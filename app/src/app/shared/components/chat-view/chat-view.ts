@@ -56,6 +56,14 @@ export class ChatView {
       this.chat.agentId();
       queueMicrotask(() => this.input()?.nativeElement.focus());
     });
+    effect(() => {
+      // o rascunho abre o painel lateral: só ele consome (a tela Agentes tem outro ChatView)
+      const draft = this.chat.draft();
+      if (draft === null || !this.compact()) return;
+      this.text.set(draft);
+      this.chat.draft.set(null);
+      queueMicrotask(() => { const el = this.input()?.nativeElement; el?.focus(); el?.setSelectionRange(draft.length, draft.length); });
+    });
   }
 
   focus(): void { this.input()?.nativeElement.focus(); }

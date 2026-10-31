@@ -445,6 +445,15 @@ export interface UpdateInfoDto {
   github_error: string | null;
 }
 
+export interface Prefs {
+  /** fechar a janela esconde na bandeja (rotinas e agentes seguem rodando) */
+  tray: boolean;
+  /** abrir com o Windows, minimizado na bandeja */
+  autostart: boolean;
+  /** notificações do Windows quando agentes terminam, CI quebra etc. */
+  notify: boolean;
+}
+
 /** invoke(canal, ...args) → Promise<retorno> */
 export interface Api {
   'app:info': () => AppInfoDto;
@@ -512,6 +521,8 @@ export interface Api {
   'chat:rename': (chatId: number, title: string) => void;
   'chat:stop': (chatId: number) => void;
   'chat:delete': (chatId: number) => void;
+  'prefs:get': () => Prefs;
+  'prefs:set': (patch: Partial<Prefs>) => Prefs;
   'update:check': (force: boolean) => UpdateInfoDto;
   'update:install': () => void;
   /** publish: também cria a release no GitHub */
@@ -532,6 +543,8 @@ export interface Events {
   'chat:event': { chat_id: number; message: ChatMessageDto | null; busy: boolean };
   'routines:changed': null;
   'agents:changed': null;
+  /** pedido do main (bandeja, notificação) para abrir uma tela */
+  'app:navigate': string;
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
 }

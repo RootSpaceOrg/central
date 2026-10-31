@@ -54,6 +54,7 @@ export class AgentsPage {
       untracked(() => {
         // ?novo=<projeto>: "Criar agente para o projeto" no menu de botão direito
         if (novo) this.dialog.set({ agent: null, projectSlug: novo });
+        else if (q?.get('criar')) this.dialog.set({ agent: null });
         if (chatId) this.chat.select(chatId);
         else if (agentId) this.chat.selectAgent(agentId);
         else if (!this.chat.agentId() && this.agents.central()) this.chat.selectAgent(this.agents.central()!.id);

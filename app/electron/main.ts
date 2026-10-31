@@ -12,6 +12,7 @@ import {
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
+import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
 import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent } from './agentdefs';
 import { startMcp } from './mcp';
@@ -40,9 +41,21 @@ const changed = () => send('projects:changed', null);
 const routinesChanged = () => send('routines:changed', null);
 const agentsChanged = () => send('agents:changed', null);
 const backlogChanged = () => send('backlog:changed', null);
+const navigate = (route: string) => send('app:navigate', route);
+// testes (--capture) não mostram notificação na tela de quem está usando o PC
+const toast = (title: string, body: string, route: string | null) => { if (!CAPTURE) notify(title, body, route, () => win, navigate); };
+/** avisa uma vez quando cada execução termina */
+const notified = new Set<number>();
 const emitRun = {
   event: (e: Events['run:event']) => send('run:event', e),
-  update: (r: Events['run:update']) => send('run:update', r),
+  update: (r: Events['run:update']) => {
+    send('run:update', r);
+    if ((r.status === 'succeeded' || r.status === 'failed') && r.finished_at && !notified.has(r.id)) {
+      notified.add(r.id);
+      const who = r.routine_id ? 'Rotina' : 'Agente';
+      toast(r.status === 'succeeded' ? `${who} concluiu` : `${who} falhou`, `${r.prompt.split('\n')[0]}${r.pr_url ? ' (PR aberto)' : ''}`, `/execucoes?run=${r.id}`);
+    }
+  },
   changed: () => { backlogChanged(); changed(); },
 };
 
@@ -120,6 +133,8 @@ function registerIpc(): void {
   handle('turns:start', input => startTurn(input, emitRun));
   handle('turns:stop', id => stopTurn(id, emitRun));
 
+  handle('prefs:get', () => getPrefs());
+  handle('prefs:set', patch => setPrefs(patch, () => win, navigate));
   handle('update:check', force => checkUpdate(force));
   handle('update:install', () => installUpdate());
   handle('update:build', publish => buildUpdate(publish, line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
@@ -165,7 +180,9 @@ function createWindow(): void {
     ...(CAPTURE ? { x: -4000, y: 0, focusable: false, skipTaskbar: true } : {}),
     webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: !CAPTURE },
   });
-  win.once('ready-to-show', () => (CAPTURE ? win!.showInactive() : win!.show()));
+  // aberto pelo Windows ao iniciar (--hidden): fica só na bandeja
+  win.once('ready-to-show', () => (CAPTURE ? win!.showInactive() : process.argv.includes('--hidden') && getPrefs().tray ? null : win!.show()));
+  keepAliveOnClose(win);
   // Links externos abrem no navegador, nunca dentro do app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
@@ -196,6 +213,7 @@ app.whenReady().then(() => {
   seedAgentsV2();
   registerIpc();
   createWindow();
+  if (!CAPTURE) setupTray(() => win, navigate);
   watchTurns(emitRun);
   watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
   startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged, agents: agentsChanged })
@@ -203,10 +221,20 @@ app.whenReady().then(() => {
   // sincroniza repositórios e, depois, leva para Feito as tarefas cujo PR foi mergeado
   // e abre decisões para CI quebrado nos repositórios ativos
   const watchGithub = () => Promise.all([syncPullRequests(), syncCiFailures()])
-    .then(([prs, ci]) => { if (prs) backlogChanged(); if (ci) { backlogChanged(); changed(); } });
+    .then(([prs, ci]) => {
+      if (prs) backlogChanged();
+      if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/decisoes'); }
+    });
   syncProjects(null, changed).then(watchGithub);
   setInterval(watchGithub, 15 * 60_000);
 });
+
+app.on('before-quit', () => markQuitting());
+
+// uma Central só: abrir de novo traz a janela que já está rodando (na bandeja, por exemplo)
+// (só no app de verdade: dev e testes com --data rodam ao lado da instalada)
+if (!CAPTURE && !DEV && !arg('data') && !app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 
 app.on('window-all-closed', () => {
   killAllTerminals();

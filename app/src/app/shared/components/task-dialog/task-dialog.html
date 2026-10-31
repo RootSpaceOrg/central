@@ -46,6 +46,7 @@
     <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
       @if (editing()) {
         <button type="button" class="btn btn-ghost !text-no" (click)="remove()"><app-icon name="delete" [size]="17" />Excluir</button>
+        <button type="button" class="btn" (click)="talk()"><app-icon name="central" [size]="17" />Conversar</button>
         @if (editing()!.column !== 'doing' && editing()!.column !== 'done') {
           <button type="button" class="btn" (click)="toAgent()"><app-icon name="agent" [size]="17" />Mandar para agente</button>
         }

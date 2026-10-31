@@ -77,6 +77,14 @@ Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), n
 - **M6 (scouts)**: agente Radar de tendências com rotina semanal (desligada até você ligar).
 - Uso do Claude com proteção contra limite de consultas (429) e último valor salvo.
 
+## Feito (v0.7)
+
+- **Bandeja do Windows**: fechar a janela esconde a Central; rotinas, turnos e agentes seguem rodando. Menu na bandeja.
+- **Abrir com o Windows** (minimizada na bandeja) e **notificações** (agente/rotina terminou, CI quebrou) que levam à tela certa.
+- **Paleta de comandos (Ctrl+K)**: ações, telas, projetos, agentes, tarefas e ideias; sem resultado, Enter pergunta à Central.
+- **Conversar sobre esta tarefa** (menu do card e diálogo da tarefa): abre o agente do projeto com o contexto escrito.
+- **Preferências** (engrenagem na barra lateral).
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

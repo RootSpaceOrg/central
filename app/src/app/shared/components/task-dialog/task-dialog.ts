@@ -7,6 +7,8 @@ import { Repo } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { COLUMNS, PRIORITY, TaskColumn, TaskPriority, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
+import { AgentsService } from '../../services/agents/agents.service';
+import { ChatService } from '../../services/chat/chat.service';
 
 @Component({
   selector: 'app-task-dialog',
@@ -16,6 +18,8 @@ import { Icon } from '../../ui/icon';
 export class TaskDialog {
   private readonly dialogs = inject(DialogsService);
   private readonly tasks = inject(TasksService);
+  private readonly agents = inject(AgentsService);
+  private readonly chat = inject(ChatService);
   protected readonly projects = inject(ProjectsService);
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
@@ -79,6 +83,15 @@ export class TaskDialog {
   protected remove(): void {
     const t = this.editing();
     if (t && confirm(`Excluir "${t.title}"?`)) { this.tasks.remove(t.id); this.close(); }
+  }
+
+  protected talk(): void {
+    const t = this.editing();
+    if (!t) return;
+    const agent = this.agents.agents().find(a => a.projectSlug === t.projectSlug && !a.builtin) ?? this.agents.central();
+    if (!agent) return;
+    this.close();
+    this.chat.compose(agent.id, `Sobre a tarefa #${t.id} "${t.title}" (${this.projects.bySlug().get(t.projectSlug)?.name ?? t.projectSlug}): `);
   }
 
   protected toAgent(): void {

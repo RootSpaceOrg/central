@@ -3,6 +3,12 @@
   <header class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
     <span class="grid size-6 place-items-center rounded-lg bg-frost text-[13px] font-extrabold text-night font-display">C</span>
     <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
+    <span class="flex-1"></span>
+    <button type="button" class="no-drag flex w-[min(380px,40vw)] items-center gap-2 rounded-lg border border-edge bg-panel px-3 py-1 text-[12.5px] text-faint transition hover:border-faint hover:text-mute"
+            (click)="openPalette()" aria-label="Buscar ou executar um comando">
+      <app-icon name="spark" [size]="13" />Buscar ou fazer algo…<span class="flex-1"></span><kbd class="font-mono text-[11px]">Ctrl K</kbd>
+    </button>
+    <span class="flex-1"></span>
   </header>
 
   <div class="grid min-h-0 grid-cols-[56px_252px_1fr]">
@@ -31,7 +37,11 @@
         </a>
       }
 
-      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()" class="nav-item group mt-auto disabled:opacity-60"
+      <button type="button" (click)="dialogs.settings.set(true)" class="nav-item group mt-auto" aria-label="Preferências">
+        <app-icon name="settings" [size]="19" />
+        <span class="nav-tip">Preferências</span>
+      </button>
+      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()" class="nav-item group disabled:opacity-60"
               aria-label="Sincronizar repositórios">
         <app-icon name="sync" [size]="19" [class.animate-spin]="projects.syncing()" />
         <span class="nav-tip">Sincronizar repositórios</span>
@@ -125,3 +135,5 @@
 <app-project-edit-dialog />
 <app-central-chat />
 <app-context-menu />
+<app-settings-dialog />
+<app-command-palette />

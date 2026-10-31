@@ -23,6 +23,9 @@ import { RunsService } from './shared/services/runs/runs.service';
 import { AgoPipe } from './shared/ui/ago.pipe';
 import { Icon, IconName } from './shared/ui/icon';
 import { ContextMenu } from './shared/ui/context-menu';
+import { SettingsDialog } from './shared/components/settings-dialog/settings-dialog';
+import { CommandPalette } from './shared/components/command-palette/command-palette';
+import { PrefsApiService } from './shared/services/prefs/prefs-api.service';
 import { ContextMenuService, MenuEntry } from './shared/services/context-menu/context-menu.service';
 import { AgentsService } from './shared/services/agents/agents.service';
 import { Router } from '@angular/router';
@@ -36,7 +39,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 
 @Component({
   selector: 'app-root',
-  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu],
+  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette],
   templateUrl: './app.html',
 })
 export class App {
@@ -80,10 +83,17 @@ export class App {
 
   constructor() {
     setInterval(() => this.tick.update(t => t + 1), 30_000);
+    // clique numa notificação ou no menu da bandeja
+    inject(PrefsApiService).onNavigate(route => this.router.navigateByUrl(route));
   }
 
   protected runningIn(p: Project): boolean {
     return this.runs.active().some(r => r.projectSlug === p.slug);
+  }
+
+  /** mesma tecla do atalho: a paleta escuta Ctrl+K no documento */
+  protected openPalette(): void {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
   }
 
   /** Botão direito num projeto da lista. */

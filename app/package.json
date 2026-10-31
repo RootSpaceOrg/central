@@ -1,6 +1,6 @@
 {
   "name": "central",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "scripts": {
     "ng": "ng",
     "start": "npm run icons && npm run build:main && ng build && electron .",
@@ -65,7 +65,8 @@
     "files": [
       "dist-electron/**",
       "dist/web/browser/**",
-      "package.json"
+      "package.json",
+      "build/icon.png"
     ],
     "asarUnpack": [
       "node_modules/@lydell/**"

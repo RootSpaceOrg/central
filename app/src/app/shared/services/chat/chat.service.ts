@@ -33,6 +33,8 @@ export class ChatService {
   readonly messages = signal<ChatMessage[]>([]);
   readonly busy = signal<Set<number>>(new Set());
   readonly error = signal<string | null>(null);
+  /** texto para pré-preencher a caixa de mensagem (ex.: contexto de uma tarefa) */
+  readonly draft = signal<string | null>(null);
 
   readonly agent = computed(() => {
     const id = this.agentId();
@@ -105,6 +107,13 @@ export class ChatService {
     } catch (e) {
       this.error.set(errorMessage(e));
     }
+  }
+
+  /** Abre o painel numa conversa nova com o agente, com o texto já escrito para o Gustavo completar. */
+  compose(agentId: number, text: string): void {
+    this.newChat(agentId);
+    this.draft.set(text);
+    this.open.set(true);
   }
 
   /** Continua a sessão de uma execução já terminada. Devolve o id da conversa. */

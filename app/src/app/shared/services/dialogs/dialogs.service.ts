@@ -27,6 +27,7 @@ export class DialogsService {
   readonly task = signal<TaskDialogState | null>(null);
   readonly turn = signal<TurnDialogState | null>(null);
   readonly update = signal(false);
+  readonly settings = signal(false);
   /** slug do projeto sendo editado */
   readonly editProject = signal<string | null>(null);
 
