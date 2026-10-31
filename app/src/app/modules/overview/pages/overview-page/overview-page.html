@@ -1,0 +1,128 @@
+<div class="mx-auto max-w-[1280px] px-10 pt-9 pb-16">
+  <p class="text-mute first-letter:uppercase">{{ today }}</p>
+  <h1 class="mt-1 font-display text-[34px] font-bold leading-tight tracking-tight">Visão geral</h1>
+  <p class="mt-2 max-w-3xl text-[15px] leading-relaxed text-mute">
+    {{ projects.living().length }} projetos vivos, {{ commits7d() }} commits nos últimos 7 dias.
+    @if (proposals.inbox().length) {
+      <a routerLink="/decisoes" class="text-later hover:underline">{{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão espera' : 'decisões esperam' }} você.</a>
+    }
+    @if (runs.active().length) {
+      <a routerLink="/agentes" class="text-yes hover:underline">{{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }} agora.</a>
+    }
+    @if (quiet()) { Sem movimento esta semana: {{ quiet() }}. }
+  </p>
+
+  <!-- pulso dos projetos -->
+  <section class="mt-9" aria-labelledby="pulso">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h2 id="pulso" class="font-display text-xl font-semibold">Pulso dos projetos</h2>
+      <span class="text-[13px] text-faint">commits por dia, últimos 14 dias</span>
+    </div>
+
+    <div class="overflow-hidden rounded-2xl border border-edge bg-panel">
+      @for (p of board(); track p.slug) {
+        <a [routerLink]="['/projetos', p.slug]"
+           class="grid grid-cols-[minmax(200px,1.1fr)_minmax(220px,1.4fr)_70px_minmax(220px,1.5fr)] items-center gap-6 border-b border-edge px-5 py-4 last:border-0 hover:bg-raise/50">
+          <div class="flex min-w-0 items-center gap-3">
+            <span class="h-9 w-1 shrink-0 rounded-full" [style.background]="p.color"></span>
+            <div class="min-w-0">
+              <p class="truncate font-display text-[16px] font-semibold">{{ p.name }}</p>
+              <p class="text-[12.5px] text-mute">{{ statusLabel[p.status] }}, {{ p.repoCount }} {{ p.repoCount === 1 ? 'repo' : 'repos' }}</p>
+            </div>
+          </div>
+
+          <app-heartbeat class="h-8" [values]="p.spark" [color]="p.color" [height]="30" />
+
+          <p class="text-right">
+            <span class="block font-display text-xl font-semibold tabular-nums">{{ p.commits7d }}</span>
+            <span class="block text-[11.5px] text-faint">7 dias</span>
+          </p>
+
+          <div class="min-w-0">
+            @if (p.lastCommitAt) {
+              <p class="truncate text-[13.5px]">{{ p.lastCommitSubject }}</p>
+              <p class="truncate text-[12.5px] text-mute">{{ p.lastCommitRepo }}, {{ p.lastCommitAt | ago }}</p>
+            } @else {
+              <p class="text-[13.5px] text-faint">Nenhum commit em 60 dias</p>
+            }
+            @if (attention(p).length) {
+              <p class="mt-1 truncate text-[12.5px] text-later">{{ attention(p).join(' e ') }}</p>
+            }
+          </div>
+        </a>
+      } @empty {
+        <div class="p-10 text-center text-mute">
+          @if (projects.loaded()) {
+            Nenhum projeto ainda.
+            <button type="button" class="btn btn-primary ml-3" (click)="dialogs.newProject()">Adicionar projeto</button>
+          } @else { Carregando… }
+        </div>
+      }
+    </div>
+  </section>
+
+  <div class="mt-10 grid grid-cols-[1.6fr_1fr] gap-10">
+    <!-- o que foi feito -->
+    <section aria-labelledby="feito">
+      <h2 id="feito" class="mb-3 font-display text-xl font-semibold">O que foi feito</h2>
+      @for (d of days(); track d.label) {
+        <h3 class="sticky top-0 z-10 bg-night py-2 text-[13px] font-semibold text-mute">{{ d.label }}</h3>
+        <ol class="mb-4">
+          @for (c of d.commits; track c.repoPath + c.sha) {
+            <li class="grid grid-cols-[3px_1fr_auto] gap-3 py-2">
+              <span class="rounded-full" [style.background]="color(c.projectSlug)"></span>
+              <div class="min-w-0">
+                <p class="truncate text-[14px] selectable">{{ c.subject }}</p>
+                <p class="truncate text-[12.5px] text-mute">{{ c.repoName }}, {{ c.author }}</p>
+              </div>
+              <time class="text-[12px] tabular-nums text-faint">{{ c.committedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</time>
+            </li>
+          }
+        </ol>
+      } @empty {
+        <p class="rounded-2xl border border-dashed border-edge p-8 text-center text-mute">
+          {{ projects.syncing() ? 'Lendo o histórico dos repositórios…' : 'Nenhum commit nos últimos 7 dias.' }}
+        </p>
+      }
+    </section>
+
+    <aside class="space-y-10">
+      <section aria-labelledby="dec">
+        <div class="mb-3 flex items-baseline justify-between">
+          <h2 id="dec" class="font-display text-xl font-semibold">Esperando você</h2>
+          @if (proposals.inbox().length) { <a routerLink="/decisoes" class="text-[13px] text-frost hover:underline">Decidir agora</a> }
+        </div>
+        @for (p of proposals.inbox().slice(0, 4); track p.id) {
+          <a routerLink="/decisoes" class="mb-2 block rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
+            @if (p.projectSlug) {
+              <span class="text-[12.5px] font-semibold" [style.color]="color(p.projectSlug)">{{ projects.bySlug().get(p.projectSlug)?.name }}</span>
+            }
+            <p class="leading-snug">{{ p.title }}</p>
+          </a>
+        } @empty {
+          <p class="text-mute">Nenhuma decisão pendente.</p>
+        }
+      </section>
+
+      <section aria-labelledby="ag">
+        <div class="mb-3 flex items-baseline justify-between">
+          <h2 id="ag" class="font-display text-xl font-semibold">Agentes</h2>
+          <button type="button" class="text-[13px] text-frost hover:underline" (click)="dialogs.newRun()">Nova tarefa</button>
+        </div>
+        @for (r of recentRuns(); track r.id) {
+          <a routerLink="/agentes" [queryParams]="{ run: r.id }"
+             class="mb-2 flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
+            <span class="size-2 shrink-0 rounded-full" [class.pulse]="r.status === 'running'"
+                  [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : r.status === 'killed' ? 'bg-faint' : 'bg-later'"></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate">{{ r.title }}</span>
+              <span class="block text-[12.5px] text-mute">{{ runLabel[r.status] }}, {{ r.repoName }}, {{ r.createdAt | ago }}</span>
+            </span>
+          </a>
+        } @empty {
+          <p class="text-mute">Nenhum agente rodou ainda. Aprove uma decisão ou crie uma tarefa.</p>
+        }
+      </section>
+    </aside>
+  </div>
+</div>

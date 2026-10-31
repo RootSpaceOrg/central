@@ -1,0 +1,20 @@
+import { Routes } from '@angular/router';
+
+export const routes: Routes = [
+  { path: '', title: 'Início', loadComponent: () => import('./modules/home/pages/home-page/home-page').then(m => m.HomePage) },
+  {
+    path: 'visao-geral',
+    title: 'Visão geral',
+    loadComponent: () => import('./modules/overview/pages/overview-page/overview-page').then(m => m.OverviewPage),
+  },
+  { path: 'decisoes', title: 'Decisões', loadComponent: () => import('./modules/inbox/pages/inbox-page/inbox-page').then(m => m.InboxPage) },
+  { path: 'ideias', title: 'Ideias', loadComponent: () => import('./modules/ideas/pages/ideas-page/ideas-page').then(m => m.IdeasPage) },
+  { path: 'backlog', title: 'Backlog', loadComponent: () => import('./modules/backlog/pages/backlog-page/backlog-page').then(m => m.BacklogPage) },
+  { path: 'agentes', title: 'Agentes', loadComponent: () => import('./modules/agents/pages/agents-page/agents-page').then(m => m.AgentsPage) },
+  {
+    path: 'projetos/:slug',
+    title: 'Projeto',
+    loadComponent: () => import('./modules/project/pages/project-page/project-page').then(m => m.ProjectPage),
+  },
+  { path: '**', redirectTo: '' },
+];

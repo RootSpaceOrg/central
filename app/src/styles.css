@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night: #141922;
+  --color-panel: #1A202B;
+  --color-raise: #212836;
+  --color-edge: #2B3445;
+  --color-text: #E6E9EF;
+  --color-mute: #8A93A6;
+  --color-faint: #5D6679;
+  --color-frost: #7FA2FF;
+  --color-yes: #3FBF8A;
+  --color-later: #E0B44C;
+  --color-no: #F07167;
+
+  --font-sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+@layer base {
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--color-night); color: var(--color-text);
+    font-family: var(--font-sans); font-size: 14px; -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  input, textarea, [contenteditable], .selectable { user-select: text; }
+  :focus-visible { outline: 2px solid var(--color-frost); outline-offset: 2px; }
+  ::selection { background: rgb(127 162 255 / 0.35); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-edge); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  dialog::backdrop { background: rgb(8 11 16 / 0.6); backdrop-filter: blur(2px); }
+}
+
+@layer components {
+  .drag { -webkit-app-region: drag; }
+  .no-drag { -webkit-app-region: no-drag; }
+
+  .field {
+    width: 100%; border-radius: 10px; background: var(--color-night); border: 1px solid var(--color-edge);
+    padding: 9px 12px; color: var(--color-text); outline: none;
+  }
+  .field:focus { border-color: var(--color-frost); }
+  .field::placeholder { color: var(--color-faint); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 999px; padding: 8px 16px; font-weight: 600; white-space: nowrap;
+    border: 1px solid var(--color-edge); color: var(--color-text); background: var(--color-raise);
+  }
+  .btn:hover { border-color: var(--color-mute); }
+  .btn:disabled { opacity: .5; pointer-events: none; }
+  .btn-primary { background: var(--color-frost); border-color: var(--color-frost); color: #0F1420; }
+  .btn-primary:hover { filter: brightness(1.08); border-color: var(--color-frost); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--color-mute); }
+  .btn-ghost:hover { color: var(--color-text); background: var(--color-raise); border-color: transparent; }
+  .btn-sm { padding: 5px 12px; font-size: 13px; }
+
+  .quick {
+    display: flex; align-items: flex-start; gap: 14px; text-align: left; border-radius: 20px;
+    border: 1px solid var(--color-edge); background: var(--color-panel); padding: 16px;
+  }
+  .quick:hover { border-color: var(--color-faint); }
+  .quick:disabled { opacity: .6; }
+  .quick b { display: block; font-weight: 600; font-size: 15px; }
+  .quick small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--color-mute); }
+}
+
+/* arrastar no quadro */
+.cdk-drag-preview { box-shadow: 0 18px 40px -12px rgb(0 0 0 / .7); transform: rotate(1.5deg); border-radius: 12px; }
+.cdk-drag-animating { transition: transform 200ms cubic-bezier(0, 0, .2, 1); }
+.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder) { transition: transform 200ms cubic-bezier(0, 0, .2, 1); }
+
+/* Saída do card na direção da decisão: só responde a uma ação. */
+.card-leave { transition: transform 220ms cubic-bezier(.4, 0, .2, 1), opacity 220ms ease; }
+.leave-approve { transform: translateX(70%) rotate(5deg); opacity: 0; }
+.leave-reject { transform: translateX(-70%) rotate(-5deg); opacity: 0; }
+.leave-defer { transform: translateY(40%) scale(.94); opacity: 0; }
+
+@keyframes pulse-dot { 50% { opacity: .35; } }
+.pulse { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card-leave { transition: opacity 120ms linear; }
+  .leave-approve, .leave-reject, .leave-defer { transform: none; }
+  .pulse { animation: none; }
+}
+
+/* xterm dentro do painel */
+.xterm { padding: 8px 0 0 12px; height: 100%; }
+.xterm-viewport { background: transparent !important; }

@@ -1,0 +1,61 @@
+<dialog #dlg (close)="close()" aria-labelledby="td-title"
+        class="m-auto w-[min(680px,92vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+  <form (submit)="submit($event)">
+    <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-4">
+      <h2 id="td-title" class="font-display text-2xl font-semibold">{{ editing() ? 'Tarefa' : 'Nova tarefa' }}</h2>
+      <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
+    </header>
+
+    <div class="space-y-4 px-8 pb-6">
+      <input class="field font-display !text-lg" placeholder="O que precisa ser feito" aria-label="Título" required
+             [value]="title()" (input)="title.set($any($event.target).value)">
+      <textarea class="field min-h-32 resize-y leading-relaxed" placeholder="Contexto, critério de pronto, links. Um agente lê isto."
+                aria-label="Descrição" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block">
+          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Projeto</span>
+          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
+            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Repositório</span>
+          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
+            <option value="" [selected]="!(repoPath())">Decidir depois</option>
+            @for (r of repos(); track r.path) { <option [value]="r.path" [selected]="(r.path) === (repoPath())">{{ r.name }}</option> }
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Coluna</span>
+          <select class="field" [value]="column()" (change)="column.set($any($event.target).value)">
+            @for (c of columns; track c.id) { <option [value]="c.id" [selected]="(c.id) === (column())">{{ c.label }}</option> }
+          </select>
+        </label>
+        <div>
+          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Prioridade</span>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Prioridade">
+            @for (p of priorities; track p.value) {
+              <button type="button" role="radio" [attr.aria-checked]="priority() === p.value" (click)="priority.set(p.value)"
+                      class="flex-1 rounded-full py-1.5 text-[12.5px] font-semibold"
+                      [class]="priority() === p.value ? 'bg-raise ' + p.tone : 'text-faint hover:text-mute'">{{ p.label }}</button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
+      @if (editing()) {
+        <button type="button" class="btn btn-ghost !text-no" (click)="remove()"><app-icon name="delete" [size]="17" />Excluir</button>
+        @if (editing()!.column !== 'doing' && editing()!.column !== 'done') {
+          <button type="button" class="btn" (click)="toAgent()"><app-icon name="agent" [size]="17" />Mandar para agente</button>
+        }
+      }
+      @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
+      <span class="flex-1"></span>
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+      <button class="btn btn-primary" [disabled]="busy() || !title().trim() || !projectSlug()">{{ editing() ? 'Salvar' : 'Criar tarefa' }}</button>
+    </footer>
+  </form>
+</dialog>

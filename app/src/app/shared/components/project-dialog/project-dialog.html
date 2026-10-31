@@ -1,0 +1,135 @@
+<dialog #dlg (close)="close()" aria-labelledby="pd-title"
+        class="m-auto w-[min(960px,94vw)] max-h-[88vh] rounded-3xl bg-panel text-text border border-edge p-0 shadow-2xl">
+  <form (submit)="submit($event)" class="flex max-h-[88vh] flex-col">
+    <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-5">
+      <div>
+        <h2 id="pd-title" class="font-display text-2xl font-semibold">
+          @if (cloneTarget(); as t) { Clonar em {{ t.name }} } @else { Adicionar projeto }
+        </h2>
+        <p class="mt-1 text-mute">
+          @if (cloneTarget(); as t) { Os repositórios vão para {{ t.folder }}. }
+          @else { Uma pasta em Development com todos os repositórios do projeto dentro. }
+        </p>
+      </div>
+      <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
+    </header>
+
+    <div class="grid min-h-0 flex-1 gap-8 overflow-y-auto px-8 pb-6" [class]="cloneTarget() ? '' : 'grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]'">
+      @if (!cloneTarget()) {
+        <div class="min-w-0 space-y-5">
+          <label class="block">
+            <span class="mb-1.5 block font-semibold">Nome</span>
+            <input class="field" placeholder="Ex.: Mapa Edu" autofocus [value]="name()" (input)="name.set($any($event.target).value)" required>
+          </label>
+
+          <div>
+            <span class="mb-1.5 block font-semibold">Pasta</span>
+            <div class="flex gap-2">
+              <input class="field min-w-0 font-mono text-[12px]" [value]="effectiveFolder()" aria-label="Pasta do projeto"
+                     placeholder="Escolha um nome primeiro"
+                     (input)="folder.set($any($event.target).value); folderEdited.set(true)">
+              <button type="button" class="btn" (click)="pickFolder()"><app-icon name="folder" [size]="16" />Escolher</button>
+            </div>
+            <p class="mt-1.5 text-[13px] text-mute">Se a pasta já existir, os repositórios dela entram no projeto.</p>
+          </div>
+
+          <div>
+            <span class="mb-1.5 block font-semibold">Status</span>
+            <div class="flex gap-1 rounded-full bg-night p-1 border border-edge w-fit" role="radiogroup" aria-label="Status">
+              @for (s of statuses; track s) {
+                <button type="button" role="radio" [attr.aria-checked]="status() === s" (click)="status.set(s)"
+                        class="rounded-full px-4 py-1.5 text-[13px] font-semibold"
+                        [class]="status() === s ? 'bg-raise text-text' : 'text-mute hover:text-text'">{{ statusLabel[s] }}</button>
+              }
+            </div>
+          </div>
+
+          <div>
+            <span class="mb-1.5 block font-semibold">Cor</span>
+            <div class="flex gap-2" role="radiogroup" aria-label="Cor do projeto">
+              @for (c of colors; track c) {
+                <button type="button" role="radio" [attr.aria-checked]="color() === c" [attr.aria-label]="c" (click)="color.set(c)"
+                        class="size-8 rounded-full ring-offset-2 ring-offset-panel" [style.background]="c"
+                        [class.ring-2]="color() === c" [class.ring-text]="color() === c"></button>
+              }
+            </div>
+          </div>
+
+          <label class="block">
+            <span class="mb-1.5 block font-semibold">Descrição</span>
+            <textarea class="field min-h-24 resize-y" placeholder="O que é, para quem, o que importa agora"
+                      [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+          </label>
+        </div>
+      }
+
+      <div class="flex min-h-0 min-w-0 flex-col">
+        <span class="mb-1.5 block font-semibold">Repositórios do GitHub <span class="font-normal text-mute">(opcional)</span></span>
+        <input class="field" placeholder="Buscar nas suas contas e organizações" [value]="query()"
+               (input)="query.set($any($event.target).value)" aria-label="Buscar repositório">
+
+        @if (selected().length) {
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            @for (s of selected(); track s) {
+              <button type="button" (click)="toggle(s)"
+                      class="flex items-center gap-1.5 rounded-full bg-frost/15 px-3 py-1 text-[13px] text-frost">
+                {{ s.split('/')[1] }} <app-icon name="close" [size]="12" />
+              </button>
+            }
+          </div>
+        }
+
+        <ul class="mt-3 min-h-48 flex-1 overflow-y-auto rounded-2xl border border-edge bg-night/60 max-h-[340px]">
+          @if (githubError()) {
+            <li class="p-4 text-no">{{ githubError() }}</li>
+          } @else if (!github()) {
+            <li class="p-4 text-mute">Carregando seus repositórios…</li>
+          } @else {
+            @for (r of matches(); track r.full_name) {
+              <li>
+                <label class="flex cursor-pointer items-start gap-3 px-4 py-2.5 hover:bg-raise">
+                  <input type="checkbox" class="mt-1 accent-frost" [checked]="selected().includes(r.full_name)" (change)="toggle(r.full_name)">
+                  <span class="min-w-0">
+                    <span class="block truncate font-semibold">{{ r.full_name.split('/')[1] }}
+                      <span class="font-normal text-faint">{{ r.full_name.split('/')[0] }}</span></span>
+                    @if (r.description) { <span class="block truncate text-[13px] text-mute">{{ r.description }}</span> }
+                  </span>
+                </label>
+              </li>
+            } @empty {
+              <li class="p-4 text-mute">Nenhum repositório com esse nome.</li>
+            }
+          }
+        </ul>
+      </div>
+    </div>
+
+    @if (cloning()) {
+      <ul class="mx-8 mb-4 space-y-1 rounded-2xl bg-night p-4 text-[13px]" aria-live="polite">
+        @for (p of selected(); track p) {
+          @let s = progress()[p];
+          <li class="flex items-center gap-2">
+            <span class="size-2 rounded-full" [class.pulse]="s.state === 'cloning'"
+                  [class]="s.state === 'done' ? 'bg-yes' : s.state === 'error' ? 'bg-no' : 'bg-later'"></span>
+            <span class="font-semibold">{{ p.split('/')[1] }}</span>
+            <span class="truncate text-mute">{{ s.state === 'cloning' ? 'clonando…' : s.state === 'done' ? (s.message || 'clonado') : s.message }}</span>
+          </li>
+        }
+      </ul>
+    }
+
+    <footer class="flex items-center justify-end gap-3 border-t border-edge px-8 py-4">
+      @if (error()) { <p role="alert" class="mr-auto text-no">{{ error() }}</p> }
+      @if (cloning()) {
+        <button type="button" class="btn btn-primary" [disabled]="!cloneDone()" (click)="open()">
+          {{ cloneDone() ? 'Abrir projeto' : 'Clonando…' }}
+        </button>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+        <button class="btn btn-primary" [disabled]="busy() || (!cloneTarget() && !name().trim()) || (!!cloneTarget() && !selected().length)">
+          @if (cloneTarget()) { Clonar {{ selected().length || '' }} } @else { Criar projeto }
+        </button>
+      }
+    </footer>
+  </form>
+</dialog>

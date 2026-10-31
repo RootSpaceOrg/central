@@ -1,0 +1,74 @@
+<dialog #dlg (close)="close()" aria-labelledby="rd-title"
+        class="m-auto w-[min(720px,92vw)] rounded-3xl bg-panel text-text border border-edge p-0 shadow-2xl">
+  <form (submit)="submit($event)">
+    <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-5">
+      <div>
+        <h2 id="rd-title" class="font-display text-2xl font-semibold">Mandar para um agente</h2>
+        <p class="mt-1 text-mute">O agente trabalha numa cópia isolada do repositório e termina abrindo um PR draft.</p>
+      </div>
+      <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
+    </header>
+
+    <div class="space-y-5 px-8 pb-6">
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block">
+          <span class="mb-1.5 block font-semibold">Projeto</span>
+          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
+            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block font-semibold">Repositório</span>
+          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)" [disabled]="!repos().length">
+            @for (r of repos(); track r.path) {
+              <option [value]="r.path" [selected]="(r.path) === (repoPath())">{{ r.name }}{{ r.lastCommitAt ? ' · ' + (r.lastCommitAt | ago) : '' }}</option>
+            } @empty {
+              <option value="" [selected]="!(repoPath())">{{ project()?.folderExists ? 'Nenhum repositório na pasta' : 'Pasta ainda não existe' }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <label class="block">
+        <span class="mb-1.5 block font-semibold">O que fazer</span>
+        <textarea class="field min-h-40 resize-y leading-relaxed" placeholder="Descreva o resultado esperado, como num ticket bem escrito."
+                  [value]="prompt()" (input)="prompt.set($any($event.target).value)" required></textarea>
+      </label>
+
+      <div class="grid grid-cols-[1fr_auto] gap-6">
+        <div>
+          <span class="mb-1.5 block font-semibold">Liberdade</span>
+          <div class="space-y-2" role="radiogroup" aria-label="Liberdade do agente">
+            <label class="flex cursor-pointer gap-3 rounded-2xl border p-3"
+                   [class]="permission() === 'edits' ? 'border-frost bg-frost/10' : 'border-edge'">
+              <input type="radio" name="perm" class="mt-1 accent-frost" [checked]="permission() === 'edits'" (change)="permission.set('edits')">
+              <span><span class="font-semibold">Segura</span>
+                <span class="block text-[13px] text-mute">Edita arquivos e roda git, gh pr, npm e python. Outros comandos ficam bloqueados.</span></span>
+            </label>
+            <label class="flex cursor-pointer gap-3 rounded-2xl border p-3"
+                   [class]="permission() === 'full' ? 'border-later bg-later/10' : 'border-edge'">
+              <input type="radio" name="perm" class="mt-1 accent-later" [checked]="permission() === 'full'" (change)="permission.set('full')">
+              <span><span class="font-semibold">Total</span>
+                <span class="block text-[13px] text-mute">Roda qualquer comando sem perguntar. Use em tarefas que você confia.</span></span>
+            </label>
+          </div>
+        </div>
+        <label class="block w-36">
+          <span class="mb-1.5 block font-semibold">Teto de gasto</span>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-mute">US$</span>
+            <input type="number" min="0.5" max="50" step="0.5" class="field pl-11" [value]="budget()"
+                   (input)="budget.set(+$any($event.target).value)">
+          </div>
+          <span class="mt-1.5 block text-[13px] text-mute">Para sozinho ao atingir.</span>
+        </label>
+      </div>
+    </div>
+
+    <footer class="flex items-center justify-end gap-3 border-t border-edge px-8 py-4">
+      @if (error()) { <p role="alert" class="mr-auto text-no">{{ error() }}</p> }
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+      <button class="btn btn-primary" [disabled]="!canSubmit()"><app-icon name="play" [size]="15" />Iniciar agente</button>
+    </footer>
+  </form>
+</dialog>

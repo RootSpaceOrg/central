@@ -1,0 +1,25 @@
+import { ProposalStatus, Verdict } from '../../contract';
+
+export type { ProposalStatus, Verdict };
+export type RiskTier = 0 | 1 | 2;
+
+export interface Proposal {
+  id: number;
+  projectSlug: string | null;
+  title: string;
+  body: string | null;
+  tier: RiskTier | null;
+  attentionMin: number | null;
+  nextAction: string | null;
+  status: ProposalStatus;
+  source: string;
+  createdAt: Date;
+}
+
+export const RISK_LABEL: Record<RiskTier, string> = { 0: 'risco baixo', 1: 'risco médio', 2: 'risco alto' };
+export const SOURCE_LABEL: Record<string, string> = { manual: 'anotado por você', memory: 'das suas notas', pr: 'PR aberto' };
+
+/** Texto pronto para mandar a proposta a um agente. */
+export function proposalPrompt(p: Proposal): string {
+  return [p.title, p.body, p.nextAction && `Próximo passo esperado: ${p.nextAction}`].filter(Boolean).join('\n\n');
+}

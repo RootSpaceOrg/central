@@ -1,0 +1,116 @@
+<div class="grid h-screen grid-rows-[40px_1fr_26px]">
+  <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
+  <header class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
+    <span class="grid size-6 place-items-center rounded-lg bg-frost text-[13px] font-extrabold text-night font-display">C</span>
+    <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
+  </header>
+
+  <div class="grid min-h-0 grid-cols-[56px_252px_1fr]">
+    <!-- barra de atividades -->
+    <nav class="flex flex-col items-center gap-1 border-r border-edge bg-night py-3" aria-label="Seções">
+      @for (n of nav; track n.path) {
+        <a [routerLink]="n.path" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ exact: !!n.exact }"
+           class="relative grid size-11 place-items-center rounded-xl text-mute hover:text-text"
+           [class.!text-text]="rla.isActive" [class.!bg-raise]="rla.isActive" [title]="n.label" [attr.aria-label]="n.label">
+          @if (rla.isActive) { <span class="absolute -left-[7px] h-5 w-[3px] rounded-full bg-frost"></span> }
+          <app-icon [name]="n.icon" [size]="23" [fill]="rla.isActive" />
+          @if (badge(n.path); as b) {
+            <span class="absolute -right-0.5 -top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-night {{ b.tone }}">{{ b.n }}</span>
+          }
+          @if (n.path === '/agentes' && runs.active().length) {
+            <span class="pulse absolute right-1.5 top-1.5 size-2.5 rounded-full bg-yes ring-2 ring-night"></span>
+          }
+        </a>
+      }
+
+      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()"
+              class="mt-auto grid size-10 place-items-center rounded-xl text-mute hover:text-text disabled:opacity-60"
+              title="Sincronizar repositórios" aria-label="Sincronizar repositórios">
+        <app-icon name="sync" [size]="19" [class.animate-spin]="projects.syncing()" />
+      </button>
+    </nav>
+
+    <!-- projetos -->
+    <aside class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
+      <div class="flex items-center justify-between px-4 pt-4 pb-2">
+        <h2 class="font-display text-[15px] font-semibold">Projetos</h2>
+        <button type="button" class="btn btn-sm" (click)="dialogs.newProject()">
+          <app-icon name="plus" [size]="14" />Adicionar
+        </button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        @for (g of groups(); track g.status) {
+          <h3 class="px-2 pt-4 pb-1 text-[12px] font-semibold text-faint">{{ g.label }}</h3>
+          @for (p of g.items; track p.slug) {
+            <ng-container *ngTemplateOutlet="item; context: { $implicit: p }" />
+          }
+        }
+
+        @if (projects.dead().length) {
+          <button type="button" (click)="showDead.set(!showDead())" [attr.aria-expanded]="showDead()"
+                  class="mt-4 flex w-full items-center gap-1 px-2 py-1 text-[12px] font-semibold text-faint hover:text-mute">
+            <app-icon name="chevron" [size]="13" [class.rotate-90]="showDead()" class="transition-transform" />
+            Mortos ({{ projects.dead().length }})
+          </button>
+          @if (showDead()) {
+            @for (p of projects.dead(); track p.slug) {
+              <ng-container *ngTemplateOutlet="item; context: { $implicit: p }" />
+            }
+          }
+        }
+      </div>
+    </aside>
+
+    <main class="min-h-0 min-w-0 overflow-hidden bg-night">
+      <router-outlet />
+    </main>
+  </div>
+
+  <!-- barra de status -->
+  <footer class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
+    <span class="flex items-center gap-1.5">
+      @if (projects.syncing()) { <span class="pulse size-1.5 rounded-full bg-frost"></span> Sincronizando repositórios… }
+      @else if (projects.lastSync(); as at) { {{ tick() >= 0 ? 'Sincronizado ' + (at | ago) : '' }} }
+    </span>
+    @if (runs.active().length) {
+      <a routerLink="/agentes" class="flex items-center gap-1.5 text-yes hover:underline">
+        <span class="pulse size-1.5 rounded-full bg-yes"></span>
+        {{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }}
+      </a>
+    }
+    @if (proposals.inbox().length) {
+      <a routerLink="/decisoes" class="text-later hover:underline">
+        {{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão esperando' : 'decisões esperando' }}
+      </a>
+    }
+    <app-usage-meter class="ml-auto" />
+    @if (update.available(); as v) {
+      <button type="button" (click)="dialogs.update.set(true)"
+              class="flex items-center gap-1.5 rounded-full bg-yes/15 px-2.5 py-0.5 font-semibold text-yes hover:bg-yes/25">
+        <app-icon name="download" [size]="14" />Nova versão {{ v }}</button>
+    } @else {
+      <button type="button" (click)="dialogs.update.set(true)" class="tabular-nums text-faint hover:text-text" title="Atualizar a Central">
+        v{{ update.info()?.current }}</button>
+    }
+  </footer>
+</div>
+
+<ng-template #item let-p>
+  <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text"
+     class="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-mute hover:bg-raise/60 hover:text-text"
+     [class.opacity-60]="p.status === 'dead'">
+    <span class="size-2.5 shrink-0 rounded-[4px]" [style.background]="p.color"></span>
+    <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+    @if (runningIn(p)) { <span class="pulse size-1.5 rounded-full bg-yes" title="Agente trabalhando"></span> }
+    @if (p.openProposals) {
+      <span class="rounded-full bg-later/15 px-1.5 text-[11px] font-semibold text-later" title="Decisões esperando">{{ p.openProposals }}</span>
+    }
+  </a>
+</ng-template>
+
+<app-project-dialog />
+<app-run-dialog />
+<app-task-dialog />
+<app-turn-dialog />
+<app-update-dialog />

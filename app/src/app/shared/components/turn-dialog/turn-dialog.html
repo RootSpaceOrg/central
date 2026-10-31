@@ -1,0 +1,88 @@
+<dialog #dlg (close)="close()" aria-labelledby="tn-title"
+        class="m-auto w-[min(760px,92vw)] max-h-[88vh] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+  <form (submit)="submit($event)" class="flex max-h-[88vh] flex-col">
+    <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-4">
+      <div>
+        <h2 id="tn-title" class="flex items-center gap-2.5 font-display text-2xl font-semibold">
+          <app-icon name="night" [size]="26" class="text-frost" />Deixar evoluindo
+        </h2>
+        <p class="mt-1 text-mute">Agentes trabalham nas tarefas escolhidas, em paralelo, até o horário limite. Você acorda com PRs para revisar.</p>
+      </div>
+      <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
+    </header>
+
+    <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-8 pb-6">
+      <label class="block">
+        <span class="mb-1.5 block font-semibold">Projeto</span>
+        <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
+          @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
+        </select>
+      </label>
+
+      <div>
+        <span class="mb-1.5 block font-semibold">Tarefas <span class="font-normal text-mute">{{ count() }} escolhidas</span></span>
+        <ul class="max-h-72 overflow-y-auto rounded-2xl border border-edge bg-night/60">
+          @for (t of candidates(); track t.id) {
+            @let on = isPicked(t.id);
+            <li class="flex items-center gap-3 border-b border-edge px-4 py-2.5 last:border-0">
+              <input type="checkbox" class="accent-frost" [checked]="on" (change)="toggle(t.id, t.repoPath)" [attr.aria-label]="t.title">
+              <span class="min-w-0 flex-1">
+                <span class="block truncate">{{ t.title }}</span>
+                <span class="text-[12px] text-faint">{{ t.column === 'todo' ? 'A fazer' : 'Backlog' }}</span>
+              </span>
+              @if (on) {
+                <select class="field !w-52 !py-1.5 text-[13px]" [value]="picked()[t.id]" (change)="setRepo(t.id, $any($event.target).value)"
+                        aria-label="Repositório">
+                  @for (r of repos(); track r.path) { <option [value]="r.path" [selected]="(r.path) === (picked()[t.id])">{{ r.name }}</option> }
+                </select>
+              }
+            </li>
+          } @empty {
+            <li class="p-5 text-center text-mute">Nenhuma tarefa em Backlog ou A fazer neste projeto. Crie tarefas no quadro primeiro.</li>
+          }
+        </ul>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4">
+        <label class="block">
+          <span class="mb-1.5 block font-semibold">Até</span>
+          <input type="time" class="field" [value]="until()" (input)="until.set($any($event.target).value)">
+          <span class="mt-1 block text-[12.5px] text-mute">{{ untilLabel() }}</span>
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block font-semibold">Teto total</span>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-mute">US$</span>
+            <input type="number" min="1" step="1" class="field pl-11" [value]="budget()" (input)="budget.set(+$any($event.target).value)">
+          </div>
+          @if (count()) { <span class="mt-1 block text-[12.5px] text-mute">US$ {{ (budget() / count()).toFixed(2) }} por tarefa</span> }
+        </label>
+        <div>
+          <span class="mb-1.5 block font-semibold">Liberdade</span>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Liberdade">
+            <button type="button" role="radio" [attr.aria-checked]="permission() === 'edits'" (click)="permission.set('edits')"
+                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'edits' ? 'bg-raise' : 'text-faint'">Segura</button>
+            <button type="button" role="radio" [attr.aria-checked]="permission() === 'full'" (click)="permission.set('full')"
+                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'full' ? 'bg-raise text-later' : 'text-faint'">Total</button>
+          </div>
+        </div>
+      </div>
+
+      @if (usage.session(); as s) {
+        <p class="rounded-2xl bg-night px-4 py-3 text-[13px] text-mute">
+          Os agentes usam a cota do seu plano do Claude. Agora: <span class="text-text">{{ 100 - s.percent }}% da sessão livre</span>,
+          reinicia em {{ reset(s.resetsAt) }}@if (usage.weekly(); as w) {; semana em {{ w.percent }}%}.
+        </p>
+      }
+    </div>
+
+    <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
+      @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
+      <span class="flex-1"></span>
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+      <button class="btn btn-primary" [disabled]="busy() || !count()">
+        <app-icon name="night" [size]="17" />Começar {{ count() ? '(' + count() + ')' : '' }}
+      </button>
+    </footer>
+  </form>
+</dialog>

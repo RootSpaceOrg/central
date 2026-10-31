@@ -1,0 +1,110 @@
+@let p = project();
+<div class="grid grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)] gap-10 px-10 pt-7 pb-16">
+  <div class="min-w-0 space-y-10">
+    <!-- números -->
+    <section class="grid grid-cols-[1fr_auto_auto_auto] items-end gap-8 rounded-2xl border border-edge bg-panel px-6 py-5" aria-label="Atividade">
+      <div>
+        <p class="mb-2 text-[12.5px] text-faint">Commits por dia, 14 dias</p>
+        <app-heartbeat class="h-10" [values]="p.spark" [color]="p.color" [height]="40" />
+      </div>
+      <p><span class="block font-display text-3xl font-semibold tabular-nums">{{ p.commits7d }}</span><span class="text-[12.5px] text-mute">em 7 dias</span></p>
+      <p><span class="block font-display text-3xl font-semibold tabular-nums">{{ p.commits30d }}</span><span class="text-[12.5px] text-mute">em 30 dias</span></p>
+      <p><span class="block font-display text-3xl font-semibold tabular-nums" [class.text-later]="p.dirtyRepos">{{ p.dirtyRepos }}</span>
+        <span class="text-[12.5px] text-mute">sem commit</span></p>
+    </section>
+
+    <!-- repositórios -->
+    <section aria-labelledby="repos-title">
+      <div class="mb-3 flex items-baseline justify-between">
+        <h2 id="repos-title" class="font-display text-xl font-semibold">Repositórios <span class="text-mute">{{ repos().length }}</span></h2>
+        <button type="button" class="text-[13px] text-frost hover:underline" (click)="dialogs.cloneInto(p.slug)">Clonar do GitHub</button>
+      </div>
+      <div class="overflow-hidden rounded-2xl border border-edge">
+        @for (r of repos(); track r.path) {
+          <div class="group grid grid-cols-[minmax(240px,1.1fr)_minmax(0,1.3fr)_auto] items-center gap-5 border-b border-edge bg-panel px-5 py-3 last:border-0">
+            <div class="min-w-0">
+              <p class="truncate font-semibold">
+                @if (r.url) { <button type="button" class="hover:underline" (click)="projects.openExternal(r.url)">{{ r.name }}</button> }
+                @else { {{ r.name }} }
+              </p>
+              <p class="flex items-center gap-1.5 truncate font-mono text-[11.5px] text-mute">
+                <app-icon name="branch" [size]="12" />{{ r.branch ?? 'sem branch' }}
+                @if (r.ahead) { <span class="text-frost">↑{{ r.ahead }}</span> }
+                @if (r.behind) { <span class="text-later">↓{{ r.behind }}</span> }
+              </p>
+            </div>
+            <div class="min-w-0">
+              @if (r.lastCommitAt) {
+                <p class="truncate text-[13.5px]">{{ r.lastCommitSubject }}</p>
+                <p class="text-[12px] text-mute">{{ r.lastCommitAt | ago }}@if (r.dirty) {<span class="text-later">, {{ r.dirty }} {{ r.dirty === 1 ? 'arquivo mudado' : 'arquivos mudados' }} sem commit</span>}</p>
+              } @else {
+                <p class="text-[13px] text-faint">Sem commits em 60 dias@if (r.dirty) {<span class="text-later">, {{ r.dirty }} sem commit</span>}</p>
+              }
+            </div>
+            <div class="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              <button type="button" class="btn btn-ghost !p-2" title="Mandar tarefa para agente" aria-label="Mandar tarefa para agente" (click)="newRun(r)">
+                <app-icon name="agent" [size]="16" /></button>
+              <button type="button" class="btn btn-ghost !p-2" title="Abrir no VS Code" aria-label="Abrir no VS Code" (click)="projects.openInVsCode(r.path)">
+                <app-icon name="code" [size]="16" /></button>
+            </div>
+          </div>
+        } @empty {
+          <div class="bg-panel p-8 text-center text-mute">
+            @if (!p.folderExists) { A pasta {{ p.folder }} ainda não existe. }
+            @else { Nenhum repositório git nesta pasta. }
+            <button type="button" class="btn btn-primary btn-sm ml-3" (click)="dialogs.cloneInto(p.slug)">Clonar do GitHub</button>
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- o que foi feito -->
+    <section aria-labelledby="feito-title">
+      <h2 id="feito-title" class="mb-3 font-display text-xl font-semibold">O que foi feito <span class="text-mute">30 dias</span></h2>
+      @for (d of days(); track d.label) {
+        <h3 class="sticky top-0 z-10 bg-night py-2 text-[13px] font-semibold text-mute">{{ d.label }}</h3>
+        <ol class="mb-3 border-l-2 pl-4" [style.border-color]="p.color + '55'">
+          @for (c of d.commits; track c.repoPath + c.sha) {
+            <li class="grid grid-cols-[1fr_auto] gap-3 py-1.5">
+              <div class="min-w-0">
+                <p class="truncate text-[14px] selectable">{{ c.subject }}</p>
+                <p class="truncate text-[12px] text-mute">{{ c.repoName }}, {{ c.author }} <span class="font-mono text-faint">{{ c.shortSha }}</span></p>
+              </div>
+              <time class="text-[12px] tabular-nums text-faint">{{ c.committedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</time>
+            </li>
+          }
+        </ol>
+      } @empty {
+        <p class="rounded-2xl border border-dashed border-edge p-8 text-center text-mute">Nenhum commit nos últimos 30 dias.</p>
+      }
+    </section>
+  </div>
+
+  <aside class="space-y-9">
+    <section aria-labelledby="sobre-title">
+      <h2 id="sobre-title" class="mb-2 font-display text-xl font-semibold">Sobre</h2>
+      <textarea class="field min-h-28 resize-y leading-relaxed" aria-label="Descrição do projeto"
+                placeholder="O que é, para quem, o que importa agora. Agentes leem isto."
+                [value]="p.description ?? ''" (blur)="saveDescription($any($event.target).value)"></textarea>
+      <button type="button" class="mt-2 block max-w-full truncate font-mono text-[11.5px] text-faint hover:text-mute" (click)="projects.reveal(p.folder)"
+              [title]="'Abrir ' + p.folder">{{ p.folder }}</button>
+    </section>
+
+    <section aria-labelledby="pd-title">
+      <div class="mb-3 flex items-baseline justify-between">
+        <h2 id="pd-title" class="font-display text-xl font-semibold">Decisões</h2>
+        @if (p.openProposals) { <a routerLink="/decisoes" class="text-[13px] text-frost hover:underline">Decidir</a> }
+      </div>
+      @for (x of proposals(); track x.id) {
+        <div class="mb-2 rounded-2xl border border-edge bg-panel px-4 py-3">
+          <p class="leading-snug">{{ x.title }}</p>
+          <p class="mt-1 text-[12.5px]" [class]="x.status === 'proposed' ? 'text-later' : 'text-yes'">
+            {{ x.status === 'proposed' ? 'Esperando você' : x.status === 'running' ? 'Agente trabalhando' : 'Aprovada' }}
+          </p>
+        </div>
+      } @empty {
+        <p class="text-mute">Nada pendente neste projeto.</p>
+      }
+    </section>
+  </aside>
+</div>

@@ -1,0 +1,218 @@
+/** Ideias, tarefas (Kanban), importação de pendências (M2) e configurações. */
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, join, relative } from 'node:path';
+import { promisify } from 'node:util';
+
+import type {
+  IdeaDto, IdeaPatch, ImportResultDto, NewIdeaInput, NewTaskInput, TaskColumn, TaskDto, TaskPatch,
+} from '../src/app/shared/contract';
+import { all, get, now, run } from './db';
+
+const execFileP = promisify(execFile);
+const COLUMNS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'done'];
+
+// ---------- configurações ----------
+
+export const getSetting = (key: string) => get<{ value: string }>('select value from settings where key = ?', key)?.value ?? null;
+export const setSetting = (key: string, value: string) =>
+  run('insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value', key, value);
+
+// ---------- ideias ----------
+
+export const listIdeas = () => all<IdeaDto>(`select id, project_slug, title, body, status, source, source_ref, task_id, created_at
+  from ideas order by case status when 'new' then 0 when 'promoted' then 1 else 2 end, created_at desc, id desc`);
+
+export function createIdea(input: NewIdeaInput): IdeaDto {
+  const title = input.title?.trim();
+  if (!title) throw new Error('Escreva a ideia.');
+  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref) values (?,?,?,'manual',?)`,
+    input.project_slug || null, title, input.body?.trim() || null, `${Date.now()}-${Math.random()}`);
+  return get<IdeaDto>('select * from ideas where id = ?', Number(lastInsertRowid))!;
+}
+
+export function updateIdea(id: number, patch: IdeaPatch): void {
+  const allowed = ['title', 'body', 'project_slug', 'status'] as const;
+  const fields = allowed.filter(k => k in patch);
+  if (patch.status && !['new', 'promoted', 'archived'].includes(patch.status)) throw new Error('Status inválido.');
+  if (!fields.length) return;
+  run(`update ideas set ${fields.map(k => `${k} = ?`).join(', ')} where id = ?`, ...fields.map(k => (patch[k] ?? null) as string | null), id);
+}
+
+export function promoteIdea(id: number, projectSlug: string): TaskDto {
+  const idea = get<IdeaDto>('select * from ideas where id = ?', id);
+  if (!idea) throw new Error('Ideia não encontrada.');
+  if (idea.task_id) throw new Error('Essa ideia já virou tarefa.');
+  const task = createTask({ project_slug: projectSlug, repo_path: null, title: idea.title, body: idea.body, column: 'backlog', priority: 2 });
+  run('update tasks set idea_id = ? where id = ?', id, task.id);
+  run(`update ideas set status = 'promoted', task_id = ?, project_slug = ? where id = ?`, task.id, projectSlug, id);
+  return getTask(task.id);
+}
+
+// ---------- tarefas ----------
+
+const TASK_SELECT = `
+  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.priority, t.position, t.pr_url,
+         t.proposal_id, t.idea_id, t.created_at, t.updated_at,
+         r.id run_id, r.status run_status
+  from tasks t
+  left join runs r on r.id = (select max(id) from runs where task_id = t.id)`;
+
+export const getTask = (id: number) => get<TaskDto>(`${TASK_SELECT} where t.id = ?`, id)!;
+
+export const listTasks = (slug: string | null) => all<TaskDto>(`${TASK_SELECT}
+  join projects p on p.slug = t.project_slug
+  where (? is null and p.status <> 'dead' or t.project_slug = ?)
+  order by t.position, t.priority, t.created_at desc`, slug, slug);
+
+export function createTask(input: NewTaskInput & { proposal_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
+  const title = input.title?.trim();
+  if (!title) throw new Error('Dê um título à tarefa.');
+  if (!get('select 1 from projects where slug = ?', input.project_slug)) throw new Error('Escolha um projeto.');
+  const column = COLUMNS.includes(input.column) ? input.column : 'backlog';
+  const top = get<{ p: number | null }>('select min(position) p from tasks where "column" = ?', column)!.p ?? 1;
+  const { lastInsertRowid } = run(`insert into tasks (project_slug, repo_path, title, body, "column", priority, position, proposal_id, pr_url, source, source_ref)
+    values (?,?,?,?,?,?,?,?,?,?,?)`,
+    input.project_slug, input.repo_path || null, title, input.body?.trim() || null, column,
+    Math.min(Math.max(Number(input.priority) || 0, 0), 3), top - 1,
+    input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
+  return getTask(Number(lastInsertRowid));
+}
+
+export function updateTask(id: number, patch: TaskPatch): void {
+  const task = get<TaskDto>('select * from tasks where id = ?', id);
+  if (!task) throw new Error('Tarefa não encontrada.');
+  if (patch.column && !COLUMNS.includes(patch.column)) throw new Error('Coluna inválida.');
+
+  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority'] as const).filter(k => k in patch);
+  if (simple.length) {
+    run(`update tasks set ${simple.map(k => `${k} = ?`).join(', ')}, updated_at = ? where id = ?`,
+      ...simple.map(k => (patch[k] ?? null) as string | number | null), now(), id);
+  }
+  if (patch.column !== undefined || patch.position !== undefined) {
+    const column = patch.column ?? task.column;
+    // renumera a coluna de destino com a tarefa na posição pedida
+    const others = all<{ id: number }>('select id from tasks where "column" = ? and id <> ? order by position, priority, created_at desc', column, id);
+    const at = Math.min(Math.max(patch.position ?? 0, 0), others.length);
+    others.splice(at, 0, { id });
+    run('begin');
+    try {
+      others.forEach((t, i) => run('update tasks set position = ? where id = ?', i, t.id));
+      run('update tasks set "column" = ?, updated_at = ? where id = ?', column, now(), id);
+      run('commit');
+    } catch (e) { run('rollback'); throw e; }
+  }
+}
+
+export function deleteTask(id: number): void {
+  run(`update ideas set status = 'new', task_id = null where task_id = ?`, id);
+  run('delete from tasks where id = ?', id);
+}
+
+/** Chamado pelos agentes: a tarefa anda no quadro conforme a execução. */
+export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string | null = null): void {
+  run(`update tasks set "column" = ?, pr_url = coalesce(?, pr_url), updated_at = ? where id = ?`, column, prUrl, now(), taskId);
+}
+
+// ---------- importação de pendências (M2) ----------
+
+// a palavra abre o nome ou vem depois de um separador: METODOLOGIA.md não é um TODO
+export const PLAN_FILE = /(^|[-_ .])(roadmap|plan|todo|backlog|queue|lacunas|pendencias|pendências)[^/\\]*\.md$/i;
+const SKIP = new Set(['node_modules', '.git', 'dist', '.angular', 'vendor', '.terraform', '.central', '.venv', 'venv']);
+const hash = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 12);
+
+function findPlanFiles(root: string, depth = 3): string[] {
+  const out: string[] = [];
+  const walk = (dir: string, d: number) => {
+    let entries: string[];
+    try { entries = readdirSync(dir); } catch { return; }
+    for (const name of entries) {
+      if (SKIP.has(name)) continue;
+      const p = join(dir, name);
+      let st; try { st = statSync(p); } catch { continue; }
+      if (st.isDirectory()) { if (d < depth) walk(p, d + 1); }
+      else if (PLAN_FILE.test(name) && st.size < 512 * 1024) out.push(p);
+    }
+  };
+  if (existsSync(root)) walk(root, 0);
+  return out;
+}
+
+const clean = (s: string) => s.replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').trim();
+
+/** Memória do Claude → projeto: primeiro por palavra-chave no nome/descrição, depois pela pasta de origem. */
+function projectForMemory(dirName: string, text: string, projects: { slug: string; name: string; folder: string }[]): string | null {
+  const hay = text.toLowerCase();
+  for (const p of projects) {
+    const keys = [p.slug, basename(p.folder).toLowerCase(), ...p.name.toLowerCase().split(/[^a-z0-9à-ú]+/).filter(w => w.length > 4)];
+    if (keys.some(k => hay.includes(k))) return p.slug;
+  }
+  const byFolder = projects
+    .map(p => ({ slug: p.slug, enc: p.folder.replace(/[:\\/]/g, '-') }))
+    .filter(p => dirName === p.enc || dirName.startsWith(`${p.enc}-`))
+    .sort((a, b) => b.enc.length - a.enc.length)[0];
+  return byFolder?.slug ?? null;
+}
+
+export async function importPending(): Promise<ImportResultDto> {
+  const projects = all<{ slug: string; name: string; folder: string }>("select slug, name, folder from projects where status <> 'dead'");
+  const sources: string[] = [];
+  let ideas = 0, tasks = 0;
+  const addIdea = (slug: string | null, title: string, body: string | null, source: string, ref: string) => {
+    const r = run(`insert or ignore into ideas (project_slug, title, body, source, source_ref) values (?,?,?,?,?)`,
+      slug, title.slice(0, 200), body, source, ref);
+    ideas += Number(r.changes);
+  };
+
+  // 1. memórias de projeto do Claude Code
+  const memRoot = join(process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude'), 'projects');
+  for (const dir of existsSync(memRoot) ? readdirSync(memRoot) : []) {
+    const memDir = join(memRoot, dir, 'memory');
+    if (!existsSync(memDir)) continue;
+    const before = ideas;
+    for (const file of readdirSync(memDir).filter(f => f.endsWith('.md') && f !== 'MEMORY.md')) {
+      const text = readFileSync(join(memDir, file), 'utf8');
+      const type = text.match(/^\s*type:\s*(\w+)/m)?.[1];
+      if (type !== 'project' && !file.startsWith('project')) continue;
+      const desc = text.match(/^description:\s*"?(.+?)"?\s*$/m)?.[1] ?? text.match(/^name:\s*(.+)$/m)?.[1] ?? file;
+      const body = text.replace(/^---[\s\S]*?---/, '').trim().slice(0, 900);
+      addIdea(projectForMemory(dir, `${file} ${desc}`, projects), clean(desc), body, 'memory', join(memDir, file));
+    }
+    if (ideas > before) sources.push(`memórias de ${dir.split('-').pop()}`);
+  }
+
+  // 2. itens abertos "- [ ]" em ROADMAP / PLAN / TODO dos projetos
+  for (const p of projects) {
+    for (const file of findPlanFiles(p.folder)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      let n = 0;
+      const before = ideas;
+      for (const line of lines) {
+        const m = line.match(/^\s*[-*]\s+\[ \]\s+(.+)$/);
+        if (!m || ++n > 60) continue;
+        addIdea(p.slug, clean(m[1]), `De ${relative(p.folder, file)}`, 'doc', `${file}#${hash(m[1])}`);
+      }
+      if (ideas > before) sources.push(relative(p.folder, file));
+    }
+  }
+
+  // 3. PRs abertos seus → tarefas em Revisão
+  try {
+    const { stdout } = await execFileP('gh', ['search', 'prs', '--state', 'open', '--author', '@me', '--limit', '200',
+      '--json', 'repository,title,url,body'], { maxBuffer: 16 * 1024 * 1024, windowsHide: true });
+    const repos = all<{ path: string; project_slug: string; remote: string | null }>('select path, project_slug, remote from repos');
+    for (const pr of JSON.parse(stdout) as { repository: { nameWithOwner: string }; title: string; url: string; body: string }[]) {
+      const repo = repos.find(r => r.remote?.replace(/\.git$/, '').toLowerCase().endsWith(pr.repository.nameWithOwner.toLowerCase()));
+      if (!repo || get('select 1 from tasks where source = ? and source_ref = ?', 'pr', pr.url)) continue;
+      createTask({ project_slug: repo.project_slug, repo_path: repo.path, title: pr.title, body: `${pr.url}\n\n${(pr.body ?? '').slice(0, 600)}`,
+        column: 'review', priority: 1, pr_url: pr.url, source: 'pr', source_ref: pr.url });
+      tasks++;
+    }
+    sources.push('PRs abertos no GitHub');
+  } catch { /* gh ausente ou offline: segue com o resto */ }
+
+  setSetting('import:last', now());
+  return { ideas, tasks, sources };
+}

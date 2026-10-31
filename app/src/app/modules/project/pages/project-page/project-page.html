@@ -1,0 +1,85 @@
+@if (project(); as p) {
+  <header class="shrink-0 border-b border-edge px-10 pt-6">
+    <div class="flex items-start gap-5">
+      <span class="mt-1 grid size-11 shrink-0 place-items-center rounded-2xl font-display text-xl font-bold text-night" [style.background]="p.color">
+        {{ p.name[0] }}</span>
+      <div class="min-w-0 flex-1">
+        <h1 class="truncate font-display text-[28px] font-bold leading-tight tracking-tight">{{ p.name }}</h1>
+        <div class="mt-2 flex w-fit gap-0.5 rounded-full border border-edge bg-panel p-0.5" role="radiogroup" aria-label="Status do projeto">
+          @for (s of statuses; track s) {
+            <button type="button" role="radio" [attr.aria-checked]="p.status === s" (click)="projects.setStatus(p.slug, s)"
+                    class="rounded-full px-3 py-1 text-[12.5px] font-semibold"
+                    [class]="p.status === s ? (s === 'dead' ? 'bg-no/20 text-no' : 'bg-raise text-text') : 'text-faint hover:text-mute'">
+              {{ statusLabel[s] }}</button>
+          }
+        </div>
+      </div>
+      <div class="flex shrink-0 flex-wrap justify-end gap-2">
+        <button type="button" class="btn btn-sm" (click)="projects.sync(p.slug)" [disabled]="projects.syncing()">
+          <app-icon name="sync" [size]="14" [class.animate-spin]="projects.syncing()" />Sincronizar</button>
+        <button type="button" class="btn btn-sm" (click)="projects.reveal(p.folder)" [disabled]="!p.folderExists">
+          <app-icon name="folder" [size]="14" />Pasta</button>
+        <button type="button" class="btn btn-sm" (click)="projects.openInVsCode(p.folder)" [disabled]="!p.folderExists">
+          <app-icon name="code" [size]="14" />VS Code</button>
+        <button type="button" class="btn btn-primary btn-sm" (click)="dialogs.newRun({ projectSlug: p.slug })">
+          <app-icon name="agent" [size]="14" />Nova tarefa</button>
+      </div>
+    </div>
+
+    <nav class="mt-5 flex gap-6" role="tablist" aria-label="Seções do projeto">
+      @for (t of [{ id: 'resumo', label: 'Resumo', icon: 'summary' }, { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'codigo', label: 'Código', icon: 'code' }, { id: 'agentes', label: 'Agentes', icon: 'agent' }]; track t.id) {
+        <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" (click)="go($any(t.id))"
+                class="-mb-px flex items-center gap-2 border-b-2 pb-3 font-semibold"
+                [class]="tab() === t.id ? 'text-text' : 'border-transparent text-mute hover:text-text'"
+                [style.border-color]="tab() === t.id ? p.color : null">
+          <app-icon [name]="$any(t.icon)" [size]="15" />{{ t.label }}
+          @if (t.id === 'agentes' && projectRuns().length) { <span class="text-[12px] text-faint">{{ projectRuns().length }}</span> }
+        </button>
+      }
+    </nav>
+  </header>
+
+  <div class="relative min-h-0 flex-1">
+    @if (tab() === 'resumo') { <app-summary [project]="p" /> }
+    @if (tab() === 'backlog') {
+      <div class="flex h-full flex-col px-8 pt-5 pb-5">
+        <div class="mb-4 flex justify-end gap-2">
+          <button type="button" class="btn btn-sm" (click)="dialogs.newTurn({ projectSlug: p.slug })"><app-icon name="night" [size]="16" />Deixar evoluindo</button>
+          <button type="button" class="btn btn-sm btn-primary" (click)="dialogs.newTask({ projectSlug: p.slug })"><app-icon name="plus" [size]="16" />Nova tarefa</button>
+        </div>
+        <app-kanban-board class="min-h-0 flex-1" [projectSlug]="p.slug" />
+      </div>
+    }
+
+    @if (codeMounted()) {
+      <app-code-workspace class="absolute inset-0" [hidden]="tab() !== 'codigo'" [slug]="p.slug" [folder]="p.folder" />
+    }
+
+    @if (tab() === 'agentes') {
+      <div class="h-full overflow-y-auto px-10 pt-7 pb-16">
+        <div class="max-w-4xl">
+          @for (r of projectRuns(); track r.id) {
+            <a routerLink="/agentes" [queryParams]="{ run: r.id }"
+               class="mb-2 flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-4 hover:border-faint">
+              <span class="size-2 shrink-0 rounded-full" [class.pulse]="isActive(r.status)"
+                    [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : isActive(r.status) ? 'bg-later' : 'bg-faint'"></span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate">{{ r.title }}</span>
+                <span class="block text-[12.5px] text-mute">{{ runLabel[r.status] }}, {{ r.repoName }}, {{ r.createdAt | ago }}</span>
+              </span>
+              @if (r.prUrl) { <span class="text-[12.5px] text-yes">PR aberto</span> }
+              @if (r.costUsd) { <span class="text-[12.5px] tabular-nums text-faint">US$ {{ r.costUsd.toFixed(2) }}</span> }
+            </a>
+          } @empty {
+            <div class="rounded-2xl border border-dashed border-edge p-10 text-center text-mute">
+              Nenhum agente trabalhou neste projeto ainda.
+              <button type="button" class="btn btn-primary btn-sm ml-3" (click)="dialogs.newRun({ projectSlug: p.slug })">Nova tarefa</button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+} @else {
+  <div class="grid h-full place-items-center text-mute">{{ projects.loaded() ? 'Projeto não encontrado.' : 'Carregando…' }}</div>
+}
