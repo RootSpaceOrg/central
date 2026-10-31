@@ -13,12 +13,10 @@
                 aria-label="Descrição" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
 
       <div class="grid grid-cols-2 gap-3">
-        <label class="block">
+        <div>
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Projeto</span>
-          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
-            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
-          </select>
-        </label>
+          <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" />
+        </div>
         <label class="block">
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Repositório</span>
           <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">

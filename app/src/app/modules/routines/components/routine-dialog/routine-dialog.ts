@@ -4,6 +4,9 @@ import { Repo } from '../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { RunPermission, RunSize, SIZES } from '../../../../shared/services/runs/runs.model';
 import { Icon } from '../../../../shared/ui/icon';
+import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
+import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
+import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { Routine, RoutineDraft, RoutinesService, describeSchedule } from '../../services/routines/routines.service';
 
 /** Estado de abertura: null fechado; routine null = nova; draft = modelo pronto para começar. */
@@ -11,7 +14,7 @@ export type RoutineDialogState = { routine: Routine | null; draft?: Partial<Rout
 
 @Component({
   selector: 'app-routine-dialog',
-  imports: [Icon],
+  imports: [Icon, AgentSelect, ProjectSelect],
   templateUrl: './routine-dialog.html',
 })
 export class RoutineDialog {
@@ -26,6 +29,9 @@ export class RoutineDialog {
   protected readonly weekdays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
   protected readonly name = signal('');
+  private readonly agents = inject(AgentsService);
+  /** id do agente em texto ('' = sem agente) */
+  protected readonly agentId = signal('');
   protected readonly projectSlug = signal('');
   protected readonly repos = signal<Repo[]>([]);
   protected readonly repoPath = signal<string>('');
@@ -54,6 +60,13 @@ export class RoutineDialog {
     });
   }
 
+  /** escolher um agente com projeto já traz o projeto dele */
+  protected selectAgent(id: string): void {
+    this.agentId.set(id);
+    const agent = id ? this.agents.byId().get(Number(id)) : null;
+    if (agent?.projectSlug && agent.projectSlug !== this.projectSlug()) this.selectProject(agent.projectSlug);
+  }
+
   protected async selectProject(slug: string, repo = ''): Promise<void> {
     this.projectSlug.set(slug);
     this.repoPath.set(repo);
@@ -66,13 +79,14 @@ export class RoutineDialog {
 
   protected async submit(e: Event): Promise<void> {
     e.preventDefault();
-    if (!this.name().trim() || !this.prompt().trim() || !this.projectSlug()) return;
+    if (!this.name().trim() || !this.prompt().trim()) return;
+    if (!this.projectSlug() && !this.agentId()) { this.error.set('Escolha um projeto ou um agente.'); return; }
     if (this.scheduleKind() === 'daily' && !this.days().length) { this.error.set('Escolha pelo menos um dia.'); return; }
     this.busy.set(true);
     this.error.set(null);
     try {
       await this.routines.save(this.state()?.routine?.id ?? null, {
-        name: this.name().trim(), projectSlug: this.projectSlug(), repoPath: this.repoPath() || null, prompt: this.prompt().trim(),
+        name: this.name().trim(), agentId: Number(this.agentId()) || null, projectSlug: this.projectSlug() || null, repoPath: this.repoPath() || null, prompt: this.prompt().trim(),
         permission: this.permission(), size: this.size(), scheduleKind: this.scheduleKind(), days: this.days(), time: this.time(),
         intervalHours: this.intervalHours(), maxSession: this.maxSession(), enabled: this.state()?.routine?.enabled ?? true,
       });
@@ -90,6 +104,8 @@ export class RoutineDialog {
     this.scheduleKind.set(r.scheduleKind ?? 'daily'); this.days.set(r.days ?? [1, 2, 3, 4, 5]); this.time.set(r.time ?? '08:00');
     this.intervalHours.set(r.intervalHours ?? 6); this.maxSession.set(r.maxSession ?? 80);
     this.error.set(null); this.busy.set(false);
-    this.selectProject(r.projectSlug ?? this.projects.living()[0]?.slug ?? '', r.repoPath ?? '');
+    this.agentId.set(r.agentId ? String(r.agentId) : '');
+    const agentProject = r.agentId ? this.agents.byId().get(r.agentId)?.projectSlug : null;
+    this.selectProject(r.projectSlug ?? agentProject ?? (r.agentId ? '' : this.projects.defaultSlug()), r.repoPath ?? '');
   }
 }

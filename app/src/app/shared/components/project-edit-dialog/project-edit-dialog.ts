@@ -1,25 +1,22 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
-import { DomSanitizer } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { PROJECT_COLORS, ProjectIconKind, ProjectStatus, STATUS_LABEL } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
-import { PROJECT_ICONS, ProjectAvatar } from '../../ui/project-avatar';
-
-const EMOJIS = ['🚀', '📚', '🎓', '🐾', '🏥', '💼', '🎨', '🛒', '📈', '🧠', '⚡', '🌱', '🏫', '🧩', '🎯', '🔧'];
+import { ProjectAvatar } from '../../ui/project-avatar';
+import { IconPicker } from '../pickers/icon-picker';
 
 @Component({
   selector: 'app-project-edit-dialog',
-  imports: [Icon, ProjectAvatar],
+  imports: [Icon, ProjectAvatar, IconPicker],
   templateUrl: './project-edit-dialog.html',
 })
 export class ProjectEditDialog {
   protected readonly dialogs = inject(DialogsService);
   protected readonly projects = inject(ProjectsService);
   private readonly router = inject(Router);
-  private readonly sanitizer = inject(DomSanitizer);
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
   protected readonly project = computed(() => {
@@ -27,14 +24,8 @@ export class ProjectEditDialog {
     return slug ? this.projects.bySlug().get(slug) ?? null : null;
   });
 
-  protected readonly colors = PROJECT_COLORS;
-  protected readonly emojis = EMOJIS;
-  protected readonly icons = Object.keys(PROJECT_ICONS);
   protected readonly statuses = Object.keys(STATUS_LABEL) as ProjectStatus[];
   protected readonly statusLabel = STATUS_LABEL;
-  protected readonly kinds: { id: ProjectIconKind; label: string }[] = [
-    { id: 'letter', label: 'Letra' }, { id: 'emoji', label: 'Emoji' }, { id: 'lucide', label: 'Ícone' }, { id: 'image', label: 'Imagem' },
-  ];
 
   protected readonly name = signal('');
   protected readonly description = signal('');
@@ -68,25 +59,6 @@ export class ProjectEditDialog {
   }
 
   protected close(): void { this.dialogs.editProject.set(null); }
-
-  protected iconSvg(name: string) { return this.sanitizer.bypassSecurityTrustHtml(PROJECT_ICONS[name]); }
-
-  protected setKind(kind: ProjectIconKind): void {
-    if (kind === this.iconKind()) return;
-    this.iconKind.set(kind);
-    this.iconValue.set(kind === 'emoji' ? EMOJIS[0] : kind === 'lucide' ? 'rocket' : null);
-    if (kind === 'image') this.pickImage();
-  }
-
-  protected async pickImage(): Promise<void> {
-    try {
-      const img = await this.projects.pickImage();
-      if (img) { this.iconKind.set('image'); this.iconValue.set(img); }
-      else if (!this.iconValue()) this.iconKind.set('letter');
-    } catch (e) {
-      this.error.set((e as Error).message);
-    }
-  }
 
   protected async pickFolder(): Promise<void> {
     const f = await this.projects.pickFolder(this.folder());

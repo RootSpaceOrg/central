@@ -22,6 +22,11 @@ import { ProposalsService } from './shared/services/proposals/proposals.service'
 import { RunsService } from './shared/services/runs/runs.service';
 import { AgoPipe } from './shared/ui/ago.pipe';
 import { Icon, IconName } from './shared/ui/icon';
+import { ContextMenu } from './shared/ui/context-menu';
+import { ContextMenuService, MenuEntry } from './shared/services/context-menu/context-menu.service';
+import { AgentsService } from './shared/services/agents/agents.service';
+import { Router } from '@angular/router';
+import { STATUS_LABEL } from './shared/services/projects/projects.model';
 
 const GROUPS: { status: ProjectStatus; label: string }[] = [
   { status: 'active', label: 'Ativos' },
@@ -31,7 +36,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 
 @Component({
   selector: 'app-root',
-  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar],
+  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu],
   templateUrl: './app.html',
 })
 export class App {
@@ -43,6 +48,9 @@ export class App {
   protected readonly tasks = inject(TasksService);
   protected readonly update = inject(UpdateService);
   protected readonly chat = inject(ChatService);
+  private readonly menu = inject(ContextMenuService);
+  private readonly agents = inject(AgentsService);
+  private readonly router = inject(Router);
 
   protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
     { path: '/', label: 'Início', icon: 'home', exact: true },
@@ -51,6 +59,7 @@ export class App {
     { path: '/ideias', label: 'Ideias', icon: 'ideas' },
     { path: '/backlog', label: 'Backlog', icon: 'kanban' },
     { path: '/agentes', label: 'Agentes', icon: 'agent' },
+    { path: '/execucoes', label: 'Execuções', icon: 'activity' },
     { path: '/rotinas', label: 'Rotinas', icon: 'routine' },
   ];
 
@@ -75,5 +84,34 @@ export class App {
 
   protected runningIn(p: Project): boolean {
     return this.runs.active().some(r => r.projectSlug === p.slug);
+  }
+
+  /** Botão direito num projeto da lista. */
+  protected projectMenu(e: MouseEvent, p: Project): void {
+    const go = (aba?: string) => this.router.navigate(['/projetos', p.slug], { queryParams: aba ? { aba } : {} });
+    const agent = this.agents.agents().find(a => a.projectSlug === p.slug);
+    const status: MenuEntry[] = (['active', 'maintenance', 'frozen', 'dead'] as ProjectStatus[])
+      .filter(s => s !== p.status)
+      .map(s => ({ label: `Marcar como ${STATUS_LABEL[s].toLowerCase()}`, icon: s === 'dead' ? 'archive' as const : 'flag' as const, run: () => this.projects.setStatus(p.slug, s) }));
+    this.menu.open(e, [
+      { label: 'Abrir', icon: 'summary', run: () => go() },
+      { label: 'Backlog', icon: 'kanban', run: () => go('backlog') },
+      { label: 'Código', icon: 'code', run: () => go('codigo') },
+      null,
+      { label: 'Nova tarefa', icon: 'plus', run: () => this.dialogs.newTask({ projectSlug: p.slug }) },
+      { label: 'Mandar para um agente', icon: 'play', run: () => this.dialogs.newRun({ projectSlug: p.slug }) },
+      { label: agent ? `Conversar com ${agent.name}` : 'Criar agente para o projeto', icon: 'central',
+        run: () => agent ? this.router.navigate(['/agentes'], { queryParams: { agente: agent.id } }) : this.router.navigate(['/agentes'], { queryParams: { novo: p.slug } }) },
+      null,
+      { label: 'Editar projeto…', icon: 'edit', run: () => this.dialogs.editProject.set(p.slug) },
+      { label: 'Trocar ícone…', icon: 'spark', run: () => this.dialogs.editProject.set(p.slug) },
+      ...status,
+      null,
+      { label: 'Abrir pasta', icon: 'folder', run: () => this.projects.reveal(p.folder), disabled: !p.folderExists },
+      { label: 'Abrir no VS Code', icon: 'code', run: () => this.projects.openInVsCode(p.folder), disabled: !p.folderExists },
+      { label: 'Sincronizar', icon: 'sync', run: () => this.projects.sync(p.slug) },
+      null,
+      { label: 'Excluir da Central…', icon: 'delete', danger: true, run: () => this.dialogs.editProject.set(p.slug) },
+    ]);
   }
 }

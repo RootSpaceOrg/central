@@ -4,6 +4,7 @@ export type ProjectDialogState = { mode: 'create' } | { mode: 'clone'; slug: str
 
 export interface RunDialogState {
   projectSlug?: string | null;
+  agentId?: number | null;
   repoPath?: string;
   prompt?: string;
   proposalId?: number | null;

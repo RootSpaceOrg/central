@@ -67,6 +67,9 @@ export class ProjectsService {
   readonly living = computed(() => this.projects().filter(p => p.status !== 'dead'));
   readonly dead = computed(() => this.projects().filter(p => p.status === 'dead'));
   readonly bySlug = computed(() => new Map(this.projects().map(p => [p.slug, p])));
+  /** projeto que aparece escolhido por padrão: o mais movimentado da semana */
+  readonly defaultSlug = computed(() => [...this.living()].sort((a, b) =>
+    b.commits7d - a.commits7d || (b.lastCommitAt?.getTime() ?? 0) - (a.lastCommitAt?.getTime() ?? 0))[0]?.slug ?? '');
 
   constructor() {
     this.api.onChanged(() => { this.syncing.set(false); this.lastSync.set(new Date()); this.load(); });

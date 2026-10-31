@@ -45,6 +45,7 @@ function validate(i: Partial<NewRoutineInput>): void {
   if (i.time !== undefined && !/^\d{2}:\d{2}$/.test(i.time)) throw new Error('Horário inválido.');
   if (i.size && !(i.size in SIZE_BUDGET)) throw new Error('Tamanho inválido.');
   if (i.project_slug && !get('select 1 from projects where slug = ?', i.project_slug)) throw new Error('Projeto não encontrado.');
+  if (i.agent_id && !get('select 1 from agents where id = ?', i.agent_id)) throw new Error('Agente não encontrado.');
   if (i.repo_path && !get('select 1 from repos where path = ?', i.repo_path)) throw new Error('Repositório não encontrado.');
 }
 
@@ -54,11 +55,12 @@ function schedule(r: { schedule_kind: 'daily' | 'interval'; days: number[]; time
 
 export function createRoutine(i: NewRoutineInput): RoutineDto {
   validate(i);
-  if (!i.name?.trim() || !i.prompt?.trim() || !i.project_slug) throw new Error('Nome, projeto e o que fazer são obrigatórios.');
+  if (!i.name?.trim() || !i.prompt?.trim()) throw new Error('Nome e o que fazer são obrigatórios.');
+  if (!i.project_slug && !i.agent_id) throw new Error('Escolha um projeto ou um agente.');
   const r = { schedule_kind: i.schedule_kind ?? 'daily', days: i.days ?? [1, 2, 3, 4, 5], time: i.time ?? '08:00', interval_hours: i.interval_hours ?? 24 };
-  const { lastInsertRowid } = run(`insert into routines (name, project_slug, repo_path, prompt, permission, size, schedule_kind, days, time,
-      interval_hours, max_session, enabled, next_run_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    i.name.trim(), i.project_slug, i.repo_path || null, i.prompt.trim(), i.permission === 'full' ? 'full' : 'edits', i.size ?? 'small',
+  const { lastInsertRowid } = run(`insert into routines (name, agent_id, project_slug, repo_path, prompt, permission, size, schedule_kind, days, time,
+      interval_hours, max_session, enabled, next_run_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    i.name.trim(), i.agent_id ?? null, i.project_slug || null, i.repo_path || null, i.prompt.trim(), i.permission === 'full' ? 'full' : 'edits', i.size ?? 'small',
     r.schedule_kind, r.days.join(','), r.time, r.interval_hours, i.max_session ?? 80, i.enabled === false ? 0 : 1, schedule(r));
   return getRoutine(Number(lastInsertRowid))!;
 }
@@ -67,7 +69,7 @@ export function updateRoutine(id: number, patch: RoutinePatch): void {
   const cur = getRoutine(id);
   if (!cur) throw new Error('Rotina não encontrada.');
   validate(patch);
-  const cols = ['name', 'project_slug', 'repo_path', 'prompt', 'permission', 'size', 'schedule_kind', 'time', 'interval_hours', 'max_session'] as const;
+  const cols = ['name', 'agent_id', 'project_slug', 'repo_path', 'prompt', 'permission', 'size', 'schedule_kind', 'time', 'interval_hours', 'max_session'] as const;
   const fields: [string, string | number | null][] = cols.filter(k => k in patch).map(k => [k, (patch[k] ?? null) as string | number | null]);
   if ('days' in patch) fields.push(['days', (patch.days ?? []).join(',')]);
   if ('enabled' in patch) fields.push(['enabled', patch.enabled ? 1 : 0]);
@@ -94,7 +96,7 @@ export async function fireRoutine(id: number, emit: Emit, manual: boolean): Prom
   }
   const prompt = `${r.prompt}\n\n(Execução ${manual ? 'manual' : 'agendada'} da rotina "${r.name}".)`;
   const runDto = startRun({
-    project_slug: r.project_slug, repo_path: r.repo_path, prompt, budget_usd: SIZE_BUDGET[r.size], permission: r.permission,
+    project_slug: r.project_slug, agent_id: r.agent_id, repo_path: r.repo_path, prompt, budget_usd: SIZE_BUDGET[r.size], permission: r.permission,
     proposal_id: null,
   }, emit, id);
   run('update routines set last_run_at = ?, last_skipped = null, next_run_at = ? where id = ?', now(), manual ? r.next_run_at : next, id);

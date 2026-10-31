@@ -25,7 +25,8 @@ npm start             # build completo e abre o app
 - `electron/`: processo principal (banco, git, terminais, agentes). Typecheck: `npx tsc -p electron/tsconfig.json`.
 - `src/app/shared/contract.ts`: tudo o que a interface pode pedir ao processo principal.
 - `src/app/`: interface Angular (convenções de `modules/`, `shared/`, services em duas camadas).
-- `node electron/backlog.check.mjs`: self-check do filtro de arquivos do importador de pendências.
+- Self-checks: `node electron/backlog.check.mjs`, `electron/updater.check.mjs`, `electron/routines.check.mjs`,
+  `scripts/file-icons.check.mjs`, `scripts/markdown.check.mjs`.
 
 Depuração: `--data=<pasta>` usa outro banco; `--route=/projetos/x?aba=codigo` abre numa tela;
 `--capture=arquivo.png` salva um print e fecha (`--exec64=<js em base64>` roda um script antes).

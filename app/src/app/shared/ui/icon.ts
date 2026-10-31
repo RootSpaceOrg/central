@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import {
-  Archive, ArchiveRestore, ArrowUpFromLine, Bot, ChartNoAxesColumn, Check, ChevronRight, CircleStop, Clock, Code, Download,
+  Activity, Archive, ArchiveRestore, ArrowUpFromLine, Bot, ChartNoAxesColumn, Check, ChevronRight, CircleStop, Clock, Code, Download,
   Ellipsis, ExternalLink, File, Flag, Folder, FolderOpen, GitBranch, GitMerge, House, Inbox, KanbanSquare, Lightbulb,
   ListTree, MessageSquare, Moon, Pencil, Play, Plus, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
   BatteryLow, Zap, X,
@@ -10,6 +10,7 @@ import {
 /** Nome usado no app → SVG do Lucide (strings estáticas do pacote, sem rede). */
 const SVGS = {
   home: House,
+  activity: Activity,
   overview: ChartNoAxesColumn,
   inbox: Inbox,
   ideas: Lightbulb,

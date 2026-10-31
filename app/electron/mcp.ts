@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 
 import { Emit, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
+import { createAgent, deleteAgent, listAgents, updateAgent } from './agentdefs';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   updateIdea, updateTask,
@@ -23,11 +24,11 @@ import { createProject, deleteProject, listProjects, listRepos, recent, syncProj
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
 
-export interface Hooks { emit: Emit; projects: () => void; backlog: () => void; routines: () => void }
+export interface Hooks { emit: Emit; projects: () => void; backlog: () => void; routines: () => void; agents: () => void }
 
 const INSTRUCTIONS = `Central do Gustavo: o lugar onde vivem os projetos dele (cada um é uma pasta em Development com vários repositórios),
 o backlog (tarefas em Kanban: backlog, todo, doing, review, done), a base de ideias, as decisões que esperam por ele,
-os agentes (execuções do Claude Code) e as rotinas (agentes com agenda).
+os agentes (definições com papel e instruções, com ou sem projeto), as execuções de agentes e as rotinas (execuções com agenda).
 Use estas ferramentas para consultar e manter tudo verdadeiro. Tarefas e decisões sempre pertencem a um projeto (slug).
 Prefira registrar descobertas como tarefa no backlog ou ideia em vez de só mencioná-las.`;
 
@@ -120,13 +121,29 @@ function build(h: Hooks): McpServer {
     id: z.number().int(), verdict: z.enum(['approve', 'defer', 'reject']), reason: z.string().optional(),
   }, a => decide(a.id, a.verdict, a.reason ?? null), () => { h.backlog(); h.projects(); });
 
-  // ---------- agentes ----------
+  // ---------- agentes (definições) ----------
+  const agentShape = {
+    name: z.string().optional(), description: z.string().optional(), project_slug: z.string().nullable().optional().describe('null = sem projeto'),
+    instructions: z.string().optional().describe('papel e jeito de trabalhar do agente'), color: z.string().optional(),
+    icon_kind: z.enum(['letter', 'emoji', 'lucide']).optional(), icon_value: z.string().optional().describe('emoji ou nome de ícone Lucide'),
+    tools: z.array(z.string()).optional().describe('ferramentas extras, ex.: mcp__sentry'), permission: permission.optional(),
+    model: z.enum(['', 'sonnet', 'opus', 'haiku']).optional(),
+  };
+  tool('list_agents', 'Agentes definidos (papel, projeto, ferramentas extras, quantas conversas, rotinas e execuções).', {}, () =>
+    listAgents().map(a => ({ id: a.id, name: a.name, description: a.description, project: a.project_slug, tools: a.tools, permission: a.permission, model: a.model, builtin: a.builtin, chats: a.chats, routines: a.routines, runs: a.runs, instructions: a.instructions.slice(0, 400) })));
+  tool('create_agent', 'Cria um agente (ex.: "Suporte KultivAi", "Marketing"). project_slug é opcional: sem projeto ele trabalha numa pasta própria.', { ...agentShape, name: z.string() }, a =>
+    createAgent({ ...a, name: a.name, project_slug: a.project_slug ?? null }), h.agents);
+  tool('update_agent', 'Edita um agente: nome, papel/instruções, projeto, ferramentas, liberdade, modelo, ícone.', { id: z.number().int(), ...agentShape }, ({ id, ...patch }) => updateAgent(id, patch), h.agents);
+  tool('delete_agent', 'Exclui um agente (e as conversas dele). Só use se o Gustavo pediu explicitamente.', { id: z.number().int(), confirm: z.literal(true) }, ({ id }) => deleteAgent(id), () => { h.agents(); h.routines(); });
+
+  // ---------- execuções ----------
   tool('list_agent_runs', 'Execuções de agentes recentes (status, projeto, PR, resultado).', { project_slug: z.string().optional(), limit: z.number().int().max(50).optional() }, a =>
     listRuns(a.project_slug ?? null).slice(0, a.limit ?? 15).map(r => ({ id: r.id, project: r.project_slug, scope: r.scope, status: r.status, prompt: r.prompt.slice(0, 160), pr: r.pr_url, result: r.result?.slice(0, 400), session_used: r.usage_start != null && r.usage_end != null ? `${Math.max(r.usage_end - r.usage_start, 0)}%` : null })));
   tool('get_agent_run', 'Log de uma execução de agente (últimos eventos).', { id: z.number().int() }, ({ id }) => listEvents(id).slice(-40).map(e => `${e.kind}: ${e.text.slice(0, 400)}`));
-  tool('start_agent', 'Coloca um agente para trabalhar. Sem repo_path ele atua na pasta do projeto inteira (com permission edits só lê e organiza). Com repo_path trabalha numa worktree isolada e termina em PR draft.', {
-    project_slug: z.string(), prompt: z.string(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(), task_id: z.number().int().optional(),
-  }, a => startRun({ project_slug: a.project_slug, repo_path: a.repo_path ?? null, prompt: a.prompt, permission: a.permission ?? 'edits', budget_usd: SIZE_BUDGET[a.size ?? 'medium'], proposal_id: null, task_id: a.task_id ?? null }, h.emit), h.backlog);
+  tool('start_agent', 'Coloca um agente para trabalhar numa tarefa. agent_id usa o papel e as ferramentas de um agente definido. Sem repo_path atua na pasta do projeto inteira (edits = só lê e organiza); com repo_path trabalha numa worktree e termina em PR draft; sem projeto (agente sem projeto) trabalha na pasta do agente.', {
+    prompt: z.string(), project_slug: z.string().optional(), agent_id: z.number().int().optional(), repo_path: z.string().optional(),
+    permission: permission.optional(), size: size.optional(), task_id: z.number().int().optional(),
+  }, a => startRun({ project_slug: a.project_slug ?? null, agent_id: a.agent_id ?? null, repo_path: a.repo_path ?? null, prompt: a.prompt, permission: a.permission ?? 'edits', budget_usd: SIZE_BUDGET[a.size ?? 'medium'], proposal_id: null, task_id: a.task_id ?? null }, h.emit), h.backlog);
   tool('stop_agent', 'Interrompe uma execução de agente.', { id: z.number().int() }, ({ id }) => killRun(id, h.emit));
   tool('start_turn', 'Deixa um projeto evoluindo: vários agentes em paralelo em tarefas do backlog até um horário (ISO).', {
     project_slug: z.string(), items: z.array(z.object({ task_id: z.number().int(), repo_path: z.string() })), until: z.string(), size: size.optional(), permission: permission.optional(),
@@ -135,13 +152,13 @@ function build(h: Hooks): McpServer {
 
   // ---------- rotinas ----------
   tool('list_routines', 'Rotinas (agentes com agenda): o que fazem, quando rodam, último resultado.', {}, () => listRoutines());
-  tool('create_routine', 'Cria rotina. schedule_kind daily: dias (0=domingo) e time HH:MM; interval: a cada interval_hours. Sem repo_path a rotina atua no projeto inteiro (com edits só lê e alimenta backlog, ideias e decisões).', {
-    name: z.string(), project_slug: z.string(), prompt: z.string(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(),
+  tool('create_routine', 'Cria rotina (execução com agenda). schedule_kind daily: dias (0=domingo) e time HH:MM; interval: a cada interval_hours. agent_id faz a rotina rodar com o papel de um agente. Sem repo_path atua no projeto inteiro (edits = só lê e alimenta backlog, ideias e decisões).', {
+    name: z.string(), project_slug: z.string().optional(), agent_id: z.number().int().optional(), prompt: z.string(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(),
     schedule_kind: z.enum(['daily', 'interval']).optional(), days: z.array(z.number().int().min(0).max(6)).optional(), time: z.string().optional(),
     interval_hours: z.number().int().min(1).optional(), max_session: z.number().int().min(10).max(100).optional(), enabled: z.boolean().optional(),
-  }, a => createRoutine({ ...a, repo_path: a.repo_path ?? null, permission: a.permission ?? 'edits', size: a.size ?? 'small', schedule_kind: a.schedule_kind ?? 'daily', days: a.days ?? [1, 2, 3, 4, 5], time: a.time ?? '08:00', interval_hours: a.interval_hours ?? 24 }), h.routines);
+  }, a => createRoutine({ ...a, project_slug: a.project_slug ?? null, agent_id: a.agent_id ?? null, repo_path: a.repo_path ?? null, permission: a.permission ?? 'edits', size: a.size ?? 'small', schedule_kind: a.schedule_kind ?? 'daily', days: a.days ?? [1, 2, 3, 4, 5], time: a.time ?? '08:00', interval_hours: a.interval_hours ?? 24 }), h.routines);
   tool('update_routine', 'Edita, liga ou desliga (enabled) uma rotina.', {
-    id: z.number().int(), name: z.string().optional(), prompt: z.string().optional(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(),
+    id: z.number().int(), name: z.string().optional(), agent_id: z.number().int().nullable().optional(), prompt: z.string().optional(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(),
     schedule_kind: z.enum(['daily', 'interval']).optional(), days: z.array(z.number().int().min(0).max(6)).optional(), time: z.string().optional(),
     interval_hours: z.number().int().min(1).optional(), max_session: z.number().int().min(10).max(100).optional(), enabled: z.boolean().optional(),
   }, ({ id, ...patch }) => updateRoutine(id, patch), h.routines);

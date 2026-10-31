@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { AgentsService } from '../../../../shared/services/agents/agents.service';
 
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
@@ -50,13 +51,24 @@ export class RoutinesPage {
   protected readonly routines = inject(RoutinesService);
   protected readonly projects = inject(ProjectsService);
   private readonly router = inject(Router);
+  private readonly agentsService = inject(AgentsService);
+  private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
 
   protected readonly templates = TEMPLATES;
   protected readonly dialog = signal<RoutineDialogState>(null);
   protected readonly describe = describeSchedule;
   protected readonly firing = signal<number | null>(null);
 
-  protected project(slug: string) { return this.projects.bySlug().get(slug) ?? null; }
+  constructor() {
+    // ?nova=1&agente=3: vindo da tela Agentes ("Nova rotina")
+    if (this.query.get('nova')) {
+      const agentId = Number(this.query.get('agente')) || null;
+      queueMicrotask(() => this.dialog.set({ routine: null, draft: { agentId, projectSlug: null } }));
+    }
+  }
+
+  protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
+  protected agent(id: number | null) { return id ? this.agentsService.byId().get(id) ?? null : null; }
   protected repoName(path: string | null) { return path?.split(/[\\/]/).pop() ?? null; }
 
   protected when(d: Date): string {
@@ -72,7 +84,7 @@ export class RoutinesPage {
     this.firing.set(r.id);
     const run = await this.routines.fire(r);
     this.firing.set(null);
-    if (run) this.router.navigate(['/agentes'], { queryParams: { run } });
+    if (run) this.router.navigate(['/execucoes'], { queryParams: { run } });
   }
 
   protected remove(r: Routine): void {

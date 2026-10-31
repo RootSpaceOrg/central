@@ -1,5 +1,6 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
+import { ProjectSelect } from '../pickers/project-select';
 
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { Repo } from '../../services/projects/projects.model';
@@ -13,7 +14,7 @@ import { Icon } from '../../ui/icon';
 /** "Deixar evoluindo": escolhe tarefas, até que horas e quanto pode gastar. */
 @Component({
   selector: 'app-turn-dialog',
-  imports: [Icon],
+  imports: [Icon, ProjectSelect],
   templateUrl: './turn-dialog.html',
 })
 export class TurnDialog {
@@ -61,7 +62,7 @@ export class TurnDialog {
       if (!el) return;
       if (s && !el.open) {
         this.error.set(null); this.busy.set(false); this.picked.set({});
-        this.selectProject(s.projectSlug ?? this.projects.living()[0]?.slug ?? '');
+        this.selectProject(s.projectSlug ?? this.projects.defaultSlug());
         el.showModal();
       }
       if (!s && el.open) el.close();
@@ -100,7 +101,7 @@ export class TurnDialog {
     try {
       await this.turns.start(this.projectSlug(), items, this.untilDate(), SIZES.find(s => s.id === this.size())!.budget * items.length, this.permission());
       this.close();
-      this.router.navigate(['/agentes']);
+      this.router.navigate(['/execucoes']);
     } catch (err) {
       this.error.set((err as Error).message);
       this.busy.set(false);

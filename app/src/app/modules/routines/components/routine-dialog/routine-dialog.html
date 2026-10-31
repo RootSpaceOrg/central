@@ -16,12 +16,17 @@
       </label>
 
       <div class="grid grid-cols-2 gap-3">
-        <label class="block">
+        <div>
+          <span class="mb-1.5 block font-semibold">Agente <span class="font-normal text-mute">(opcional)</span></span>
+          <app-agent-select [value]="agentId()" (valueChange)="selectAgent($event)" noneLabel="Nenhum (genérico)" [hideCentral]="true" />
+          <span class="mt-1 block text-[12.5px] text-mute">A rotina roda com o papel, as instruções e as ferramentas dele.</span>
+        </div>
+        <div>
           <span class="mb-1.5 block font-semibold">Projeto</span>
-          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
-            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="p.slug === projectSlug()">{{ p.name }}</option> }
-          </select>
-        </label>
+          <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" [noneLabel]="agentId() ? 'Nenhum (pasta do agente)' : null" />
+        </div>
+      </div>
+      @if (projectSlug()) {
         <label class="block">
           <span class="mb-1.5 block font-semibold">Onde</span>
           <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
@@ -29,7 +34,7 @@
             @for (r of repos(); track r.path) { <option [value]="r.path" [selected]="r.path === repoPath()">Repositório {{ r.name }}</option> }
           </select>
         </label>
-      </div>
+      }
 
       <label class="block">
         <span class="mb-1.5 block font-semibold">O que fazer</span>

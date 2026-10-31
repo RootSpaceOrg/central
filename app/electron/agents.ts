@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import type { NewRunInput, NewTurnInput, RunDto, RunEventDto, RunEventKind, TurnDto } from '../src/app/shared/contract';
+import { agentCwd, agentPromptFile, agentTools, getAgent } from './agentdefs';
 import { moveTaskForRun } from './backlog';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
@@ -27,7 +28,7 @@ export type Emit = { event: (e: RunEventDto) => void; update: (r: RunDto) => voi
 const procs = new Map<number, ChildProcess>();
 
 export function listRuns(slug: string | null): RunDto[] {
-  return all<RunDto>(`select * from runs where (? is null or project_slug = ?) order by id desc limit 200`, slug, slug)
+  return all<RunDto>(`select * from runs where (? is null or project_slug = ?) order by id desc limit 300`, slug, slug)
     .map(r => ({ ...r, repo_name: basename(r.repo_path) }));
 }
 
@@ -43,19 +44,24 @@ export function startRun(input: NewRunInput, emit: Emit, routineId: number | nul
 function queueRun(input: NewRunInput, turnId: number | null, routineId: number | null = null): number {
   const prompt = input.prompt?.trim();
   if (!prompt) throw new Error('Descreva o que o agente deve fazer.');
-  const project = get<{ folder: string }>('select folder from projects where slug = ?', input.project_slug);
-  if (!project) throw new Error('Escolha um projeto.');
-  const scope = input.repo_path ? 'repo' : 'project';
-  if (scope === 'repo' && !get('select 1 from repos where path = ? and project_slug = ?', input.repo_path, input.project_slug)) {
+  const agent = input.agent_id ? getAgent(input.agent_id) : null;
+  if (input.agent_id && !agent) throw new Error('Agente não encontrado.');
+  const slug = input.project_slug || agent?.project_slug || null;
+  const project = slug ? get<{ folder: string }>('select folder from projects where slug = ?', slug) : null;
+  if (slug && !project) throw new Error('Projeto não encontrado.');
+  if (!project && !agent) throw new Error('Escolha um projeto ou um agente.');
+  // repositório → worktree; projeto → pasta do projeto; só agente → pasta própria do agente
+  const scope = input.repo_path ? 'repo' : project ? 'project' : 'workspace';
+  if (scope === 'repo' && !get('select 1 from repos where path = ? and project_slug = ?', input.repo_path, slug)) {
     throw new Error('Esse repositório não é do projeto.');
   }
+  const where = input.repo_path ?? project?.folder ?? agentCwd(agent!);
   const budget = Math.min(Math.max(Number(input.budget_usd) || 0, 0.5), MAX_BUDGET);
   const permission = input.permission === 'full' ? 'full' : 'edits';
   const { lastInsertRowid } = run(
-    `insert into runs (project_slug, proposal_id, task_id, turn_id, routine_id, scope, repo_path, prompt, permission, budget_usd)
-     values (?,?,?,?,?,?,?,?,?,?)`,
-    input.project_slug, input.proposal_id ?? null, input.task_id ?? null, turnId, routineId, scope,
-    input.repo_path ?? project.folder, prompt, permission, budget);
+    `insert into runs (project_slug, agent_id, proposal_id, task_id, turn_id, routine_id, scope, repo_path, prompt, permission, budget_usd)
+     values (?,?,?,?,?,?,?,?,?,?,?)`,
+    slug, agent?.id ?? null, input.proposal_id ?? null, input.task_id ?? null, turnId, routineId, scope, where, prompt, permission, budget);
   if (input.proposal_id) run(`update proposals set status = 'running', updated_at = ? where id = ?`, now(), input.proposal_id);
   if (input.task_id) {
     moveTaskForRun(input.task_id, 'doing');
@@ -184,8 +190,13 @@ async function execute(id: number, emit: Emit): Promise<void> {
   const session = (await getUsage(true)).limits.find(l => l.kind === 'session');
   if (session) set(id, { usage_start: session.percent }, emit);
 
+  const agent = r.agent_id ? getAgent(r.agent_id) : null;
   let cwd: string, frame: string;
-  if (r.scope === 'project') {
+  if (r.scope === 'workspace') {
+    cwd = r.repo_path;
+    event(id, 'system', `Trabalhando na pasta do agente, ${cwd}.`, emit);
+    frame = framePrompt(r, { kind: 'workspace', folder: cwd });
+  } else if (r.scope === 'project') {
     cwd = r.repo_path;
     const repos = all<{ name: string }>('select name from repos where project_slug = ? order by name', r.project_slug).map(x => x.name);
     event(id, 'system', `Trabalhando na pasta do projeto, ${cwd}${r.permission === 'edits' ? ', só leitura' : ''}.`, emit);
@@ -198,7 +209,7 @@ async function execute(id: number, emit: Emit): Promise<void> {
     const startPoint = head || 'HEAD';
     const branch = `central/run-${id}-${slugify(r.prompt).slice(0, 30)}`;
     // Fora de qualquer repo: se a pasta do projeto for o próprio repo, a cópia não aparece como mudança nele.
-    const worktrees = join(DEV_ROOT, '.central-worktrees', r.project_slug);
+    const worktrees = join(DEV_ROOT, '.central-worktrees', r.project_slug!);
     cwd = join(worktrees, `${r.repo_name}-run-${id}`);
     mkdirSync(worktrees, { recursive: true });
     await git(r.repo_path, ['worktree', 'add', '-b', branch, cwd, startPoint]);
@@ -210,9 +221,13 @@ async function execute(id: number, emit: Emit): Promise<void> {
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-budget-usd', String(r.budget_usd)];
   const mcp = mcpConfigPath();
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
+  // agente: papel, ferramentas extras (ex.: mcp__sentry) e modelo dele
+  const extra = agent ? agentTools(agent) : [];
+  if (agent) args.push('--append-system-prompt-file', `"${agentPromptFile(agent)}"`);
+  if (agent?.model) args.push('--model', agent.model);
   if (r.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
-  else if (r.scope === 'project') args.push('--allowedTools', `"${READ_TOOLS.join(',')}"`);
-  else args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${SAFE_TOOLS.join(',')}"`);
+  else if (r.scope === 'repo') args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SAFE_TOOLS, ...extra])].join(',')}"`);
+  else args.push('--allowedTools', `"${[...new Set([...READ_TOOLS, ...extra])].join(',')}"`);
 
   // Prompt vai por stdin: nenhum texto do usuário passa pela linha de comando do shell.
   const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv() });
@@ -220,10 +235,11 @@ async function execute(id: number, emit: Emit): Promise<void> {
   set(id, { status: 'running' }, emit);
   child.stdin.end(frame);
 
-  let result: string | null = null, cost: number | null = null, isError = false;
+  let result: string | null = null, cost: number | null = null, isError = false, sessionSaved = false;
   createInterface({ input: child.stdout }).on('line', line => {
     let msg: any;
     try { msg = JSON.parse(line); } catch { return; }
+    if (msg.type === 'system' && msg.session_id && !sessionSaved) { sessionSaved = true; set(id, { session_id: msg.session_id }, emit); }
     if (msg.type === 'assistant') {
       for (const block of msg.message?.content ?? []) {
         if (block.type === 'text' && block.text.trim()) event(id, 'text', block.text.trim(), emit);
@@ -252,16 +268,29 @@ async function execute(id: number, emit: Emit): Promise<void> {
   }));
 }
 
-type Where = { kind: 'repo'; branch: string; base: string } | { kind: 'project'; folder: string; repos: string[] };
+type Where = { kind: 'repo'; branch: string; base: string } | { kind: 'project'; folder: string; repos: string[] } | { kind: 'workspace'; folder: string };
 
 function framePrompt(r: RunDto, where: Where): string {
   const task = r.task_id ? get<{ id: number; title: string }>('select id, title from tasks where id = ?', r.task_id) : null;
   const central = `## Central
 Você tem as ferramentas \`central\` (MCP) da Central do Gustavo, onde vivem projetos, backlog, ideias e decisões. Use-as para deixar o backlog verdadeiro:
-${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova essa tarefa: a Central faz isso quando você terminar.\n` : ''}- O que ficou faltando ou o que você descobriu e vale fazer: crie tarefa no backlog do projeto "${r.project_slug}" (create_task, coluna backlog) ou ideia (create_idea).
+${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova essa tarefa: a Central faz isso quando você terminar.\n` : ''}- O que ficou faltando ou o que você descobriu e vale fazer: crie tarefa no backlog ${r.project_slug ? `do projeto "${r.project_slug}"` : 'do projeto certo'} (create_task, coluna backlog) ou ideia (create_idea).
 - O que depende de uma decisão do Gustavo: crie uma decisão (create_decision) com o próximo passo sugerido.
 - Não exclua nada pela Central.`;
 
+  if (where.kind === 'workspace') {
+    return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.
+
+Você não está preso a um projeto. Sua pasta de trabalho é ${where.folder}: pode criar e editar arquivos lá (rascunhos, relatórios, notas).
+Use as ferramentas da Central para conhecer os projetos.
+
+## Tarefa
+${r.prompt}
+
+${central}
+
+Termine com um resumo curto em português do que fez, dos arquivos que criou e do que registrou na Central.`;
+  }
   if (where.kind === 'project') {
     return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.
 

@@ -61,7 +61,7 @@
       <div class="h-full overflow-y-auto px-10 pt-7 pb-16">
         <div class="max-w-4xl">
           @for (r of projectRuns(); track r.id) {
-            <a routerLink="/agentes" [queryParams]="{ run: r.id }"
+            <a routerLink="/execucoes" [queryParams]="{ run: r.id }"
                class="mb-2 flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-4 hover:border-faint">
               <span class="size-2 shrink-0 rounded-full" [class.pulse]="isActive(r.status)"
                     [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : isActive(r.status) ? 'bg-later' : 'bg-faint'"></span>

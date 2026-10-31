@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
+import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 
 import { KanbanBoard } from '../../../../shared/components/kanban-board/kanban-board';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
@@ -11,7 +12,7 @@ import { Icon } from '../../../../shared/ui/icon';
 
 @Component({
   selector: 'app-backlog-page',
-  imports: [KanbanBoard, Icon],
+  imports: [KanbanBoard, Icon, ProjectSelect],
   host: { class: 'flex h-full min-h-0 flex-col px-8 pt-7 pb-5' },
   template: `
     <div class="flex items-end gap-4">
@@ -19,10 +20,7 @@ import { Icon } from '../../../../shared/ui/icon';
         <h1 class="font-display text-[34px] font-bold leading-tight tracking-tight">Backlog</h1>
         <p class="mt-1 text-mute">{{ open() }} tarefas abertas{{ project() ? ' em ' + project()!.name : ' em todos os projetos' }}. Arraste entre as colunas.</p>
       </div>
-      <select class="field !w-60" aria-label="Projeto" [value]="slug() ?? ''" (change)="filter($any($event.target).value)">
-        <option value="" [selected]="!(slug() ?? '')">Todos os projetos</option>
-        @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (slug() ?? '')">{{ p.name }}</option> }
-      </select>
+      <app-project-select class="w-64" [value]="slug() ?? ''" (valueChange)="filter($event)" noneLabel="Todos os projetos" />
       <button type="button" class="btn" (click)="dialogs.newTurn({ projectSlug: slug() })"><app-icon name="night" [size]="18" />Deixar evoluindo</button>
       <button type="button" class="btn btn-primary" (click)="dialogs.newTask({ projectSlug: slug() })"><app-icon name="plus" [size]="18" />Nova tarefa</button>
     </div>

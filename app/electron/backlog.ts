@@ -168,6 +168,49 @@ export async function syncPullRequests(): Promise<number> {
   return moved;
 }
 
+/** owner/repo a partir do remote do GitHub */
+export function githubName(remote: string | null): string | null {
+  const m = remote?.match(/github\.com[:/]([^/]+)\/(.+?)(\.git)?\/?$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+/**
+ * Sentinela de CI: em cada repositório com commits nos últimos 14 dias, se a última execução do GitHub Actions
+ * na branch padrão falhou, abre uma decisão (uma por repositório enquanto ela estiver esperando).
+ * Devolve quantas decisões novas criou.
+ */
+export async function syncCiFailures(): Promise<number> {
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const repos = all<{ path: string; name: string; project_slug: string; remote: string | null; default_branch: string | null }>(`
+    select r.path, r.name, r.project_slug, r.remote, r.default_branch from repos r
+    join projects p on p.slug = r.project_slug
+    where p.status in ('active','maintenance') and r.remote like '%github.com%'
+      and exists (select 1 from commits c where c.repo_path = r.path and c.committed_at >= ?)
+    limit 60`, since);
+  let created = 0;
+  await pool(repos, 4, async r => {
+    const full = githubName(r.remote);
+    if (!full) return;
+    // develop = deploy em dev, main = produção (e a padrão do repo, se for outra)
+    for (const branch of [...new Set(['main', 'develop', r.default_branch].filter(Boolean) as string[])]) {
+      try {
+        const { stdout } = await execFileP('gh', ['run', 'list', '-R', full, '--branch', branch, '--limit', '1',
+          '--json', 'databaseId,conclusion,status,url,displayTitle,workflowName,createdAt'], { windowsHide: true });
+        const last = (JSON.parse(stdout) as { databaseId: number; conclusion: string; status: string; url: string; displayTitle: string; workflowName: string; createdAt: string }[])[0];
+        if (!last || last.status !== 'completed' || last.conclusion !== 'failure') continue;
+        if (get(`select 1 from proposals where source = 'ci' and status = 'proposed' and source_ref like ?`, `${full}@${branch}#%`)) continue;
+        const res = run(`insert or ignore into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,'ci',?)`,
+          r.project_slug, `CI falhando em ${r.name} (${branch})`,
+          `O workflow "${last.workflowName}" falhou em ${new Date(last.createdAt).toLocaleString('pt-BR')}, no commit "${last.displayTitle}".
+${last.url}`,
+          'Um agente abre o log da falha, encontra a causa e propõe a correção num PR draft.', branch === 'main' ? 2 : 1, `${full}@${branch}#${last.databaseId}`);
+        created += Number(res.changes);
+      } catch { /* branch sem Actions, sem acesso ou offline */ }
+    }
+  });
+  return created;
+}
+
 // ---------- importação de pendências (M2) ----------
 
 // a palavra abre o nome ou vem depois de um separador: METODOLOGIA.md não é um TODO

@@ -11,8 +11,8 @@ export type ProposalStatus = 'proposed' | 'approved' | 'rejected' | 'deferred' |
 export type Verdict = 'approve' | 'defer' | 'reject';
 export type RunStatus = 'queued' | 'preparing' | 'running' | 'succeeded' | 'failed' | 'killed';
 export type RunPermission = 'edits' | 'full';
-/** repo: worktree isolada que termina em PR; project: pasta do projeto inteira, sem worktree */
-export type RunScope = 'repo' | 'project';
+/** repo: worktree isolada que termina em PR; project: pasta do projeto inteira; workspace: pasta própria de um agente sem projeto */
+export type RunScope = 'repo' | 'project' | 'workspace';
 export type RunEventKind = 'system' | 'text' | 'tool' | 'result' | 'error';
 
 export interface ProjectDto {
@@ -104,7 +104,11 @@ export interface NewProposalInput {
 
 export interface RunDto {
   id: number;
-  project_slug: string;
+  /** null quando é de um agente sem projeto */
+  project_slug: string | null;
+  agent_id: number | null;
+  /** sessão do Claude Code: dá para continuar conversando com ela */
+  session_id: string | null;
   proposal_id: number | null;
   task_id: number | null;
   turn_id: number | null;
@@ -133,7 +137,9 @@ export interface RunDto {
 }
 
 export interface NewRunInput {
-  project_slug: string;
+  /** pode faltar se houver agent_id de um agente sem projeto */
+  project_slug: string | null;
+  agent_id?: number | null;
   /** null = projeto inteiro (sem worktree) */
   repo_path: string | null;
   prompt: string;
@@ -321,7 +327,8 @@ export type ScheduleKind = 'daily' | 'interval';
 export interface RoutineDto {
   id: number;
   name: string;
-  project_slug: string;
+  agent_id: number | null;
+  project_slug: string | null;
   /** null = projeto inteiro (organizar/analisar); com repo = trabalha em worktree e termina em PR */
   repo_path: string | null;
   prompt: string;
@@ -346,7 +353,8 @@ export interface RoutineDto {
 
 export interface NewRoutineInput {
   name: string;
-  project_slug: string;
+  agent_id?: number | null;
+  project_slug: string | null;
   repo_path: string | null;
   prompt: string;
   permission: RunPermission;
@@ -365,6 +373,7 @@ export type RoutinePatch = Partial<NewRoutineInput>;
 
 export interface ChatDto {
   id: number;
+  agent_id: number;
   title: string;
   created_at: string;
   updated_at: string;
@@ -379,6 +388,47 @@ export interface ChatMessageDto {
   text: string;
   at: string;
 }
+
+// ---------- agentes (definições) ----------
+
+export interface AgentDto {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  color: string;
+  icon_kind: ProjectIconKind;
+  icon_value: string | null;
+  /** null = não pertence a um projeto (trabalha numa pasta própria) */
+  project_slug: string | null;
+  /** papel e jeito de trabalhar (vira instrução de sistema) */
+  instructions: string;
+  /** ferramentas extras liberadas, separadas por vírgula (ex.: mcp__sentry) */
+  tools: string;
+  permission: RunPermission;
+  /** '' = padrão do Claude Code; ou sonnet, opus, haiku */
+  model: string;
+  builtin: boolean;
+  created_at: string;
+  chats: number;
+  routines: number;
+  runs: number;
+}
+
+export interface NewAgentInput {
+  name: string;
+  description?: string | null;
+  color?: string;
+  icon_kind?: ProjectIconKind;
+  icon_value?: string | null;
+  project_slug?: string | null;
+  instructions?: string;
+  tools?: string[];
+  permission?: RunPermission;
+  model?: string;
+}
+
+export type AgentPatch = Partial<NewAgentInput>;
 
 export interface UpdateInfoDto {
   current: string;
@@ -448,10 +498,18 @@ export interface Api {
   'routines:delete': (id: number) => void;
   /** roda agora; devolve o id da execução */
   'routines:fire': (id: number) => number | null;
-  'chat:list': () => ChatDto[];
+  'agents:list': () => AgentDto[];
+  'agents:create': (input: NewAgentInput) => AgentDto;
+  'agents:update': (id: number, patch: AgentPatch) => void;
+  'agents:delete': (id: number) => void;
+  /** conversas de um agente (null = todas) */
+  'chat:list': (agentId: number | null) => ChatDto[];
   'chat:messages': (chatId: number) => ChatMessageDto[];
-  /** manda mensagem; chatId null cria conversa nova. Devolve o id da conversa */
-  'chat:send': (chatId: number | null, text: string) => number;
+  /** manda mensagem; chatId null cria conversa nova com o agente. Devolve o id da conversa */
+  'chat:send': (chatId: number | null, agentId: number, text: string) => number;
+  /** abre uma conversa que continua a sessão de uma execução já terminada */
+  'chat:fromRun': (runId: number) => number;
+  'chat:rename': (chatId: number, title: string) => void;
   'chat:stop': (chatId: number) => void;
   'chat:delete': (chatId: number) => void;
   'update:check': (force: boolean) => UpdateInfoDto;
@@ -473,6 +531,7 @@ export interface Events {
   /** mensagem nova do agente Central (texto, ferramenta usada, erro) ou fim da resposta */
   'chat:event': { chat_id: number; message: ChatMessageDto | null; busy: boolean };
   'routines:changed': null;
+  'agents:changed': null;
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
 }

@@ -17,62 +17,7 @@
           <input class="field" [value]="name()" (input)="name.set($any($event.target).value)" required>
         </label>
 
-        <div>
-          <span class="mb-2 block font-semibold">Ícone</span>
-          <div class="mb-3 flex w-fit gap-1 rounded-full border border-edge bg-night p-1" role="tablist" aria-label="Tipo de ícone">
-            @for (k of kinds; track k.id) {
-              <button type="button" role="tab" [attr.aria-selected]="iconKind() === k.id" (click)="setKind(k.id)"
-                      class="rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors"
-                      [class]="iconKind() === k.id ? 'bg-raise text-text' : 'text-mute hover:text-text'">{{ k.label }}</button>
-            }
-          </div>
-          @switch (iconKind()) {
-            @case ('letter') { <p class="text-[13px] text-mute">A inicial do nome, na cor do projeto.</p> }
-            @case ('emoji') {
-              <div class="flex flex-wrap items-center gap-1.5">
-                @for (e of emojis; track e) {
-                  <button type="button" (click)="iconValue.set(e)" [attr.aria-label]="e" [attr.aria-pressed]="iconValue() === e"
-                          class="grid size-10 place-items-center rounded-xl text-xl transition hover:bg-raise"
-                          [class.!bg-raise]="iconValue() === e" [class.ring-2]="iconValue() === e" [class.ring-frost]="iconValue() === e">{{ e }}</button>
-                }
-                <input class="field !w-24 text-center text-xl" maxlength="4" aria-label="Outro emoji" placeholder="outro"
-                       [value]="emojis.includes(iconValue() ?? '') ? '' : iconValue() ?? ''" (input)="iconValue.set($any($event.target).value || null)">
-              </div>
-            }
-            @case ('lucide') {
-              <div class="grid grid-cols-9 gap-1.5">
-                @for (i of icons; track i) {
-                  <button type="button" (click)="iconValue.set(i)" [attr.aria-label]="i" [attr.aria-pressed]="iconValue() === i" [title]="i"
-                          class="grid aspect-square place-items-center rounded-xl text-mute transition hover:bg-raise hover:text-text"
-                          [class.!bg-raise]="iconValue() === i" [class.!text-text]="iconValue() === i" [class.ring-2]="iconValue() === i" [class.ring-frost]="iconValue() === i">
-                    <span class="size-5 [&>svg]:size-full" [innerHTML]="iconSvg(i)"></span>
-                  </button>
-                }
-              </div>
-            }
-            @case ('image') {
-              <div class="flex items-center gap-3">
-                <button type="button" class="btn" (click)="pickImage()"><app-icon name="folder" [size]="16" />Escolher imagem</button>
-                <span class="text-[13px] text-mute">PNG, JPG, WebP ou SVG, até 400 KB.</span>
-              </div>
-            }
-          }
-        </div>
-
-        <div>
-          <span class="mb-2 block font-semibold">Cor</span>
-          <div class="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Cor do projeto">
-            @for (c of colors; track c) {
-              <button type="button" role="radio" [attr.aria-checked]="color() === c" [attr.aria-label]="c" (click)="color.set(c)"
-                      class="size-8 rounded-full ring-offset-2 ring-offset-panel transition hover:scale-110" [style.background]="c"
-                      [class.ring-2]="color() === c" [class.ring-text]="color() === c"></button>
-            }
-            <label class="ml-1 flex cursor-pointer items-center gap-2 rounded-full border border-edge px-3 py-1 text-[13px] text-mute hover:text-text">
-              <input type="color" class="size-5 cursor-pointer rounded border-0 bg-transparent p-0" [value]="color()" (input)="color.set($any($event.target).value)">
-              Outra
-            </label>
-          </div>
-        </div>
+        <app-icon-picker [(kind)]="iconKind" [(value)]="iconValue" [(color)]="color" />
 
         <div>
           <span class="mb-2 block font-semibold">Status</span>

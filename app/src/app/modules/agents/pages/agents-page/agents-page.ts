@@ -1,86 +1,100 @@
-import { Component, ElementRef, computed, effect, inject, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
+import { ChatView } from '../../../../shared/components/chat-view/chat-view';
+import { Agent, AgentsService, MODELS } from '../../../../shared/services/agents/agents.service';
+import { ChatService } from '../../../../shared/services/chat/chat.service';
+import { ContextMenuService } from '../../../../shared/services/context-menu/context-menu.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
-import { RUN_STATUS_LABEL, Run, RunStatus, isActive } from '../../../../shared/services/runs/runs.model';
+import { RUN_STATUS_LABEL, isActive } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
-import { MdLitePipe } from '../../../../shared/ui/md-lite.pipe';
+import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
+import { AgentDialog, AgentDialogState } from '../../components/agent-dialog/agent-dialog';
 
-const DOT: Record<RunStatus, string> = {
-  queued: 'bg-faint', preparing: 'bg-later', running: 'bg-yes', succeeded: 'bg-yes', failed: 'bg-no', killed: 'bg-faint',
-};
+type Pane = 'conversas' | 'execucoes';
 
+/** Agentes: escolhe um agente, vê as sessões dele (conversas e execuções) e conversa. */
 @Component({
   selector: 'app-agents-page',
-  imports: [RouterLink, Icon, AgoPipe, MdLitePipe],
+  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, ChatView, AgentDialog],
   templateUrl: './agents-page.html',
-  host: { class: 'grid h-full grid-cols-[360px_minmax(0,1fr)]' },
+  host: { class: 'grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)]' },
 })
 export class AgentsPage {
-  protected readonly runs = inject(RunsService);
+  protected readonly agents = inject(AgentsService);
+  protected readonly chat = inject(ChatService);
   protected readonly projects = inject(ProjectsService);
+  protected readonly runs = inject(RunsService);
   protected readonly dialogs = inject(DialogsService);
+  private readonly menu = inject(ContextMenuService);
   private readonly router = inject(Router);
   private readonly query = toSignal(inject(ActivatedRoute).queryParamMap);
-  private readonly log = viewChild<ElementRef<HTMLElement>>('log');
 
-  protected readonly statusLabel = RUN_STATUS_LABEL;
-  protected readonly dot = DOT;
+  protected readonly dialog = signal<AgentDialogState>(null);
+  protected readonly pane = signal<Pane>('conversas');
+  protected readonly runLabel = RUN_STATUS_LABEL;
   protected readonly isActive = isActive;
 
-  protected readonly filter = computed(() => this.query()?.get('projeto') ?? null);
-  protected readonly list = computed(() => {
-    const f = this.filter();
-    return f ? this.runs.runs().filter(r => r.projectSlug === f) : this.runs.runs();
-  });
-  protected readonly selected = computed<Run | null>(() => {
-    const id = Number(this.query()?.get('run'));
-    return this.runs.runs().find(r => r.id === id) ?? this.list()[0] ?? null;
-  });
-  /** a última fala do agente costuma repetir o resultado; mostra só o resultado */
-  protected readonly events = computed(() => {
-    const r = this.selected();
-    const list = r ? this.runs.eventsOf(r.id)() : [];
-    return list.filter((e, i) => !(e.kind === 'text' && list[i + 1]?.kind === 'result' && list[i + 1].text === e.text));
-  });
-  protected readonly elapsed = computed(() => {
-    const r = this.selected();
-    if (!r?.startedAt) return null;
-    const ms = (r.finishedAt ?? new Date()).getTime() - r.startedAt.getTime();
-    const min = Math.round(ms / 60000);
-    return min < 1 ? 'menos de 1 min' : `${min} min`;
-  });
+  protected readonly selected = computed(() => this.chat.agent());
+  protected readonly agentRuns = computed(() => this.runs.runs().filter(r => r.agentId === this.selected()?.id).slice(0, 60));
+  protected readonly modelLabel = (m: string) => MODELS.find(x => x.value === m)?.label ?? m;
 
   constructor() {
-    // log sempre no fim quando chega evento novo
+    // ?agente=3&conversa=12 (vindo do painel, de uma execução ou do menu de projeto)
     effect(() => {
-      this.events();
-      const el = this.log()?.nativeElement;
-      if (el) queueMicrotask(() => el.scrollTo({ top: el.scrollHeight }));
+      const q = this.query();
+      const agentId = Number(q?.get('agente'));
+      const chatId = Number(q?.get('conversa'));
+      const novo = q?.get('novo');
+      if (!this.agents.loaded()) return;
+      untracked(() => {
+        // ?novo=<projeto>: "Criar agente para o projeto" no menu de botão direito
+        if (novo) this.dialog.set({ agent: null, projectSlug: novo });
+        if (chatId) this.chat.select(chatId);
+        else if (agentId) this.chat.selectAgent(agentId);
+        else if (!this.chat.agentId() && this.agents.central()) this.chat.selectAgent(this.agents.central()!.id);
+      });
     });
   }
 
-  protected select(r: Run): void {
-    this.router.navigate([], { queryParams: { run: r.id }, queryParamsHandling: 'merge' });
+  protected pick(a: Agent): void {
+    this.chat.selectAgent(a.id);
+    this.router.navigate([], { queryParams: { agente: a.id, conversa: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
-  protected project(slug: string) {
-    return this.projects.bySlug().get(slug) ?? null;
+  protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
+
+  protected newRun(a: Agent): void {
+    this.dialogs.newRun({ agentId: a.id, projectSlug: a.projectSlug });
   }
 
-  protected openWorktree(r: Run): void {
-    if (r.worktreePath) this.projects.openInVsCode(r.worktreePath);
+  protected newRoutine(a: Agent): void {
+    this.router.navigate(['/rotinas'], { queryParams: { nova: 1, agente: a.id } });
   }
 
-  protected openPr(r: Run): void {
-    if (r.prUrl) this.projects.openExternal(r.prUrl);
+  protected closed(savedId: number | null): void {
+    this.dialog.set(null);
+    if (savedId) this.chat.selectAgent(savedId);
   }
 
-  protected time(d: Date): string {
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  protected rename(id: number, current: string): void {
+    const title = prompt('Nome da conversa', current);
+    if (title?.trim()) this.chat.rename(id, title);
+  }
+
+  protected agentMenu(e: MouseEvent, a: Agent): void {
+    this.menu.open(e, [
+      { label: 'Conversar', icon: 'central', run: () => this.pick(a) },
+      { label: 'Nova conversa', icon: 'plus', run: () => { this.pick(a); this.chat.newChat(a.id); } },
+      { label: 'Mandar uma tarefa', icon: 'play', run: () => this.newRun(a) },
+      { label: 'Nova rotina', icon: 'routine', run: () => this.newRoutine(a) },
+      null,
+      { label: 'Editar', icon: 'edit', run: () => this.dialog.set({ agent: a }) },
+      ...(a.builtin ? [] : [{ label: 'Excluir', icon: 'delete' as const, danger: true, run: () => this.dialog.set({ agent: a }) }]),
+    ]);
   }
 }

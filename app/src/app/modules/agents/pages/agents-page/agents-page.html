@@ -1,126 +1,110 @@
-<!-- lista -->
-<section class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-labelledby="ag-title">
+<!-- lista de agentes -->
+<section class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-labelledby="ag-list">
   <div class="flex items-center justify-between gap-3 px-5 pt-6 pb-3">
-    <h1 id="ag-title" class="font-display text-2xl font-bold tracking-tight">Agentes</h1>
-    <button type="button" class="btn btn-primary btn-sm" (click)="dialogs.newRun({ projectSlug: filter() })">
-      <app-icon name="plus" [size]="14" />Nova tarefa
-    </button>
+    <h1 id="ag-list" class="font-display text-2xl font-bold tracking-tight">Agentes</h1>
+    <button type="button" class="btn btn-primary btn-sm" (click)="dialog.set({ agent: null })"><app-icon name="plus" [size]="14" />Novo</button>
   </div>
-  @if (filter(); as f) {
-    <div class="mx-5 mb-2 flex items-center gap-2 rounded-full bg-raise px-3 py-1.5 text-[13px]">
-      <span class="size-2 rounded-[3px]" [style.background]="project(f)?.color"></span>
-      <span class="flex-1 truncate">Só {{ project(f)?.name }}</span>
-      <a routerLink="/agentes" class="text-mute hover:text-text" aria-label="Ver todos"><app-icon name="close" [size]="13" /></a>
-    </div>
-  }
-
-  <ul class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-    @for (r of list(); track r.id) {
+  <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-4">
+    @for (a of agents.agents(); track a.id) {
       <li>
-        <button type="button" (click)="select(r)"
-                class="flex w-full gap-3 rounded-xl px-3 py-3 text-left hover:bg-raise/60"
-                [class.bg-raise]="selected()?.id === r.id" [attr.aria-current]="selected()?.id === r.id">
-          <span class="mt-1.5 size-2 shrink-0 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>
+        <button type="button" (click)="pick(a)" (contextmenu)="agentMenu($event, a)" [attr.aria-current]="selected()?.id === a.id"
+                class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-raise/70"
+                [class.bg-raise]="selected()?.id === a.id">
+          <app-project-avatar [project]="a" [size]="36" class="transition-transform duration-150 group-hover:scale-105" />
           <span class="min-w-0 flex-1">
-            <span class="line-clamp-2 leading-snug">{{ r.title }}</span>
-            <span class="mt-1 block truncate text-[12.5px] text-mute">
-              {{ statusLabel[r.status] }}, {{ r.scope === 'project' ? 'projeto inteiro' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}
+            <span class="block truncate font-semibold">{{ a.name }}</span>
+            <span class="block truncate text-[12.5px] text-mute">
+              @if (a.builtin) { Organiza tudo } @else if (project(a.projectSlug); as p) { {{ p.name }} } @else { Sem projeto }
             </span>
           </span>
+          @if (a.routines) { <span class="flex items-center gap-1 text-[11.5px] text-faint" title="Rotinas"><app-icon name="routine" [size]="12" />{{ a.routines }}</span> }
         </button>
-      </li>
-    } @empty {
-      <li class="px-4 py-10 text-center text-mute">
-        Nenhuma tarefa ainda. Os agentes trabalham em cópias isoladas dos repositórios e terminam com um PR draft.
       </li>
     }
   </ul>
+  <p class="border-t border-edge px-5 py-3 text-[12px] text-faint">Clique com o botão direito num agente para mais opções.</p>
 </section>
 
-<!-- detalhe -->
-@if (selected(); as r) {
-  <section class="flex min-h-0 flex-col" aria-label="Execução">
-    <header class="border-b border-edge px-8 pt-6 pb-5">
-      <div class="flex items-start gap-4">
-        <div class="min-w-0 flex-1">
-          <p class="flex items-center gap-2 text-[13px]">
-            <span class="flex items-center gap-1.5 rounded-full bg-raise px-2.5 py-0.5 font-semibold">
-              <span class="size-1.5 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>{{ statusLabel[r.status] }}
-            </span>
-            @if (project(r.projectSlug); as p) {
-              <a [routerLink]="['/projetos', p.slug]" class="font-semibold hover:underline" [style.color]="p.color">{{ p.name }}</a>
-            }
-          </p>
-          <h2 class="mt-2 font-display text-[22px] font-semibold leading-snug [overflow-wrap:anywhere] selectable">{{ r.title }}</h2>
-        </div>
-        <div class="flex shrink-0 gap-2">
-          @if (r.prUrl) { <button type="button" class="btn btn-primary btn-sm" (click)="openPr(r)"><app-icon name="pr" [size]="14" />Ver PR</button> }
-          @if (r.worktreePath) { <button type="button" class="btn btn-sm" (click)="openWorktree(r)"><app-icon name="code" [size]="14" />Abrir no VS Code</button> }
-          @if (isActive(r.status)) { <button type="button" class="btn btn-sm !text-no" (click)="runs.kill(r.id)"><app-icon name="stop" [size]="13" />Interromper</button> }
+<!-- agente selecionado -->
+@if (selected(); as a) {
+  <section class="flex min-h-0 flex-col" aria-label="Agente">
+    <header class="flex items-start gap-4 border-b border-edge px-8 pt-6 pb-5">
+      <app-project-avatar [project]="a" [size]="48" />
+      <div class="min-w-0 flex-1">
+        <h2 class="truncate font-display text-[24px] font-bold leading-tight tracking-tight">{{ a.name }}</h2>
+        @if (a.description) { <p class="mt-0.5 line-clamp-2 text-mute">{{ a.description }}</p> }
+        <div class="mt-2.5 flex flex-wrap gap-1.5 text-[12px]">
+          @if (project(a.projectSlug); as p) {
+            <a [routerLink]="['/projetos', p.slug]" class="flex items-center gap-1.5 rounded-full border border-edge px-2.5 py-0.5 hover:border-faint" [style.color]="p.color">
+              <app-project-avatar [project]="p" [size]="14" />{{ p.name }}</a>
+          } @else if (!a.builtin) { <span class="rounded-full border border-edge px-2.5 py-0.5 text-mute">Sem projeto</span> }
+          <span class="rounded-full border border-edge px-2.5 py-0.5 text-mute">{{ a.permission === 'full' ? 'Liberdade total' : 'Segura' }}</span>
+          @if (a.model) { <span class="rounded-full border border-edge px-2.5 py-0.5 text-mute">{{ modelLabel(a.model) }}</span> }
+          @for (t of a.tools; track t) { <span class="rounded-full border border-frost/30 bg-frost/10 px-2.5 py-0.5 font-mono text-frost">{{ t }}</span> }
         </div>
       </div>
-
-      <dl class="mt-4 flex flex-wrap gap-x-7 gap-y-2 text-[13px]">
-        <div><dt class="text-faint">Onde</dt><dd>{{ r.scope === 'project' ? 'Projeto inteiro' : 'Repositório ' + r.repoName }}</dd></div>
-        @if (r.routineId) { <div><dt class="text-faint">Origem</dt><dd><a routerLink="/rotinas" class="text-frost hover:underline">Rotina</a></dd></div> }
-        @if (r.branch) { <div class="min-w-0 max-w-full"><dt class="text-faint">Branch</dt><dd class="font-mono text-[12px] [overflow-wrap:anywhere] selectable">{{ r.branch }} → {{ r.baseBranch }}</dd></div> }
-        <div><dt class="text-faint">Liberdade</dt><dd>{{ r.permission === 'full' ? 'Total' : 'Segura' }}</dd></div>
-        <div [title]="r.costUsd != null ? 'Equivalente em API: US$ ' + r.costUsd.toFixed(2) + '. Não é cobrado: sai da cota do seu plano.' : 'Sai da cota do seu plano do Claude.'">
-          <dt class="text-faint">Consumo</dt>
-          <dd class="tabular-nums">{{ r.sessionUsed != null ? '≈ ' + r.sessionUsed + '% da sessão' : (isActive(r.status) ? 'medindo…' : 'cota do plano') }}</dd></div>
-        @if (elapsed()) { <div><dt class="text-faint">Duração</dt><dd>{{ elapsed() }}</dd></div> }
-      </dl>
-
-      @if (r.prompt !== r.title) {
-        <details class="mt-4">
-          <summary class="cursor-pointer text-[13px] text-mute hover:text-text">Tarefa completa</summary>
-          <p class="mt-2 whitespace-pre-line rounded-2xl bg-panel p-4 text-[13.5px] leading-relaxed selectable">{{ r.prompt }}</p>
-        </details>
-      }
+      <div class="flex shrink-0 flex-wrap justify-end gap-2">
+        <button type="button" class="btn btn-sm" (click)="newRun(a)"><app-icon name="play" [size]="14" />Tarefa</button>
+        <button type="button" class="btn btn-sm" (click)="newRoutine(a)"><app-icon name="routine" [size]="14" />Rotina</button>
+        <button type="button" class="btn btn-sm" (click)="dialog.set({ agent: a })"><app-icon name="edit" [size]="14" />Editar</button>
+      </div>
     </header>
 
-    <ol #log class="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-8 py-6" aria-live="polite" aria-label="Log do agente">
-      @for (e of events(); track $index) {
-        @switch (e.kind) {
-          @case ('system') {
-            <li class="flex gap-3 text-[12.5px] text-faint"><time class="w-16 shrink-0 tabular-nums">{{ time(e.at) }}</time><span class="min-w-0 [overflow-wrap:anywhere] selectable">{{ e.text }}</span></li>
-          }
-          @case ('tool') {
-            <li class="flex gap-3 text-[12.5px] text-mute">
-              <time class="w-16 shrink-0 tabular-nums text-faint">{{ time(e.at) }}</time>
-              <span class="min-w-0 truncate font-mono selectable">{{ e.text }}</span>
-            </li>
-          }
-          @case ('text') {
-            <li class="flex gap-3"><time class="w-16 shrink-0 pt-0.5 text-[12.5px] tabular-nums text-faint">{{ time(e.at) }}</time>
-              <p class="min-w-0 max-w-3xl whitespace-pre-line leading-relaxed [overflow-wrap:anywhere] selectable" [innerHTML]="e.text | mdLite"></p></li>
-          }
-          @case ('result') {
-            <li class="ml-[76px] max-w-3xl rounded-2xl border border-yes/40 bg-yes/10 p-5">
-              <p class="mb-2 font-semibold text-yes">Resultado</p>
-              <p class="whitespace-pre-line leading-relaxed [overflow-wrap:anywhere] selectable" [innerHTML]="e.text | mdLite"></p>
-            </li>
-          }
-          @case ('error') {
-            <li class="ml-[76px] max-w-3xl rounded-2xl border border-no/40 bg-no/10 p-5">
-              <p class="mb-2 font-semibold text-no">Erro</p>
-              <p class="whitespace-pre-line font-mono text-[12.5px] leading-relaxed [overflow-wrap:anywhere] selectable">{{ e.text }}</p>
-            </li>
-          }
+    <div class="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)]">
+      <!-- sessões -->
+      <aside class="flex min-h-0 flex-col border-r border-edge" aria-label="Sessões">
+        <div class="flex items-center gap-1 px-3 pt-3 pb-2" role="tablist">
+          <button type="button" role="tab" [attr.aria-selected]="pane() === 'conversas'" (click)="pane.set('conversas')"
+                  class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'conversas' ? 'bg-raise' : 'text-mute hover:text-text'">Conversas</button>
+          <button type="button" role="tab" [attr.aria-selected]="pane() === 'execucoes'" (click)="pane.set('execucoes')"
+                  class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'execucoes' ? 'bg-raise' : 'text-mute hover:text-text'">Execuções</button>
+        </div>
+        @if (pane() === 'conversas') {
+          <button type="button" (click)="chat.newChat(a.id)" class="mx-3 mb-2 flex items-center gap-2 rounded-xl border border-dashed border-edge px-3 py-2 text-[13px] text-mute transition hover:border-faint hover:text-text"
+                  [class.!border-frost]="!chat.current()" [class.!text-frost]="!chat.current()"><app-icon name="plus" [size]="14" />Nova conversa</button>
+          <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+            @for (c of chat.agentChats(); track c.id) {
+              <li class="group flex items-center gap-1 rounded-lg transition-colors hover:bg-raise/70" [class.bg-raise]="c.id === chat.current()">
+                <button type="button" class="min-w-0 flex-1 px-3 py-2 text-left" (click)="chat.select(c.id)" (dblclick)="rename(c.id, c.title)">
+                  <span class="flex items-center gap-1.5">
+                    @if (chat.busy().has(c.id)) { <span class="pulse size-1.5 shrink-0 rounded-full bg-frost"></span> }
+                    <span class="truncate text-[13.5px]">{{ c.title }}</span>
+                  </span>
+                  <span class="text-[11.5px] text-faint">{{ c.updatedAt | ago }}</span>
+                </button>
+                <button type="button" class="mr-1 rounded p-1 text-faint opacity-0 hover:text-no group-hover:opacity-100" (click)="chat.remove(c.id)" aria-label="Apagar conversa">
+                  <app-icon name="delete" [size]="14" /></button>
+              </li>
+            } @empty {
+              <li class="px-3 py-4 text-[13px] text-mute">Nenhuma conversa ainda.</li>
+            }
+          </ul>
+        } @else {
+          <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+            @for (r of agentRuns(); track r.id) {
+              <li>
+                <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="flex gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-raise/70">
+                  <span class="mt-1.5 size-1.5 shrink-0 rounded-full" [class.pulse]="isActive(r.status)"
+                        [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : isActive(r.status) ? 'bg-later' : 'bg-faint'"></span>
+                  <span class="min-w-0">
+                    <span class="line-clamp-2 text-[13px]">{{ r.title }}</span>
+                    <span class="text-[11.5px] text-faint">{{ runLabel[r.status] }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}</span>
+                  </span>
+                </a>
+              </li>
+            } @empty {
+              <li class="px-3 py-4 text-[13px] text-mute">{{ a.name }} ainda não executou tarefas.</li>
+            }
+          </ul>
         }
-      } @empty {
-        <li class="text-mute">{{ isActive(r.status) ? 'Esperando o agente começar…' : 'Sem registro desta execução.' }}</li>
-      }
-      @if (r.status === 'running') {
-        <li class="ml-[76px] flex items-center gap-2 text-[13px] text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>trabalhando</li>
-      }
-    </ol>
+      </aside>
+
+      <app-chat-view class="min-h-0" />
+    </div>
   </section>
 } @else {
-  <div class="grid place-items-center p-10 text-center text-mute">
-    <div>
-      <p class="font-display text-xl text-text">Nenhuma tarefa selecionada</p>
-      <p class="mt-2">Crie uma tarefa ou aprove uma decisão para mandar a um agente.</p>
-    </div>
-  </div>
+  <div class="grid place-items-center text-mute">Carregando agentes…</div>
 }
+
+<!-- fixed: fora do grid da página (senão vira uma linha a mais e rouba altura) -->
+<app-agent-dialog class="fixed" [state]="dialog()" (closed)="closed($event)" />

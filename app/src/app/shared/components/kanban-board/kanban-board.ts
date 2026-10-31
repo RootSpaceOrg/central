@@ -2,6 +2,7 @@ import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, CdkDropListGroup
 import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { ContextMenuService } from '../../services/context-menu/context-menu.service';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
@@ -18,6 +19,7 @@ export class KanbanBoard {
   protected readonly tasks = inject(TasksService);
   protected readonly projects = inject(ProjectsService);
   protected readonly dialogs = inject(DialogsService);
+  private readonly menu = inject(ContextMenuService);
 
   readonly projectSlug = input<string | null>(null);
 
@@ -44,6 +46,19 @@ export class KanbanBoard {
       projectSlug: t.projectSlug, repoPath: t.repoPath ?? undefined, taskId: t.id,
       prompt: [t.title, t.body].filter(Boolean).join('\n\n'),
     });
+  }
+
+  /** Botão direito num card. */
+  protected cardMenu(e: MouseEvent, t: Task): void {
+    this.menu.open(e, [
+      { label: 'Editar', icon: 'edit', run: () => this.dialogs.editTask(t.id) },
+      { label: 'Mandar para um agente', icon: 'play', run: () => this.toAgent(t, e), disabled: t.column === 'doing' || t.column === 'done' },
+      ...(t.prUrl ? [{ label: 'Abrir PR', icon: 'pr' as const, run: () => this.projects.openExternal(t.prUrl!) }] : []),
+      null,
+      ...COLUMNS.filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.id, 0) })),
+      null,
+      { label: 'Excluir', icon: 'delete', danger: true, run: () => { if (confirm(`Excluir "${t.title}"?`)) this.tasks.remove(t.id); } },
+    ]);
   }
 
   protected openPr(t: Task, ev: Event): void {

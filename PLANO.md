@@ -64,6 +64,19 @@ Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), n
 - **Projeto editável**: nome, ícone (letra, emoji, ícone, imagem), cor, status, descrição, pasta; excluir da Central.
 - Ícones Lucide com hover e tooltip; atualização pela release no GitHub (RootSpaceOrg/central).
 
+## Feito (v0.6)
+
+- **Agentes como papéis** (tela Agentes): nome, ícone, instruções, projeto opcional, ferramentas extras (ex.: `mcp__sentry`),
+  liberdade e modelo. Exemplos: Suporte KultivAi (conversa), Sentinela de erros KultivAi e Radar de tendências (rotinas),
+  Marketing (sem projeto, pasta própria em `Development/.central-agents/`).
+- **Conversas** com qualquer agente: sessões salvas, renomear, apagar, markdown completo, passos recolhíveis; painel Ctrl+J
+  troca de agente. **Continuar conversa** retoma a sessão de uma execução terminada.
+- Execuções e rotinas sem projeto (agente com pasta própria); rotinas e tarefas com agente.
+- Seletor de projeto/agente com ícone; menu de botão direito em projetos, agentes e cards do Kanban.
+- **M5 (ingestão)**: sentinela de CI abre decisão quando `main` ou `develop` de um repo ativo falha no GitHub Actions.
+- **M6 (scouts)**: agente Radar de tendências com rotina semanal (desligada até você ligar).
+- Uso do Claude com proteção contra limite de consultas (429) e último valor salvo.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

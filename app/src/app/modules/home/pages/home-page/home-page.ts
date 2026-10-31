@@ -16,12 +16,15 @@ import { UsageService, untilReset } from '../../../../shared/services/usage/usag
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Heartbeat } from '../../../../shared/ui/heartbeat';
 import { Icon } from '../../../../shared/ui/icon';
+import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
+import { AgentsService } from '../../../../shared/services/agents/agents.service';
+import { ChatService } from '../../../../shared/services/chat/chat.service';
 
 type Mode = 'pilot' | 'light';
 
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, Icon, AgoPipe, Heartbeat],
+  imports: [RouterLink, Icon, AgoPipe, Heartbeat, ProjectAvatar],
   templateUrl: './home-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })
@@ -34,6 +37,8 @@ export class HomePage {
   protected readonly turns = inject(TurnsService);
   protected readonly usage = inject(UsageService);
   protected readonly dialogs = inject(DialogsService);
+  protected readonly agents = inject(AgentsService);
+  private readonly chat = inject(ChatService);
   private readonly settings = inject(SettingsApiService);
   private readonly router = inject(Router);
 
@@ -92,6 +97,12 @@ export class HomePage {
       if (v) this.since.set(new Date(v));
       this.settings.set('home:lastSeen', new Date().toISOString());
     });
+  }
+
+  /** abre o painel lateral já com o agente */
+  protected talk(agentId: number): void {
+    this.chat.selectAgent(agentId);
+    this.chat.open.set(true);
   }
 
   protected setMode(m: Mode): void {

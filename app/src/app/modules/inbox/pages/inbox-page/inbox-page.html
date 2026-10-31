@@ -71,10 +71,7 @@
         <textarea class="field min-h-20 resize-y" placeholder="Detalhes, se quiser" aria-label="Detalhes"
                   [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
         <div class="flex gap-2">
-          <select class="field" aria-label="Projeto" [value]="projectSlug()" (change)="projectSlug.set($any($event.target).value)">
-            <option value="" [selected]="!(projectSlug())">Sem projeto</option>
-            @for (pr of projects.living(); track pr.slug) { <option [value]="pr.slug" [selected]="(pr.slug) === (projectSlug())">{{ pr.name }}</option> }
-          </select>
+          <app-project-select class="min-w-0 flex-1" [value]="projectSlug()" (valueChange)="projectSlug.set($event)" noneLabel="Sem projeto" />
           <button class="btn btn-primary" [disabled]="!title().trim()">Anotar</button>
         </div>
         @if (captureError()) { <p role="alert" class="text-[13px] text-no">{{ captureError() }}</p> }

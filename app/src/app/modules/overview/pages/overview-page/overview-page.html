@@ -7,7 +7,7 @@
       <a routerLink="/decisoes" class="text-later hover:underline">{{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão espera' : 'decisões esperam' }} você.</a>
     }
     @if (runs.active().length) {
-      <a routerLink="/agentes" class="text-yes hover:underline">{{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }} agora.</a>
+      <a routerLink="/execucoes" class="text-yes hover:underline">{{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }} agora.</a>
     }
     @if (quiet()) { Sem movimento esta semana: {{ quiet() }}. }
   </p>
@@ -110,7 +110,7 @@
           <button type="button" class="text-[13px] text-frost hover:underline" (click)="dialogs.newRun()">Nova tarefa</button>
         </div>
         @for (r of recentRuns(); track r.id) {
-          <a routerLink="/agentes" [queryParams]="{ run: r.id }"
+          <a routerLink="/execucoes" [queryParams]="{ run: r.id }"
              class="mb-2 flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
             <span class="size-2 shrink-0 rounded-full" [class.pulse]="r.status === 'running'"
                   [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : r.status === 'killed' ? 'bg-faint' : 'bg-later'"></span>

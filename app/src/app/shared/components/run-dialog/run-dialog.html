@@ -11,12 +11,16 @@
 
     <div class="space-y-5 px-8 pb-6">
       <div class="grid grid-cols-2 gap-3">
-        <label class="block">
+        <div>
+          <span class="mb-1.5 block font-semibold">Agente <span class="font-normal text-mute">(opcional)</span></span>
+          <app-agent-select [value]="agentId()" (valueChange)="selectAgent($event)" noneLabel="Nenhum (genérico)" [hideCentral]="true" />
+        </div>
+        <div>
           <span class="mb-1.5 block font-semibold">Projeto</span>
-          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
-            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="p.slug === projectSlug()">{{ p.name }}</option> }
-          </select>
-        </label>
+          <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" [noneLabel]="agentId() ? 'Nenhum (pasta do agente)' : null" />
+        </div>
+      </div>
+      @if (projectSlug()) {
         <label class="block">
           <span class="mb-1.5 block font-semibold">Onde</span>
           <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
@@ -26,7 +30,7 @@
             }
           </select>
         </label>
-      </div>
+      }
 
       <label class="block">
         <span class="mb-1.5 block font-semibold">O que fazer</span>

@@ -1,49 +1,31 @@
 /**
- * Agente Central: chat que orquestra a Central pelo MCP dela. Cada conversa é uma sessão do Claude Code
- * (usa a cota do plano do Gustavo), retomada com --resume para manter o contexto.
+ * Conversas com os agentes da Central (a própria Central, Suporte KultivAi, Marketing…). Cada conversa é uma sessão do
+ * Claude Code (usa a cota do plano), retomada com --resume na mesma pasta para manter o contexto.
  */
-import { app } from 'electron';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 import type { ChatDto, ChatMessageDto, ChatRole } from '../src/app/shared/contract';
+import { agentCwd, agentPromptFile, agentTools, centralAgent, getAgent } from './agentdefs';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
 
 type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) => void;
 
-// Lê tudo e mexe na Central; não edita código (para isso existem os agentes).
-const TOOLS = ['mcp__central', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'Bash(git log:*)', 'Bash(git status:*)',
-  'Bash(gh pr list:*)', 'Bash(gh pr view:*)', 'Bash(gh issue list:*)', 'Bash(gh run list:*)'];
-
-const SYSTEM = `Você é a Central, a assistente que organiza o trabalho do Gustavo, dev solo que toca vários produtos SaaS.
-Responda sempre em português do Brasil, curto e direto, como um colega de trabalho. Sem enrolação.
-
-Você enxerga e controla a Central pelas ferramentas \`central\` (MCP): projetos (pastas em ${DEV_ROOT} com vários repositórios),
-backlog em Kanban, base de ideias, decisões que esperam o Gustavo, agentes, turnos e rotinas, e a cota do plano do Claude.
-Você também pode ler os arquivos dos projetos (Read, Grep, Glob) para entender o código antes de propor algo.
-
-Como trabalhar:
-- Consulte antes de afirmar. Comece por central_overview quando a pergunta for ampla.
-- Números e estado (commits, repositórios, tarefas, agentes) vêm das ferramentas da Central (central_overview, get_project, list_*).
-  Não use Bash para contar ou listar: só git log, git status e gh para detalhes que a Central não tem.
-- Quando ele pedir para fazer algo, faça pelas ferramentas e diga em uma linha o que mudou.
-- Para trabalho de código, crie tarefas e coloque agentes para trabalhar (start_agent) em vez de editar arquivos você mesma.
-- Excluir projeto, tarefa ou rotina: só com pedido explícito. Se o pedido for ambíguo, pergunte antes.
-- Se a cota da sessão estiver alta (acima de 80%), avise antes de disparar agentes.
-- Ao listar coisas, use listas curtas com o essencial (título, projeto, estado).`;
-
 /** passos internos do Claude que não dizem nada ao Gustavo */
 export const INTERNAL = new Set(['ToolSearch', 'TodoWrite']);
 const procs = new Map<number, ChildProcess>();
-let promptFile: string | null = null;
 
-export const listChats = () => all<ChatDto>('select id, title, created_at, updated_at from chats order by updated_at desc limit 50');
+export const listChats = (agentId: number | null) => all<ChatDto>(
+  `select id, agent_id, title, created_at, updated_at from chats where (? is null or agent_id = ?) order by updated_at desc limit 100`, agentId, agentId);
 export const listMessages = (chatId: number) => all<ChatMessageDto>('select * from chat_messages where chat_id = ? order by id', chatId);
 export const deleteChat = (chatId: number) => { stopChat(chatId); run('delete from chats where id = ?', chatId); };
+export function renameChat(chatId: number, title: string): void {
+  if (!title.trim()) throw new Error('Título vazio.');
+  run('update chats set title = ? where id = ?', title.trim().slice(0, 120), chatId);
+}
 
 function save(chatId: number, role: ChatRole, text: string, notify: Notify): void {
   const { lastInsertRowid } = run('insert into chat_messages (chat_id, role, text, at) values (?,?,?,?)', chatId, role, text, now());
@@ -56,28 +38,45 @@ export function stopChat(chatId: number): void {
   if (p?.pid) execFile('taskkill', ['/pid', String(p.pid), '/T', '/F'], () => {});
 }
 
-export function sendChat(chatId: number | null, text: string, notify: Notify, onCentralChange: () => void): number {
+/** Conversa que continua a sessão de uma execução (o agente lembra tudo o que fez nela). */
+export function chatFromRun(runId: number): number {
+  const r = get<{ id: number; prompt: string; session_id: string | null; agent_id: number | null; worktree_path: string | null; repo_path: string; scope: string }>(
+    'select id, prompt, session_id, agent_id, worktree_path, repo_path, scope from runs where id = ?', runId);
+  if (!r) throw new Error('Execução não encontrada.');
+  if (!r.session_id) throw new Error('Esta execução não guardou a sessão (é anterior à v0.6).');
+  const existing = get<{ id: number }>('select id from chats where session_id = ?', r.session_id);
+  if (existing) return existing.id;
+  const cwd = r.scope === 'repo' ? r.worktree_path : r.repo_path;
+  if (!cwd || !existsSync(cwd)) throw new Error('A pasta da execução não existe mais.');
+  const agentId = r.agent_id ?? centralAgent().id;
+  return Number(run('insert into chats (agent_id, title, session_id, cwd) values (?,?,?,?)',
+    agentId, `Execução #${r.id}: ${r.prompt.split('\n')[0].slice(0, 80)}`, r.session_id, cwd).lastInsertRowid);
+}
+
+export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void): number {
   const msg = text.trim();
   if (!msg) throw new Error('Escreva uma mensagem.');
-  if (chatId && procs.has(chatId)) throw new Error('A Central ainda está respondendo a mensagem anterior.');
+  if (chatId && procs.has(chatId)) throw new Error('O agente ainda está respondendo a mensagem anterior.');
+  const chat = chatId ? get<{ agent_id: number | null; session_id: string | null; cwd: string | null }>('select agent_id, session_id, cwd from chats where id = ?', chatId) : null;
+  if (chatId && !chat) throw new Error('Conversa não encontrada.');
+  const agent = getAgent(chat?.agent_id ?? agentId) ?? centralAgent();
   if (!chatId) {
-    chatId = Number(run('insert into chats (title) values (?)', msg.replace(/\s+/g, ' ').slice(0, 70)).lastInsertRowid);
+    chatId = Number(run('insert into chats (agent_id, title, cwd) values (?,?,?)', agent.id, msg.replace(/\s+/g, ' ').slice(0, 70), agentCwd(agent)).lastInsertRowid);
   }
   const id = chatId;
   save(id, 'user', msg, notify);
 
-  if (!promptFile) {
-    promptFile = join(app.getPath('userData'), 'central-agent.md');
-    writeFileSync(promptFile, SYSTEM);
-  }
-  const session = get<{ session_id: string | null }>('select session_id from chats where id = ?', id)?.session_id;
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt-file', `"${promptFile}"`,
-    '--allowedTools', `"${TOOLS.join(',')}"`];
+  // conversas antigas (antes da v0.6) não guardavam a pasta: eram todas na raiz de Development
+  const cwd = chat?.cwd ?? (chat ? DEV_ROOT : agentCwd(agent));
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt-file', `"${agentPromptFile(agent)}"`];
+  if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
+  else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
+  if (agent.model) args.push('--model', agent.model);
   const mcp = mcpConfigPath();
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
-  if (session) args.push('--resume', session);
+  if (chat?.session_id) args.push('--resume', chat.session_id);
 
-  const child = spawn('claude', args, { cwd: DEV_ROOT, shell: true, windowsHide: true, env: childEnv() });
+  const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv() });
   procs.set(id, child);
   child.stdin.end(msg);
 
@@ -85,7 +84,7 @@ export function sendChat(chatId: number | null, text: string, notify: Notify, on
   createInterface({ input: child.stdout }).on('line', line => {
     let m: any;
     try { m = JSON.parse(line); } catch { return; }
-    if (m.session_id && m.session_id !== session) run('update chats set session_id = ? where id = ?', m.session_id, id);
+    if (m.session_id && m.session_id !== chat?.session_id) run('update chats set session_id = ? where id = ?', m.session_id, id);
     if (m.type === 'assistant') {
       for (const b of m.message?.content ?? []) {
         if (b.type === 'text' && b.text.trim()) { answered = true; save(id, 'assistant', b.text.trim(), notify); }
@@ -95,7 +94,7 @@ export function sendChat(chatId: number | null, text: string, notify: Notify, on
         }
       }
     } else if (m.type === 'result' && m.is_error && !answered) {
-      save(id, 'error', m.result || 'A Central não conseguiu responder.', notify);
+      save(id, 'error', m.result || 'O agente não conseguiu responder.', notify);
     }
   });
   let stderr = '';
@@ -111,6 +110,7 @@ export function sendChat(chatId: number | null, text: string, notify: Notify, on
 /** "Consultou as tarefas", "Criou uma ideia"… para mostrar no chat e nos logs o que foi feito. */
 export function describe(name: string, input: any): string {
   const tool = String(name).replace(/^mcp__central__/, '');
+  if (tool.startsWith('mcp__')) return `${tool.split('__')[1]}: ${tool.split('__').slice(2).join(' ').replace(/_/g, ' ')}`;
   const labels: Record<string, string> = {
     central_overview: 'Olhou o panorama', list_projects: 'Listou os projetos', get_project: `Abriu o projeto ${input?.slug ?? ''}`,
     create_project: `Criou o projeto ${input?.name ?? ''}`, update_project: `Editou o projeto ${input?.slug ?? ''}`, delete_project: `Excluiu o projeto ${input?.slug ?? ''}`,
@@ -118,13 +118,16 @@ export function describe(name: string, input: any): string {
     delete_task: `Excluiu a tarefa #${input?.id ?? ''}`, list_ideas: 'Consultou as ideias', create_idea: `Guardou a ideia "${input?.title ?? ''}"`,
     update_idea: `Atualizou a ideia #${input?.id ?? ''}`, promote_idea: `Transformou a ideia #${input?.id ?? ''} em tarefa`,
     list_decisions: 'Consultou as decisões', create_decision: `Criou a decisão "${input?.title ?? ''}"`, decide: `Registrou decisão #${input?.id ?? ''}`,
-    list_agent_runs: 'Consultou os agentes', get_agent_run: `Leu o log do agente #${input?.id ?? ''}`, start_agent: 'Colocou um agente para trabalhar',
-    stop_agent: `Interrompeu o agente #${input?.id ?? ''}`, start_turn: 'Começou um turno', list_turns: 'Consultou os turnos',
+    list_agent_runs: 'Consultou as execuções', get_agent_run: `Leu o log da execução #${input?.id ?? ''}`, start_agent: 'Colocou um agente para trabalhar',
+    stop_agent: `Interrompeu a execução #${input?.id ?? ''}`, start_turn: 'Começou um turno', list_turns: 'Consultou os turnos',
     list_routines: 'Consultou as rotinas', create_routine: `Criou a rotina "${input?.name ?? ''}"`, update_routine: `Editou a rotina #${input?.id ?? ''}`,
     delete_routine: `Excluiu a rotina #${input?.id ?? ''}`, run_routine_now: `Rodou a rotina #${input?.id ?? ''}`,
+    list_agents: 'Consultou os agentes', create_agent: `Criou o agente "${input?.name ?? ''}"`, update_agent: `Editou o agente #${input?.id ?? ''}`,
+    delete_agent: `Excluiu o agente #${input?.id ?? ''}`,
     get_claude_usage: 'Conferiu a cota do Claude', import_pending: 'Importou pendências',
     Read: `Leu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-2).join('/')}`, Grep: `Buscou "${input?.pattern ?? ''}"`, Glob: `Listou ${input?.pattern ?? ''}`,
     WebSearch: `Pesquisou "${input?.query ?? ''}"`, WebFetch: 'Leu uma página', Bash: `Rodou ${String(input?.command ?? '').slice(0, 60)}`,
+    Write: `Escreveu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`, Edit: `Editou ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`,
   };
   return labels[tool] ?? tool;
 }

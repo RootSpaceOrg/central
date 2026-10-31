@@ -1,4 +1,5 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ProjectSelect } from '../pickers/project-select';
 
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { errorMessage } from '../../services/ipc/ipc.service';
@@ -9,7 +10,7 @@ import { Icon } from '../../ui/icon';
 
 @Component({
   selector: 'app-task-dialog',
-  imports: [Icon],
+  imports: [Icon, ProjectSelect],
   templateUrl: './task-dialog.html',
 })
 export class TaskDialog {
@@ -99,7 +100,7 @@ export class TaskDialog {
       this.selectProject(t.projectSlug, t.repoPath ?? '');
     } else if (s.mode === 'create') {
       this.title.set(s.title ?? ''); this.body.set(s.body ?? ''); this.column.set(s.column ?? 'backlog'); this.priority.set(2);
-      this.selectProject(s.projectSlug ?? this.projects.living()[0]?.slug ?? '');
+      this.selectProject(s.projectSlug ?? this.projects.defaultSlug());
     }
   }
 }

@@ -4,7 +4,10 @@ export type { RunEventKind, RunPermission, RunScope, RunSize, RunStatus };
 
 export interface Run {
   id: number;
-  projectSlug: string;
+  projectSlug: string | null;
+  agentId: number | null;
+  /** sessão do Claude Code (dá para continuar conversando) */
+  sessionId: string | null;
   proposalId: number | null;
   taskId: number | null;
   turnId: number | null;
@@ -39,7 +42,8 @@ export interface RunEvent {
 }
 
 export interface NewRun {
-  projectSlug: string;
+  projectSlug: string | null;
+  agentId?: number | null;
   /** null = projeto inteiro */
   repoPath: string | null;
   prompt: string;

@@ -8,11 +8,12 @@ import { DB_PATH, DEV_ROOT } from './db';
 import { killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
-  setSetting, syncPullRequests, updateIdea, updateTask,
+  setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
-import { deleteChat, listChats, listMessages, sendChat, stopChat } from './central-agent';
+import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
+import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent } from './agentdefs';
 import { startMcp } from './mcp';
 import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
@@ -37,6 +38,7 @@ function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]
 
 const changed = () => send('projects:changed', null);
 const routinesChanged = () => send('routines:changed', null);
+const agentsChanged = () => send('agents:changed', null);
 const backlogChanged = () => send('backlog:changed', null);
 const emitRun = {
   event: (e: Events['run:event']) => send('run:event', e),
@@ -129,9 +131,16 @@ function registerIpc(): void {
   handle('routines:fire', async id => { const r = await fireRoutine(id, emitRun, true); routinesChanged(); return r; });
 
   const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean) => send('chat:event', { chat_id, message, busy });
-  handle('chat:list', () => listChats());
+  handle('agents:list', () => listAgents());
+  handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });
+  handle('agents:update', (id, patch) => { updateAgent(id, patch); agentsChanged(); });
+  handle('agents:delete', id => { deleteAgent(id); agentsChanged(); routinesChanged(); });
+
+  handle('chat:list', agentId => listChats(agentId));
   handle('chat:messages', id => listMessages(id));
-  handle('chat:send', (id, text) => sendChat(id, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); }));
+  handle('chat:send', (id, agentId, text) => sendChat(id, agentId, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); agentsChanged(); }));
+  handle('chat:fromRun', runId => chatFromRun(runId));
+  handle('chat:rename', (id, title) => { renameChat(id, title); });
   handle('chat:stop', id => stopChat(id));
   handle('chat:delete', id => deleteChat(id));
 
@@ -183,16 +192,20 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  seedAgents();
+  seedAgentsV2();
   registerIpc();
   createWindow();
   watchTurns(emitRun);
   watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
-  startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged })
+  startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged, agents: agentsChanged })
     .catch(e => console.error('MCP da Central não subiu', e));
   // sincroniza repositórios e, depois, leva para Feito as tarefas cujo PR foi mergeado
-  const syncAll = () => syncProjects(null, changed).then(() => syncPullRequests()).then(n => { if (n) backlogChanged(); });
-  syncAll();
-  setInterval(() => syncPullRequests().then(n => { if (n) backlogChanged(); }), 15 * 60_000);
+  // e abre decisões para CI quebrado nos repositórios ativos
+  const watchGithub = () => Promise.all([syncPullRequests(), syncCiFailures()])
+    .then(([prs, ci]) => { if (prs) backlogChanged(); if (ci) { backlogChanged(); changed(); } });
+  syncProjects(null, changed).then(watchGithub);
+  setInterval(watchGithub, 15 * 60_000);
 });
 
 app.on('window-all-closed', () => {

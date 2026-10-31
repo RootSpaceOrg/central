@@ -22,6 +22,9 @@
           <div class="min-w-0 flex-1">
             <p class="flex items-center gap-2">
               <span class="truncate font-display text-[17px] font-semibold">{{ r.name }}</span>
+              @if (agent(r.agentId); as a) {
+                <span class="flex items-center gap-1.5 text-[13px]" [style.color]="a.color"><app-project-avatar [project]="a" [size]="16" />{{ a.name }}</span>
+              }
               @if (project(r.projectSlug); as p) {
                 <span class="flex items-center gap-1.5 text-[13px]" [style.color]="p.color"><app-project-avatar [project]="p" [size]="16" />{{ p.name }}</span>
               }
@@ -29,11 +32,11 @@
             <p class="mt-0.5 truncate text-[13px] text-mute">{{ r.prompt }}</p>
             <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-faint">
               <span class="flex items-center gap-1"><app-icon name="timer" [size]="13" />{{ describe(r) }}</span>
-              <span>{{ r.repoPath ? 'Repositório ' + repoName(r.repoPath) : 'Projeto inteiro' }}, {{ r.permission === 'edits' ? 'segura' : 'total' }}</span>
+              <span>{{ r.repoPath ? 'Repositório ' + repoName(r.repoPath) : r.projectSlug ? 'Projeto inteiro' : 'Pasta do agente' }}, {{ r.permission === 'edits' ? 'segura' : 'total' }}</span>
               @if (r.enabled) { <span class="text-text/70">próxima {{ when(r.nextRunAt) }}</span> }
               @if (r.lastSkipped) { <span class="text-later">pulou: {{ r.lastSkipped }}</span> }
               @else if (r.lastRunId) {
-                <a routerLink="/agentes" [queryParams]="{ run: r.lastRunId }" class="hover:underline"
+                <a routerLink="/execucoes" [queryParams]="{ run: r.lastRunId }" class="hover:underline"
                    [class]="r.lastStatus === 'failed' ? 'text-no' : r.lastStatus === 'succeeded' ? 'text-yes' : 'text-frost'">
                   última {{ r.lastRunAt | ago }}, {{ r.lastStatus === 'succeeded' ? 'concluída' : r.lastStatus === 'failed' ? 'falhou' : 'em andamento' }}</a>
               }
