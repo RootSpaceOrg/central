@@ -49,14 +49,15 @@
           <input type="time" class="field" [value]="until()" (input)="until.set($any($event.target).value)">
           <span class="mt-1 block text-[12.5px] text-mute">{{ untilLabel() }}</span>
         </label>
-        <label class="block">
-          <span class="mb-1.5 block font-semibold">Teto total</span>
-          <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-mute">US$</span>
-            <input type="number" min="1" step="1" class="field pl-11" [value]="budget()" (input)="budget.set(+$any($event.target).value)">
+        <div>
+          <span class="mb-1.5 block font-semibold">Tamanho de cada tarefa</span>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Tamanho">
+            @for (s of sizes; track s.id) {
+              <button type="button" role="radio" [attr.aria-checked]="size() === s.id" (click)="size.set(s.id)" [title]="s.hint"
+                      class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="size() === s.id ? 'bg-raise' : 'text-faint'">{{ s.label }}</button>
+            }
           </div>
-          @if (count()) { <span class="mt-1 block text-[12.5px] text-mute">US$ {{ (budget() / count()).toFixed(2) }} por tarefa</span> }
-        </label>
+        </div>
         <div>
           <span class="mb-1.5 block font-semibold">Liberdade</span>
           <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Liberdade">

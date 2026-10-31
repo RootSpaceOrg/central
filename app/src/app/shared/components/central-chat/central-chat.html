@@ -1,0 +1,81 @@
+<aside class="fixed top-10 right-0 bottom-[26px] z-30 flex w-[460px] flex-col border-l border-edge bg-panel shadow-[-24px_0_60px_-30px_rgb(0_0_0/0.8)] transition-transform duration-200 ease-out motion-reduce:transition-none"
+       [class.translate-x-full]="!chat.open()" [attr.aria-hidden]="!chat.open()" [attr.inert]="chat.open() ? null : ''" aria-label="Agente Central">
+  <header class="flex items-center gap-3 border-b border-edge px-5 py-3.5">
+    <span class="grid size-9 place-items-center rounded-xl bg-frost/15 text-frost"><app-icon name="spark" [size]="19" /></span>
+    <div class="min-w-0 flex-1">
+      <h2 class="font-display text-[17px] font-semibold leading-tight">Central</h2>
+      <p class="truncate text-[12.5px] text-mute">Projetos, backlog, ideias, decisões e agentes</p>
+    </div>
+    <button type="button" class="btn btn-ghost !p-2" (click)="history.set(!history())" title="Conversas" aria-label="Conversas"
+            [class.!bg-raise]="history()"><app-icon name="summary" [size]="17" /></button>
+    <button type="button" class="btn btn-ghost !p-2" (click)="newChat()" title="Nova conversa" aria-label="Nova conversa"><app-icon name="plus" [size]="17" /></button>
+    <button type="button" class="btn btn-ghost !p-2" (click)="chat.open.set(false)" title="Fechar (Esc)" aria-label="Fechar"><app-icon name="close" [size]="17" /></button>
+  </header>
+
+  @if (history()) {
+    <ul class="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Conversas anteriores">
+      @for (c of chat.chats(); track c.id) {
+        <li class="group flex items-center gap-2 rounded-xl px-3 py-2.5 hover:bg-raise" [class.bg-raise]="c.id === chat.current()">
+          <button type="button" class="min-w-0 flex-1 text-left" (click)="pick(c.id)">
+            <span class="block truncate">{{ c.title }}</span>
+            <span class="text-[12px] text-faint">{{ c.updatedAt | ago }}</span>
+          </button>
+          <button type="button" class="opacity-0 text-faint hover:text-no group-hover:opacity-100" (click)="chat.remove(c.id)" aria-label="Apagar conversa">
+            <app-icon name="delete" [size]="15" /></button>
+        </li>
+      } @empty {
+        <li class="p-6 text-center text-mute">Nenhuma conversa ainda.</li>
+      }
+    </ul>
+  } @else {
+    <div #list class="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-5" aria-live="polite">
+      @for (m of chat.messages(); track m.id) {
+        @switch (m.role) {
+          @case ('user') {
+            <div class="ml-10 rounded-2xl rounded-br-md bg-frost/15 px-4 py-2.5 leading-relaxed whitespace-pre-line selectable">{{ m.text }}</div>
+          }
+          @case ('assistant') {
+            <div class="leading-relaxed whitespace-pre-line [overflow-wrap:anywhere] selectable" [innerHTML]="m.text | mdLite"></div>
+          }
+          @case ('tool') {
+            <p class="flex items-center gap-2 text-[12.5px] text-mute"><app-icon name="check" [size]="13" class="text-yes" />{{ m.text }}</p>
+          }
+          @case ('error') {
+            <p class="rounded-xl bg-no/10 px-3 py-2 text-[13px] text-no">{{ m.text }}</p>
+          }
+        }
+      } @empty {
+        <div class="pt-6">
+          <p class="font-display text-xl font-semibold">Em que posso ajudar?</p>
+          <p class="mt-1 text-mute">Pergunte sobre qualquer projeto ou peça para eu organizar, criar ou colocar agentes para trabalhar.</p>
+          <div class="mt-5 space-y-2">
+            @for (s of suggestions; track s) {
+              <button type="button" (click)="send(s)" class="block w-full rounded-xl border border-edge px-4 py-2.5 text-left text-[13.5px] text-mute transition hover:border-faint hover:bg-raise hover:text-text">{{ s }}</button>
+            }
+          </div>
+        </div>
+      }
+      @if (chat.currentBusy()) {
+        <p class="flex items-center gap-2 text-[13px] text-frost"><span class="pulse size-1.5 rounded-full bg-frost"></span>trabalhando…</p>
+      }
+    </div>
+
+    <form class="border-t border-edge p-3" (submit)="$event.preventDefault(); send()">
+      @if (chat.error()) { <p role="alert" class="mb-2 px-1 text-[13px] text-no">{{ chat.error() }}</p> }
+      <div class="flex items-end gap-2 rounded-2xl border border-edge bg-night p-2 focus-within:border-frost">
+        <textarea #input rows="1" class="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 outline-none placeholder:text-faint"
+                  placeholder="Pergunte ou peça algo…" aria-label="Mensagem para a Central" [value]="text()"
+                  (input)="text.set($any($event.target).value)" (keydown)="onKey($event)"
+                  style="field-sizing: content"></textarea>
+        @if (chat.currentBusy()) {
+          <button type="button" class="grid size-9 place-items-center rounded-xl bg-raise text-no hover:bg-no/15" (click)="chat.stop()" aria-label="Interromper">
+            <app-icon name="stop" [size]="17" /></button>
+        } @else {
+          <button class="grid size-9 place-items-center rounded-xl bg-frost text-night transition hover:brightness-110 disabled:opacity-40" [disabled]="!text().trim()" aria-label="Enviar">
+            <app-icon name="send" [size]="16" /></button>
+        }
+      </div>
+      <p class="mt-1.5 px-1 text-[11.5px] text-faint">Enter envia, Shift+Enter quebra linha, Ctrl+J abre e fecha.</p>
+    </form>
+  }
+</aside>

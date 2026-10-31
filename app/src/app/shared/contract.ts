@@ -5,10 +5,14 @@
  */
 
 export type ProjectStatus = 'active' | 'maintenance' | 'frozen' | 'dead';
+/** letra: inicial do nome; emoji; lucide: nome de ícone do Lucide; image: data URL */
+export type ProjectIconKind = 'letter' | 'emoji' | 'lucide' | 'image';
 export type ProposalStatus = 'proposed' | 'approved' | 'rejected' | 'deferred' | 'running' | 'done' | 'killed';
 export type Verdict = 'approve' | 'defer' | 'reject';
 export type RunStatus = 'queued' | 'preparing' | 'running' | 'succeeded' | 'failed' | 'killed';
 export type RunPermission = 'edits' | 'full';
+/** repo: worktree isolada que termina em PR; project: pasta do projeto inteira, sem worktree */
+export type RunScope = 'repo' | 'project';
 export type RunEventKind = 'system' | 'text' | 'tool' | 'result' | 'error';
 
 export interface ProjectDto {
@@ -18,6 +22,8 @@ export interface ProjectDto {
   status: ProjectStatus;
   color: string;
   description: string | null;
+  icon_kind: ProjectIconKind;
+  icon_value: string | null;
   created_at: string;
   folder_exists: boolean;
   repo_count: number;
@@ -46,6 +52,10 @@ export interface ProjectPatch {
   status?: ProjectStatus;
   color?: string;
   description?: string | null;
+  icon_kind?: ProjectIconKind;
+  icon_value?: string | null;
+  /** caminho absoluto; os repositórios são redescobertos */
+  folder?: string;
 }
 
 export interface RepoDto {
@@ -98,6 +108,9 @@ export interface RunDto {
   proposal_id: number | null;
   task_id: number | null;
   turn_id: number | null;
+  routine_id: number | null;
+  scope: RunScope;
+  /** no escopo project é a pasta do projeto */
   repo_path: string;
   repo_name: string;
   worktree_path: string | null;
@@ -107,7 +120,11 @@ export interface RunDto {
   status: RunStatus;
   permission: RunPermission;
   budget_usd: number;
+  /** equivalente em API calculado pelo Claude Code; não é cobrado no plano */
   cost_usd: number | null;
+  /** % da sessão do plano no início e no fim (mede o consumo real) */
+  usage_start: number | null;
+  usage_end: number | null;
   pr_url: string | null;
   result: string | null;
   created_at: string;
@@ -117,7 +134,8 @@ export interface RunDto {
 
 export interface NewRunInput {
   project_slug: string;
-  repo_path: string;
+  /** null = projeto inteiro (sem worktree) */
+  repo_path: string | null;
   prompt: string;
   budget_usd: number;
   permission: RunPermission;
@@ -295,6 +313,73 @@ export interface NewTerminalInput {
   rows: number;
 }
 
+// ---------- rotinas ----------
+
+export type RunSize = 'small' | 'medium' | 'large';
+export type ScheduleKind = 'daily' | 'interval';
+
+export interface RoutineDto {
+  id: number;
+  name: string;
+  project_slug: string;
+  /** null = projeto inteiro (organizar/analisar); com repo = trabalha em worktree e termina em PR */
+  repo_path: string | null;
+  prompt: string;
+  permission: RunPermission;
+  size: RunSize;
+  schedule_kind: ScheduleKind;
+  /** dias da semana, 0 = domingo */
+  days: number[];
+  time: string;
+  interval_hours: number;
+  /** não dispara sozinha se a sessão do plano estiver acima disso (%) */
+  max_session: number;
+  enabled: boolean;
+  next_run_at: string;
+  last_run_at: string | null;
+  last_skipped: string | null;
+  last_status: RunStatus | null;
+  last_run_id: number | null;
+  run_count: number;
+  created_at: string;
+}
+
+export interface NewRoutineInput {
+  name: string;
+  project_slug: string;
+  repo_path: string | null;
+  prompt: string;
+  permission: RunPermission;
+  size: RunSize;
+  schedule_kind: ScheduleKind;
+  days: number[];
+  time: string;
+  interval_hours: number;
+  max_session?: number;
+  enabled?: boolean;
+}
+
+export type RoutinePatch = Partial<NewRoutineInput>;
+
+// ---------- agente Central (chat) ----------
+
+export interface ChatDto {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChatRole = 'user' | 'assistant' | 'tool' | 'error';
+
+export interface ChatMessageDto {
+  id: number;
+  chat_id: number;
+  role: ChatRole;
+  text: string;
+  at: string;
+}
+
 export interface UpdateInfoDto {
   current: string;
   /** maior versão disponível acima da atual, ou null */
@@ -304,6 +389,10 @@ export interface UpdateInfoDto {
   source_dir: string;
   source_exists: boolean;
   building: boolean;
+  /** de onde vem a versão nova: pasta release local ou release no GitHub */
+  source: 'local' | 'github' | null;
+  /** por que não deu para consultar o GitHub (gh ausente, offline) */
+  github_error: string | null;
 }
 
 /** invoke(canal, ...args) → Promise<retorno> */
@@ -313,6 +402,9 @@ export interface Api {
   'projects:create': (input: NewProjectInput) => ProjectDto;
   'projects:update': (slug: string, patch: ProjectPatch) => void;
   'projects:sync': (slug: string | null) => void;
+  /** remove da Central (pasta e repositórios ficam no disco) */
+  'projects:delete': (slug: string) => void;
+  'dialog:image': () => string | null;
   'repos:list': (slug: string) => RepoDto[];
   'commits:recent': (slug: string | null, days: number, limit: number) => CommitDto[];
   'proposals:list': (statuses: ProposalStatus[]) => ProposalDto[];
@@ -350,9 +442,22 @@ export interface Api {
   'turns:stop': (id: number) => void;
   'settings:get': (key: string) => string | null;
   'settings:set': (key: string, value: string) => void;
-  'update:check': () => UpdateInfoDto;
+  'routines:list': () => RoutineDto[];
+  'routines:create': (input: NewRoutineInput) => RoutineDto;
+  'routines:update': (id: number, patch: RoutinePatch) => void;
+  'routines:delete': (id: number) => void;
+  /** roda agora; devolve o id da execução */
+  'routines:fire': (id: number) => number | null;
+  'chat:list': () => ChatDto[];
+  'chat:messages': (chatId: number) => ChatMessageDto[];
+  /** manda mensagem; chatId null cria conversa nova. Devolve o id da conversa */
+  'chat:send': (chatId: number | null, text: string) => number;
+  'chat:stop': (chatId: number) => void;
+  'chat:delete': (chatId: number) => void;
+  'update:check': (force: boolean) => UpdateInfoDto;
   'update:install': () => void;
-  'update:build': () => void;
+  /** publish: também cria a release no GitHub */
+  'update:build': (publish: boolean) => void;
 }
 
 /** eventos main → interface */
@@ -365,6 +470,9 @@ export interface Events {
   /** ideias, tarefas ou turnos mudaram no main (agente terminou, importação, turno) */
   'backlog:changed': null;
   'update:log': { line: string };
+  /** mensagem nova do agente Central (texto, ferramenta usada, erro) ou fim da resposta */
+  'chat:event': { chat_id: number; message: ChatMessageDto | null; busy: boolean };
+  'routines:changed': null;
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
 }

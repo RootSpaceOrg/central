@@ -7,26 +7,34 @@
 
   <div class="grid min-h-0 grid-cols-[56px_252px_1fr]">
     <!-- barra de atividades -->
-    <nav class="flex flex-col items-center gap-1 border-r border-edge bg-night py-3" aria-label="Seções">
+    <nav class="flex flex-col items-center gap-1.5 border-r border-edge bg-night py-3" aria-label="Seções">
+      <!-- agente Central: sempre à mão, destacado -->
+      <button type="button" (click)="chat.toggle()" [attr.aria-pressed]="chat.open()" aria-label="Agente Central (Ctrl+J)"
+              class="nav-item group mb-2 !bg-frost/12 !text-frost hover:!bg-frost/20" [class.!bg-frost]="chat.open()" [class.!text-night]="chat.open()">
+        <app-icon name="spark" [size]="21" [fill]="chat.open()" />
+        @if (chat.busy().size) { <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-frost ring-2 ring-night"></span> }
+        <span class="nav-tip">Agente Central <kbd>Ctrl J</kbd></span>
+      </button>
+
       @for (n of nav; track n.path) {
         <a [routerLink]="n.path" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ exact: !!n.exact }"
-           class="relative grid size-11 place-items-center rounded-xl text-mute hover:text-text"
-           [class.!text-text]="rla.isActive" [class.!bg-raise]="rla.isActive" [title]="n.label" [attr.aria-label]="n.label">
-          @if (rla.isActive) { <span class="absolute -left-[7px] h-5 w-[3px] rounded-full bg-frost"></span> }
-          <app-icon [name]="n.icon" [size]="23" [fill]="rla.isActive" />
+           class="nav-item group" [class.nav-active]="rla.isActive" [attr.aria-label]="n.label">
+          <span class="nav-bar" aria-hidden="true"></span>
+          <app-icon [name]="n.icon" [size]="21" [fill]="rla.isActive" class="transition-transform duration-150 group-hover:scale-110" />
           @if (badge(n.path); as b) {
-            <span class="absolute -right-0.5 -top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-night {{ b.tone }}">{{ b.n }}</span>
+            <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold ring-2 ring-night {{ b.tone }}">{{ b.n }}</span>
           }
           @if (n.path === '/agentes' && runs.active().length) {
-            <span class="pulse absolute right-1.5 top-1.5 size-2.5 rounded-full bg-yes ring-2 ring-night"></span>
+            <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-yes ring-2 ring-night"></span>
           }
+          <span class="nav-tip">{{ n.label }}</span>
         </a>
       }
 
-      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()"
-              class="mt-auto grid size-10 place-items-center rounded-xl text-mute hover:text-text disabled:opacity-60"
-              title="Sincronizar repositórios" aria-label="Sincronizar repositórios">
+      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()" class="nav-item group mt-auto disabled:opacity-60"
+              aria-label="Sincronizar repositórios">
         <app-icon name="sync" [size]="19" [class.animate-spin]="projects.syncing()" />
+        <span class="nav-tip">Sincronizar repositórios</span>
       </button>
     </nav>
 
@@ -98,9 +106,9 @@
 
 <ng-template #item let-p>
   <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text"
-     class="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-mute hover:bg-raise/60 hover:text-text"
+     class="group flex items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
      [class.opacity-60]="p.status === 'dead'">
-    <span class="size-2.5 shrink-0 rounded-[4px]" [style.background]="p.color"></span>
+    <app-project-avatar [project]="p" [size]="20" class="transition-transform duration-150 group-hover:scale-110" />
     <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
     @if (runningIn(p)) { <span class="pulse size-1.5 rounded-full bg-yes" title="Agente trabalhando"></span> }
     @if (p.openProposals) {
@@ -114,3 +122,5 @@
 <app-task-dialog />
 <app-turn-dialog />
 <app-update-dialog />
+<app-project-edit-dialog />
+<app-central-chat />

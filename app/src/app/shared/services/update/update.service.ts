@@ -10,11 +10,13 @@ export interface UpdateInfo {
   builtAt: Date | null;
   sourceDir: string;
   sourceExists: boolean;
+  source: 'local' | 'github' | null;
+  githubError: string | null;
 }
 
 const toModel = (d: UpdateInfoDto): UpdateInfo => ({
   current: d.current, latest: d.latest, builtAt: d.built_at ? new Date(d.built_at) : null,
-  sourceDir: d.source_dir, sourceExists: d.source_exists,
+  sourceDir: d.source_dir, sourceExists: d.source_exists, source: d.source, githubError: d.github_error,
 });
 
 /** Versão instalada x versão disponível em app/release; gerar e instalar. Confere a cada 30 min. */
@@ -36,16 +38,16 @@ export class UpdateService {
     setInterval(() => this.check(), 30 * 60_000);
   }
 
-  check(): void {
-    this.api.check().then(d => { this.info.set(toModel(d)); if (d.building) this.building.set(true); });
+  check(force = false): void {
+    this.api.check(force).then(d => { this.info.set(toModel(d)); if (d.building) this.building.set(true); });
   }
 
-  async build(): Promise<void> {
+  async build(publish: boolean): Promise<void> {
     this.log.set([]);
     this.result.set(null);
     this.building.set(true);
     try {
-      await this.api.build();
+      await this.api.build(publish);
     } catch (e) {
       this.building.set(false);
       this.result.set({ ok: false, message: errorMessage(e) });

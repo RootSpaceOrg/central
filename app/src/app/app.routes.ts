@@ -11,6 +11,7 @@ export const routes: Routes = [
   { path: 'ideias', title: 'Ideias', loadComponent: () => import('./modules/ideas/pages/ideas-page/ideas-page').then(m => m.IdeasPage) },
   { path: 'backlog', title: 'Backlog', loadComponent: () => import('./modules/backlog/pages/backlog-page/backlog-page').then(m => m.BacklogPage) },
   { path: 'agentes', title: 'Agentes', loadComponent: () => import('./modules/agents/pages/agents-page/agents-page').then(m => m.AgentsPage) },
+  { path: 'rotinas', title: 'Rotinas', loadComponent: () => import('./modules/routines/pages/routines-page/routines-page').then(m => m.RoutinesPage) },
   {
     path: 'projetos/:slug',
     title: 'Projeto',

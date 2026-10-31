@@ -148,6 +148,42 @@ db.exec(`
     finished_at  text
   );
 
+  create table if not exists routines (
+    id             integer primary key autoincrement,
+    name           text not null,
+    project_slug   text not null references projects on delete cascade,
+    repo_path      text,
+    prompt         text not null,
+    permission     text not null default 'edits',
+    size           text not null default 'small',
+    schedule_kind  text not null default 'daily',
+    days           text not null default '1,2,3,4,5',
+    time           text not null default '08:00',
+    interval_hours integer not null default 24,
+    max_session    integer not null default 80,
+    enabled        integer not null default 1,
+    next_run_at    text not null,
+    last_run_at    text,
+    last_skipped   text,
+    created_at     text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  create table if not exists chats (
+    id         integer primary key autoincrement,
+    title      text not null,
+    session_id text,
+    created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  create table if not exists chat_messages (
+    id      integer primary key autoincrement,
+    chat_id integer not null references chats on delete cascade,
+    role    text not null,
+    text    text not null,
+    at      text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
   create table if not exists settings (
     key   text primary key,
     value text not null
@@ -155,7 +191,12 @@ db.exec(`
 `);
 
 // Colunas adicionadas depois da v0.2.
-for (const [table, column, type] of [['runs', 'task_id', 'integer'], ['runs', 'turn_id', 'integer'], ['tasks', 'repo_path', 'text']]) {
+for (const [table, column, type] of [
+  ['runs', 'task_id', 'integer'], ['runs', 'turn_id', 'integer'], ['tasks', 'repo_path', 'text'],
+  ['projects', 'icon_kind', "text not null default 'letter'"], ['projects', 'icon_value', 'text'],
+  ['runs', 'scope', "text not null default 'repo'"], ['runs', 'routine_id', 'integer'],
+  ['runs', 'usage_start', 'real'], ['runs', 'usage_end', 'real'],
+]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
   if (!cols.some(c => c.name === column)) db.exec(`alter table ${table} add column ${column} ${type}`);
 }

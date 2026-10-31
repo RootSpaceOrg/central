@@ -1,0 +1,104 @@
+<dialog #dlg (close)="closed.emit()" aria-labelledby="rt-title"
+        class="m-auto w-[min(760px,92vw)] max-h-[90vh] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+  <form (submit)="submit($event)" class="flex max-h-[90vh] flex-col">
+    <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-4">
+      <div>
+        <h2 id="rt-title" class="font-display text-2xl font-semibold">{{ state()?.routine ? 'Editar rotina' : 'Nova rotina' }}</h2>
+        <p class="mt-1 text-mute">Um agente que trabalha sozinho, na agenda que você definir, e conta o que fez na Central.</p>
+      </div>
+      <button type="button" class="btn btn-ghost !p-2" (click)="closed.emit()" aria-label="Fechar"><app-icon name="close" /></button>
+    </header>
+
+    <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-8 pb-6">
+      <label class="block">
+        <span class="mb-1.5 block font-semibold">Nome</span>
+        <input class="field" placeholder="Ex.: Revisar PRs toda manhã" [value]="name()" (input)="name.set($any($event.target).value)" required>
+      </label>
+
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block">
+          <span class="mb-1.5 block font-semibold">Projeto</span>
+          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
+            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="p.slug === projectSlug()">{{ p.name }}</option> }
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block font-semibold">Onde</span>
+          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
+            <option value="" [selected]="!repoPath()">Projeto inteiro (sem worktree)</option>
+            @for (r of repos(); track r.path) { <option [value]="r.path" [selected]="r.path === repoPath()">Repositório {{ r.name }}</option> }
+          </select>
+        </label>
+      </div>
+
+      <label class="block">
+        <span class="mb-1.5 block font-semibold">O que fazer</span>
+        <textarea class="field min-h-32 resize-y leading-relaxed" required
+                  placeholder="Ex.: Liste os PRs abertos do projeto. Para cada um parado há mais de 3 dias, crie uma decisão na Central com o próximo passo."
+                  [value]="prompt()" (input)="prompt.set($any($event.target).value)"></textarea>
+        <span class="mt-1 block text-[12.5px] text-mute">A rotina enxerga a Central: pode criar tarefas, ideias e decisões com o que encontrar.</span>
+      </label>
+
+      <div>
+        <span class="mb-1.5 block font-semibold">Quando <span class="font-normal text-mute">{{ schedule() }}</span></span>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Tipo de agenda">
+            <button type="button" role="radio" [attr.aria-checked]="scheduleKind() === 'daily'" (click)="scheduleKind.set('daily')"
+                    class="rounded-full px-4 py-1.5 text-[13px] font-semibold" [class]="scheduleKind() === 'daily' ? 'bg-raise' : 'text-mute hover:text-text'">Dias e horário</button>
+            <button type="button" role="radio" [attr.aria-checked]="scheduleKind() === 'interval'" (click)="scheduleKind.set('interval')"
+                    class="rounded-full px-4 py-1.5 text-[13px] font-semibold" [class]="scheduleKind() === 'interval' ? 'bg-raise' : 'text-mute hover:text-text'">A cada N horas</button>
+          </div>
+          @if (scheduleKind() === 'daily') {
+            <div class="flex gap-1" role="group" aria-label="Dias da semana">
+              @for (d of weekdays; track $index) {
+                <button type="button" (click)="toggleDay($index)" [attr.aria-pressed]="days().includes($index)"
+                        class="grid size-9 place-items-center rounded-full text-[13px] font-semibold transition"
+                        [class]="days().includes($index) ? 'bg-frost text-night' : 'border border-edge text-mute hover:text-text'">{{ d }}</button>
+              }
+            </div>
+            <input type="time" class="field !w-32" [value]="time()" (input)="time.set($any($event.target).value)" aria-label="Horário">
+          } @else {
+            <label class="flex items-center gap-2 text-mute">a cada
+              <input type="number" min="1" max="168" class="field !w-20" [value]="intervalHours()" (input)="intervalHours.set(+$any($event.target).value)"> horas</label>
+          }
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-5">
+        <div>
+          <span class="mb-1.5 block font-semibold">Tamanho</span>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Tamanho">
+            @for (s of sizes; track s.id) {
+              <button type="button" role="radio" [attr.aria-checked]="size() === s.id" (click)="size.set(s.id)" [title]="s.hint"
+                      class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="size() === s.id ? 'bg-raise' : 'text-mute hover:text-text'">{{ s.label }}</button>
+            }
+          </div>
+        </div>
+        <div>
+          <span class="mb-1.5 block font-semibold">Liberdade</span>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Liberdade">
+            <button type="button" role="radio" [attr.aria-checked]="permission() === 'edits'" (click)="permission.set('edits')"
+                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'edits' ? 'bg-raise' : 'text-mute hover:text-text'">Segura</button>
+            <button type="button" role="radio" [attr.aria-checked]="permission() === 'full'" (click)="permission.set('full')"
+                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'full' ? 'bg-raise text-later' : 'text-mute hover:text-text'">Total</button>
+          </div>
+          <span class="mt-1 block text-[12.5px] text-mute">
+            {{ permission() === 'edits' ? (repoPath() ? 'Edita na worktree e termina em PR.' : 'Só lê e organiza a Central.') : 'Roda qualquer comando, sem perguntar.' }}</span>
+        </div>
+      </div>
+
+      <label class="block">
+        <span class="mb-1.5 block font-semibold">Não rodar se a sessão do Claude passar de <span class="text-frost">{{ maxSession() }}%</span></span>
+        <input type="range" min="30" max="100" step="5" class="w-full accent-frost" [value]="maxSession()" (input)="maxSession.set(+$any($event.target).value)">
+        <span class="block text-[12.5px] text-mute">Protege a cota para você: nesse caso a rotina pula e tenta no próximo horário.</span>
+      </label>
+    </div>
+
+    <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
+      @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
+      <span class="flex-1"></span>
+      <button type="button" class="btn btn-ghost" (click)="closed.emit()">Cancelar</button>
+      <button class="btn btn-primary" [disabled]="busy() || !name().trim() || !prompt().trim()">{{ state()?.routine ? 'Salvar' : 'Criar rotina' }}</button>
+    </footer>
+  </form>
+</dialog>

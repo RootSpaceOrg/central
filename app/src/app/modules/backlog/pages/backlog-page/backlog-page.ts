@@ -31,7 +31,7 @@ import { Icon } from '../../../../shared/ui/icon';
       <div class="mt-4 flex items-center gap-3 rounded-2xl border border-[#B48CFF]/40 bg-[#B48CFF]/10 px-4 py-2.5 text-[13.5px]">
         <app-icon name="night" [size]="18" class="text-[#B48CFF]" />
         <span>Turno em <b>{{ projects.bySlug().get(t.projectSlug)?.name }}</b>: {{ t.succeeded }} de {{ t.runs }} concluídas,
-          até {{ t.until.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}, US$ {{ t.costUsd.toFixed(2) }} de {{ t.budgetUsd.toFixed(0) }}</span>
+          até {{ t.until.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</span>
         <button type="button" class="ml-auto text-no hover:underline" (click)="turns.stop(t.id)">Parar</button>
       </div>
     }

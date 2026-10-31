@@ -10,10 +10,11 @@ import { RUN_STATUS_LABEL } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Heartbeat } from '../../../../shared/ui/heartbeat';
+import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
 @Component({
   selector: 'app-overview-page',
-  imports: [RouterLink, Heartbeat, AgoPipe],
+  imports: [RouterLink, Heartbeat, AgoPipe, ProjectAvatar],
   templateUrl: './overview-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })

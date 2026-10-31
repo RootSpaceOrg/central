@@ -7,6 +7,7 @@ import * as pty from '@lydell/node-pty';
 
 import type { CloneProgressDto, FileDto, FsEntryDto, GithubRepoDto, NewTerminalInput } from '../src/app/shared/contract';
 import { all } from './db';
+import { mcpConfigPath } from './mcp-config';
 
 const execFileP = promisify(execFile);
 const MAX_FILE = 2 * 1024 * 1024;
@@ -59,7 +60,11 @@ let nextTerminal = 1;
 export function createTerminal(input: NewTerminalInput, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
   const cwd = guard(input.cwd);
   const args = ['-NoLogo'];
-  if (input.kind === 'claude') args.push('-NoExit', '-Command', 'claude');
+  if (input.kind === 'claude') {
+    // a sessão interativa também enxerga e atualiza a Central (backlog, ideias, decisões)
+    const mcp = mcpConfigPath();
+    args.push('-NoExit', '-Command', mcp ? `claude --mcp-config '${mcp}'` : 'claude');
+  }
   const term = pty.spawn('powershell.exe', args, {
     name: 'xterm-256color', cwd, cols: input.cols || 100, rows: input.rows || 30,
     env: childEnv({ TERM_PROGRAM: 'Central' }),

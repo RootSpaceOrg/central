@@ -1,8 +1,8 @@
 @if (project(); as p) {
   <header class="shrink-0 border-b border-edge px-10 pt-6">
     <div class="flex items-start gap-5">
-      <span class="mt-1 grid size-11 shrink-0 place-items-center rounded-2xl font-display text-xl font-bold text-night" [style.background]="p.color">
-        {{ p.name[0] }}</span>
+      <button type="button" class="mt-1 rounded-2xl transition hover:scale-105 hover:ring-2 hover:ring-edge" (click)="dialogs.editProject.set(p.slug)"
+              title="Editar projeto" aria-label="Editar projeto"><app-project-avatar [project]="p" [size]="46" /></button>
       <div class="min-w-0 flex-1">
         <h1 class="truncate font-display text-[28px] font-bold leading-tight tracking-tight">{{ p.name }}</h1>
         <div class="mt-2 flex w-fit gap-0.5 rounded-full border border-edge bg-panel p-0.5" role="radiogroup" aria-label="Status do projeto">
@@ -21,6 +21,8 @@
           <app-icon name="folder" [size]="14" />Pasta</button>
         <button type="button" class="btn btn-sm" (click)="projects.openInVsCode(p.folder)" [disabled]="!p.folderExists">
           <app-icon name="code" [size]="14" />VS Code</button>
+        <button type="button" class="btn btn-sm" (click)="dialogs.editProject.set(p.slug)">
+          <app-icon name="edit" [size]="14" />Editar</button>
         <button type="button" class="btn btn-primary btn-sm" (click)="dialogs.newRun({ projectSlug: p.slug })">
           <app-icon name="agent" [size]="14" />Nova tarefa</button>
       </div>
@@ -68,7 +70,7 @@
                 <span class="block text-[12.5px] text-mute">{{ runLabel[r.status] }}, {{ r.repoName }}, {{ r.createdAt | ago }}</span>
               </span>
               @if (r.prUrl) { <span class="text-[12.5px] text-yes">PR aberto</span> }
-              @if (r.costUsd) { <span class="text-[12.5px] tabular-nums text-faint">US$ {{ r.costUsd.toFixed(2) }}</span> }
+              @if (r.sessionUsed != null) { <span class="text-[12.5px] tabular-nums text-faint">≈ {{ r.sessionUsed }}% da sessão</span> }
             </a>
           } @empty {
             <div class="rounded-2xl border border-dashed border-edge p-10 text-center text-mute">

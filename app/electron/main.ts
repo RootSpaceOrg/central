@@ -1,17 +1,21 @@
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Api, Events, NewProposalInput, ProposalDto, ProposalStatus, Verdict } from '../src/app/shared/contract';
-import { DB_PATH, DEV_ROOT, all, get, now, run } from './db';
+import type { Api, Events } from '../src/app/shared/contract';
+import { DB_PATH, DEV_ROOT } from './db';
 import { killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
 import {
-  createIdea, createTask, deleteTask, getSetting, importPending, listIdeas, listTasks, promoteIdea, setSetting, updateIdea, updateTask,
+  createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
+  setSetting, syncPullRequests, updateIdea, updateTask,
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
-import { createProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
+import { deleteChat, listChats, listMessages, sendChat, stopChat } from './central-agent';
+import { startMcp } from './mcp';
+import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
+import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import {
   cloneRepo, createTerminal, githubRepos, killAllTerminals, killTerminal, listDir, readFile, resizeTerminal, writeFile, writeTerminal,
 } from './workspace';
@@ -32,49 +36,13 @@ function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]
 }
 
 const changed = () => send('projects:changed', null);
+const routinesChanged = () => send('routines:changed', null);
 const backlogChanged = () => send('backlog:changed', null);
 const emitRun = {
   event: (e: Events['run:event']) => send('run:event', e),
   update: (r: Events['run:update']) => send('run:update', r),
   changed: () => { backlogChanged(); changed(); },
 };
-
-// ---------- propostas ----------
-
-const VERDICT: Record<Verdict, ProposalStatus> = { approve: 'approved', defer: 'deferred', reject: 'rejected' };
-
-function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
-  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at
-    from proposals where status in (${statuses.map(() => '?').join(',') || "''"})
-    order by coalesce(tier, 9), created_at desc`, ...statuses);
-}
-
-function createProposal(input: NewProposalInput): ProposalDto {
-  const title = input.title?.trim();
-  if (!title) throw new Error('Escreva o que precisa acontecer.');
-  const { lastInsertRowid } = run(`insert into proposals (project_slug, title, body, source, source_ref) values (?,?,?,'manual',?)`,
-    input.project_slug || null, title, input.body?.trim() || null, `${Date.now()}-${Math.random()}`);
-  return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
-}
-
-function decide(id: number, verdict: Verdict, reason: string | null): void {
-  if (!VERDICT[verdict]) throw new Error('Decisão inválida.');
-  if (!run('update proposals set status = ?, updated_at = ? where id = ?', VERDICT[verdict], now(), id).changes) {
-    throw new Error('Proposta não encontrada.');
-  }
-  run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
-  // aprovar vira tarefa em "A fazer", pronta para um agente
-  const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
-  if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {
-    createTask({
-      project_slug: p.project_slug, repo_path: null, title: p.title,
-      body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`].filter(Boolean).join('\n\n') || null,
-      column: 'todo', priority: p.tier === 2 ? 0 : 1, proposal_id: id,
-    });
-    backlogChanged();
-  }
-  changed();
-}
 
 // ---------- IPC ----------
 
@@ -87,14 +55,29 @@ function registerIpc(): void {
     syncProjects(p.slug, changed);
     return p;
   });
-  handle('projects:update', (slug, patch) => { updateProject(slug, patch); changed(); });
+  handle('projects:update', (slug, patch) => {
+    updateProject(slug, patch);
+    if (patch.folder) syncProjects(slug, changed);
+    changed();
+  });
+  handle('projects:delete', slug => { deleteProject(slug); changed(); backlogChanged(); });
+  handle('dialog:image', async () => {
+    const r = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters: [{ name: 'Imagem', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg', 'gif'] }] });
+    if (r.canceled) return null;
+    const file = r.filePaths[0];
+    const ext = file.split('.').pop()!.toLowerCase();
+    const mime = ext === 'svg' ? 'svg+xml' : ext === 'jpg' ? 'jpeg' : ext;
+    const buf = readFileSync(file);
+    if (buf.length > 400 * 1024) throw new Error('Imagem grande demais (máximo 400 KB).');
+    return `data:image/${mime};base64,${buf.toString('base64')}`;
+  });
   handle('projects:sync', slug => { syncProjects(slug, changed); });
   handle('repos:list', slug => listRepos(slug));
   handle('commits:recent', (slug, days, limit) => recent(slug, days, limit));
 
   handle('proposals:list', statuses => listProposals(statuses));
   handle('proposals:create', input => { const p = createProposal(input); changed(); return p; });
-  handle('proposals:decide', (id, verdict, reason) => decide(id, verdict, reason));
+  handle('proposals:decide', (id, verdict, reason) => { decide(id, verdict, reason); backlogChanged(); changed(); });
 
   handle('runs:list', slug => listRuns(slug));
   handle('runs:start', input => startRun(input, emitRun));
@@ -135,9 +118,22 @@ function registerIpc(): void {
   handle('turns:start', input => startTurn(input, emitRun));
   handle('turns:stop', id => stopTurn(id, emitRun));
 
-  handle('update:check', () => checkUpdate());
+  handle('update:check', force => checkUpdate(force));
   handle('update:install', () => installUpdate());
-  handle('update:build', () => buildUpdate(line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
+  handle('update:build', publish => buildUpdate(publish, line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
+
+  handle('routines:list', () => listRoutines());
+  handle('routines:create', input => { const r = createRoutine(input); routinesChanged(); return r; });
+  handle('routines:update', (id, patch) => { updateRoutine(id, patch); routinesChanged(); });
+  handle('routines:delete', id => { deleteRoutine(id); routinesChanged(); });
+  handle('routines:fire', async id => { const r = await fireRoutine(id, emitRun, true); routinesChanged(); return r; });
+
+  const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean) => send('chat:event', { chat_id, message, busy });
+  handle('chat:list', () => listChats());
+  handle('chat:messages', id => listMessages(id));
+  handle('chat:send', (id, text) => sendChat(id, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); }));
+  handle('chat:stop', id => stopChat(id));
+  handle('chat:delete', id => deleteChat(id));
 
   handle('settings:get', key => getSetting(key));
   handle('settings:set', (key, value) => { setSetting(key, value); });
@@ -190,7 +186,13 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   watchTurns(emitRun);
-  syncProjects(null, changed);
+  watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
+  startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged })
+    .catch(e => console.error('MCP da Central não subiu', e));
+  // sincroniza repositórios e, depois, leva para Feito as tarefas cujo PR foi mergeado
+  const syncAll = () => syncProjects(null, changed).then(() => syncPullRequests()).then(n => { if (n) backlogChanged(); });
+  syncAll();
+  setInterval(() => syncPullRequests().then(n => { if (n) backlogChanged(); }), 15 * 60_000);
 });
 
 app.on('window-all-closed', () => {

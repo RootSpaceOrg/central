@@ -24,7 +24,7 @@
         <a [routerLink]="['/projetos', p.slug]"
            class="grid grid-cols-[minmax(200px,1.1fr)_minmax(220px,1.4fr)_70px_minmax(220px,1.5fr)] items-center gap-6 border-b border-edge px-5 py-4 last:border-0 hover:bg-raise/50">
           <div class="flex min-w-0 items-center gap-3">
-            <span class="h-9 w-1 shrink-0 rounded-full" [style.background]="p.color"></span>
+            <app-project-avatar [project]="p" [size]="34" />
             <div class="min-w-0">
               <p class="truncate font-display text-[16px] font-semibold">{{ p.name }}</p>
               <p class="text-[12.5px] text-mute">{{ statusLabel[p.status] }}, {{ p.repoCount }} {{ p.repoCount === 1 ? 'repo' : 'repos' }}</p>

@@ -1,6 +1,6 @@
-import { ProjectStatus } from '../../contract';
+import { ProjectIconKind, ProjectStatus } from '../../contract';
 
-export type { ProjectStatus };
+export type { ProjectIconKind, ProjectStatus };
 
 export interface Project {
   slug: string;
@@ -9,6 +9,8 @@ export interface Project {
   status: ProjectStatus;
   color: string;
   description: string | null;
+  iconKind: ProjectIconKind;
+  iconValue: string | null;
   folderExists: boolean;
   repoCount: number;
   dirtyRepos: number;
@@ -42,6 +44,16 @@ export interface NewProject {
   status: ProjectStatus;
   color: string;
   description: string;
+}
+
+export interface ProjectEdit {
+  name?: string;
+  status?: ProjectStatus;
+  color?: string;
+  description?: string | null;
+  iconKind?: ProjectIconKind;
+  iconValue?: string | null;
+  folder?: string;
 }
 
 export const STATUS_LABEL: Record<ProjectStatus, string> = {

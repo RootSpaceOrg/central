@@ -11,6 +11,7 @@ import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { KanbanBoard } from '../../../../shared/components/kanban-board/kanban-board';
+import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { CodeWorkspace } from './components/code-workspace/code-workspace';
 import { Summary } from './components/summary/summary';
 
@@ -18,7 +19,7 @@ type Tab = 'resumo' | 'backlog' | 'codigo' | 'agentes';
 
 @Component({
   selector: 'app-project-page',
-  imports: [RouterLink, Icon, AgoPipe, Summary, CodeWorkspace, KanbanBoard],
+  imports: [RouterLink, Icon, AgoPipe, Summary, CodeWorkspace, KanbanBoard, ProjectAvatar],
   templateUrl: './project-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })

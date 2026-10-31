@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { CloneProgressDto, GithubRepoDto, ProjectDto, RepoDto } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
 import { ProjectsApiService } from './projects-api.service';
-import { NewProject, Project, ProjectStatus, Repo } from './projects.model';
+import { NewProject, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
 
 const toProject = (d: ProjectDto): Project => ({
   slug: d.slug,
@@ -12,6 +12,8 @@ const toProject = (d: ProjectDto): Project => ({
   status: d.status,
   color: d.color,
   description: d.description,
+  iconKind: d.icon_kind ?? 'letter',
+  iconValue: d.icon_value,
   folderExists: d.folder_exists,
   repoCount: d.repo_count,
   dirtyRepos: d.dirty_repos,
@@ -100,6 +102,36 @@ export class ProjectsService {
   setDescription(slug: string, description: string): void {
     this.patchLocal(slug, { description: description || null });
     this.api.update(slug, { description: description || null }).catch(e => this.error.set(errorMessage(e)));
+  }
+
+  /** Edição completa (nome, ícone, cor, pasta…). Lança o erro para o formulário mostrar. */
+  async edit(slug: string, e: ProjectEdit): Promise<void> {
+    try {
+      await this.api.update(slug, {
+        name: e.name, status: e.status, color: e.color, description: e.description,
+        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder,
+      });
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+    this.load();
+  }
+
+  async remove(slug: string): Promise<void> {
+    try {
+      await this.api.remove(slug);
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+    this.load();
+  }
+
+  async pickImage(): Promise<string | null> {
+    try {
+      return await this.api.pickImage();
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
   }
 
   async repos(slug: string): Promise<Repo[]> {

@@ -5,7 +5,10 @@ import { createInterface } from 'node:readline';
 
 import type { NewRunInput, NewTurnInput, RunDto, RunEventDto, RunEventKind, TurnDto } from '../src/app/shared/contract';
 import { moveTaskForRun } from './backlog';
+import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
+import { mcpConfigPath } from './mcp-config';
+import { getUsage } from './usage';
 import { git, gitOr } from './git';
 import { slugify } from './projects';
 import { childEnv } from './workspace';
@@ -14,7 +17,11 @@ const MAX_PARALLEL = 4;
 const MAX_BUDGET = 50;
 // Modo "edits": edita arquivos sem perguntar e só roda os comandos desta lista.
 const SAFE_TOOLS = ['Bash(git:*)', 'Bash(gh pr:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)', 'Bash(python:*)',
-  'Bash(pytest:*)', 'Bash(uv:*)', 'Bash(ls:*)', 'Bash(cat:*)', 'Bash(grep:*)', 'Bash(find:*)'];
+  'Bash(pytest:*)', 'Bash(uv:*)', 'Bash(ls:*)', 'Bash(cat:*)', 'Bash(grep:*)', 'Bash(find:*)', 'mcp__central'];
+// Projeto inteiro em modo seguro: só lê e organiza (backlog, ideias, decisões pela Central).
+const READ_TOOLS = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Bash(git log:*)', 'Bash(git status:*)',
+  'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(git branch:*)', 'Bash(gh pr list:*)', 'Bash(gh pr view:*)', 'Bash(gh issue list:*)',
+  'Bash(gh issue view:*)', 'Bash(gh run list:*)', 'Bash(ls:*)', 'mcp__central'];
 
 export type Emit = { event: (e: RunEventDto) => void; update: (r: RunDto) => void; changed: () => void };
 const procs = new Map<number, ChildProcess>();
@@ -26,28 +33,33 @@ export function listRuns(slug: string | null): RunDto[] {
 
 export const listEvents = (id: number) => all<RunEventDto>('select run_id, at, kind, text from run_events where run_id = ? order by id', id);
 
-export function startRun(input: NewRunInput, emit: Emit, turnId: number | null = null): RunDto {
-  const id = queueRun(input, turnId);
+export function startRun(input: NewRunInput, emit: Emit, routineId: number | null = null): RunDto {
+  const id = queueRun(input, null, routineId);
   emit.changed();
   pump(emit);
   return dto(id);
 }
 
-function queueRun(input: NewRunInput, turnId: number | null): number {
+function queueRun(input: NewRunInput, turnId: number | null, routineId: number | null = null): number {
   const prompt = input.prompt?.trim();
   if (!prompt) throw new Error('Descreva o que o agente deve fazer.');
-  if (!get('select 1 from repos where path = ? and project_slug = ?', input.repo_path, input.project_slug)) {
-    throw new Error('Escolha um repositório do projeto.');
+  const project = get<{ folder: string }>('select folder from projects where slug = ?', input.project_slug);
+  if (!project) throw new Error('Escolha um projeto.');
+  const scope = input.repo_path ? 'repo' : 'project';
+  if (scope === 'repo' && !get('select 1 from repos where path = ? and project_slug = ?', input.repo_path, input.project_slug)) {
+    throw new Error('Esse repositório não é do projeto.');
   }
   const budget = Math.min(Math.max(Number(input.budget_usd) || 0, 0.5), MAX_BUDGET);
   const permission = input.permission === 'full' ? 'full' : 'edits';
   const { lastInsertRowid } = run(
-    'insert into runs (project_slug, proposal_id, task_id, turn_id, repo_path, prompt, permission, budget_usd) values (?,?,?,?,?,?,?,?)',
-    input.project_slug, input.proposal_id ?? null, input.task_id ?? null, turnId, input.repo_path, prompt, permission, budget);
+    `insert into runs (project_slug, proposal_id, task_id, turn_id, routine_id, scope, repo_path, prompt, permission, budget_usd)
+     values (?,?,?,?,?,?,?,?,?,?)`,
+    input.project_slug, input.proposal_id ?? null, input.task_id ?? null, turnId, routineId, scope,
+    input.repo_path ?? project.folder, prompt, permission, budget);
   if (input.proposal_id) run(`update proposals set status = 'running', updated_at = ? where id = ?`, now(), input.proposal_id);
   if (input.task_id) {
     moveTaskForRun(input.task_id, 'doing');
-    run('update tasks set repo_path = coalesce(repo_path, ?) where id = ?', input.repo_path, input.task_id);
+    if (input.repo_path) run('update tasks set repo_path = coalesce(repo_path, ?) where id = ?', input.repo_path, input.task_id);
   }
   return Number(lastInsertRowid);
 }
@@ -142,6 +154,11 @@ function set(id: number, fields: Record<string, string | number | null>, emit: E
 function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: string | null, cost: number | null, emit: Emit) {
   const pr = result?.match(/https:\/\/github\.com\/[^\s)]+\/pull\/\d+/)?.[0] ?? null;
   set(id, { status, result, cost_usd: cost, pr_url: pr, finished_at: now() }, emit);
+  // consumo real: % da sessão do plano depois da execução
+  getUsage(true).then(u => {
+    const s = u.limits.find(l => l.kind === 'session');
+    if (s) set(id, { usage_end: s.percent }, emit);
+  });
   const { proposal_id: proposal, task_id: task } = dto(id);
   if (proposal) run('update proposals set status = ?, updated_at = ? where id = ?', status === 'succeeded' ? 'done' : 'approved', now(), proposal);
   // concluída vai para Revisão (alguém precisa olhar o PR); falha volta para A fazer
@@ -164,30 +181,44 @@ function pump(emit: Emit): void {
 async function execute(id: number, emit: Emit): Promise<void> {
   set(id, { status: 'preparing', started_at: now() }, emit);
   const r = dto(id);
+  const session = (await getUsage(true)).limits.find(l => l.kind === 'session');
+  if (session) set(id, { usage_start: session.percent }, emit);
 
-  event(id, 'system', 'Atualizando o repositório…', emit);
-  await gitOr(r.repo_path, ['fetch', 'origin', '--quiet'], '');
-  const head = (await gitOr(r.repo_path, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], '')).trim();
-  const base = head.replace(/^origin\//, '') || (await git(r.repo_path, ['branch', '--show-current'])).trim();
-  const startPoint = head || 'HEAD';
-  const branch = `central/run-${id}-${slugify(r.prompt).slice(0, 30)}`;
-  // Fora de qualquer repo: se a pasta do projeto for o próprio repo, a cópia não aparece como mudança nele.
-  const worktrees = join(DEV_ROOT, '.central-worktrees', r.project_slug);
-  const worktree = join(worktrees, `${r.repo_name}-run-${id}`);
-  mkdirSync(worktrees, { recursive: true });
-  await git(r.repo_path, ['worktree', 'add', '-b', branch, worktree, startPoint]);
-  set(id, { worktree_path: worktree, branch, base_branch: base }, emit);
-  event(id, 'system', `Worktree criada em ${worktree}, branch ${branch} a partir de ${startPoint}.`, emit);
+  let cwd: string, frame: string;
+  if (r.scope === 'project') {
+    cwd = r.repo_path;
+    const repos = all<{ name: string }>('select name from repos where project_slug = ? order by name', r.project_slug).map(x => x.name);
+    event(id, 'system', `Trabalhando na pasta do projeto, ${cwd}${r.permission === 'edits' ? ', só leitura' : ''}.`, emit);
+    frame = framePrompt(r, { kind: 'project', folder: cwd, repos });
+  } else {
+    event(id, 'system', 'Atualizando o repositório…', emit);
+    await gitOr(r.repo_path, ['fetch', 'origin', '--quiet'], '');
+    const head = (await gitOr(r.repo_path, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], '')).trim();
+    const base = head.replace(/^origin\//, '') || (await git(r.repo_path, ['branch', '--show-current'])).trim();
+    const startPoint = head || 'HEAD';
+    const branch = `central/run-${id}-${slugify(r.prompt).slice(0, 30)}`;
+    // Fora de qualquer repo: se a pasta do projeto for o próprio repo, a cópia não aparece como mudança nele.
+    const worktrees = join(DEV_ROOT, '.central-worktrees', r.project_slug);
+    cwd = join(worktrees, `${r.repo_name}-run-${id}`);
+    mkdirSync(worktrees, { recursive: true });
+    await git(r.repo_path, ['worktree', 'add', '-b', branch, cwd, startPoint]);
+    set(id, { worktree_path: cwd, branch, base_branch: base }, emit);
+    event(id, 'system', `Worktree criada em ${cwd}, branch ${branch} a partir de ${startPoint}.`, emit);
+    frame = framePrompt(r, { kind: 'repo', branch, base });
+  }
 
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-budget-usd', String(r.budget_usd)];
+  const mcp = mcpConfigPath();
+  if (mcp) args.push('--mcp-config', `"${mcp}"`);
   if (r.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
-  else args.push('--permission-mode', 'acceptEdits', '--allowedTools', SAFE_TOOLS.join(','));
+  else if (r.scope === 'project') args.push('--allowedTools', `"${READ_TOOLS.join(',')}"`);
+  else args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${SAFE_TOOLS.join(',')}"`);
 
   // Prompt vai por stdin: nenhum texto do usuário passa pela linha de comando do shell.
-  const child = spawn('claude', args, { cwd: worktree, shell: true, windowsHide: true, env: childEnv() });
+  const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv() });
   procs.set(id, child);
   set(id, { status: 'running' }, emit);
-  child.stdin.end(framePrompt(r.prompt, r.repo_name, branch, base));
+  child.stdin.end(frame);
 
   let result: string | null = null, cost: number | null = null, isError = false;
   createInterface({ input: child.stdout }).on('line', line => {
@@ -196,7 +227,12 @@ async function execute(id: number, emit: Emit): Promise<void> {
     if (msg.type === 'assistant') {
       for (const block of msg.message?.content ?? []) {
         if (block.type === 'text' && block.text.trim()) event(id, 'text', block.text.trim(), emit);
-        if (block.type === 'tool_use') event(id, 'tool', describeTool(block.name, block.input), emit);
+        if (block.type === 'tool_use' && !INTERNAL.has(block.name)) {
+          const central = String(block.name).startsWith('mcp__central__');
+          event(id, 'tool', central ? `Central: ${describe(block.name, block.input)}` : describeTool(block.name, block.input), emit);
+          // a sessão mexeu no backlog pela Central: atualiza a tela
+          if (central) setTimeout(() => emit.changed(), 1500);
+        }
       }
     } else if (msg.type === 'result') {
       result = msg.result ?? null;
@@ -216,21 +252,48 @@ async function execute(id: number, emit: Emit): Promise<void> {
   }));
 }
 
-function framePrompt(task: string, repo: string, branch: string, base: string): string {
-  return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.
+type Where = { kind: 'repo'; branch: string; base: string } | { kind: 'project'; folder: string; repos: string[] };
 
-Repositório: ${repo}. Você está numa git worktree isolada, na branch \`${branch}\`, criada a partir de \`${base}\`.
+function framePrompt(r: RunDto, where: Where): string {
+  const task = r.task_id ? get<{ id: number; title: string }>('select id, title from tasks where id = ?', r.task_id) : null;
+  const central = `## Central
+Você tem as ferramentas \`central\` (MCP) da Central do Gustavo, onde vivem projetos, backlog, ideias e decisões. Use-as para deixar o backlog verdadeiro:
+${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova essa tarefa: a Central faz isso quando você terminar.\n` : ''}- O que ficou faltando ou o que você descobriu e vale fazer: crie tarefa no backlog do projeto "${r.project_slug}" (create_task, coluna backlog) ou ideia (create_idea).
+- O que depende de uma decisão do Gustavo: crie uma decisão (create_decision) com o próximo passo sugerido.
+- Não exclua nada pela Central.`;
+
+  if (where.kind === 'project') {
+    return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.
+
+Você está na pasta do projeto "${r.project_slug}" (${where.folder}), que contém estes repositórios: ${where.repos.join(', ') || 'nenhum'}.
+${r.permission === 'edits'
+    ? 'Modo seguro: você só pode ler e analisar. Não altere arquivos. Seu resultado vai para a Central (backlog, ideias, decisões) e para o resumo final.'
+    : 'Você pode alterar arquivos diretamente nas pastas, sem worktree isolada. Cuidado: as mudanças caem nas branches que estiverem em uso. Nunca faça push para main, master ou develop.'}
 
 ## Tarefa
-${task}
+${r.prompt}
+
+${central}
+
+Termine com um resumo curto em português do que encontrou ou fez e do que registrou na Central.`;
+  }
+  return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.
+
+Repositório: ${r.repo_name}. Você está numa git worktree isolada, na branch \`${where.branch}\`, criada a partir de \`${where.base}\`.
+
+## Tarefa
+${r.prompt}
 
 ## Regras
 - Trabalhe só nesta branch. Nunca faça push para main, master ou develop.
 - Leia o CLAUDE.md do repositório, se existir, e siga as convenções dele.
 - Rode build/testes que existirem antes de concluir.
-- Ao terminar: faça commit, \`git push -u origin ${branch}\` e abra um PR draft com \`gh pr create --draft --base ${base}\`.
+- Ao terminar: faça commit, \`git push -u origin ${where.branch}\` e abra um PR draft com \`gh pr create --draft --base ${where.base}\`.
 - Se não for possível concluir, explique exatamente o que falta.
-- Termine com um resumo curto em português do que mudou, como verificar e o link do PR.`;
+
+${central}
+
+Termine com um resumo curto em português do que mudou, como verificar e o link do PR.`;
 }
 
 function describeTool(name: string, input: any): string {

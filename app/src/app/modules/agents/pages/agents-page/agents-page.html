@@ -24,7 +24,7 @@
           <span class="min-w-0 flex-1">
             <span class="line-clamp-2 leading-snug">{{ r.title }}</span>
             <span class="mt-1 block truncate text-[12.5px] text-mute">
-              {{ statusLabel[r.status] }}, {{ r.repoName }}, {{ r.createdAt | ago }}
+              {{ statusLabel[r.status] }}, {{ r.scope === 'project' ? 'projeto inteiro' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}
             </span>
           </span>
         </button>
@@ -61,10 +61,13 @@
       </div>
 
       <dl class="mt-4 flex flex-wrap gap-x-7 gap-y-2 text-[13px]">
-        <div><dt class="text-faint">Repositório</dt><dd>{{ r.repoName }}</dd></div>
+        <div><dt class="text-faint">Onde</dt><dd>{{ r.scope === 'project' ? 'Projeto inteiro' : 'Repositório ' + r.repoName }}</dd></div>
+        @if (r.routineId) { <div><dt class="text-faint">Origem</dt><dd><a routerLink="/rotinas" class="text-frost hover:underline">Rotina</a></dd></div> }
         @if (r.branch) { <div class="min-w-0 max-w-full"><dt class="text-faint">Branch</dt><dd class="font-mono text-[12px] [overflow-wrap:anywhere] selectable">{{ r.branch }} → {{ r.baseBranch }}</dd></div> }
         <div><dt class="text-faint">Liberdade</dt><dd>{{ r.permission === 'full' ? 'Total' : 'Segura' }}</dd></div>
-        <div><dt class="text-faint">Gasto</dt><dd class="tabular-nums">US$ {{ (r.costUsd ?? 0).toFixed(2) }} de {{ r.budgetUsd.toFixed(2) }}</dd></div>
+        <div [title]="r.costUsd != null ? 'Equivalente em API: US$ ' + r.costUsd.toFixed(2) + '. Não é cobrado: sai da cota do seu plano.' : 'Sai da cota do seu plano do Claude.'">
+          <dt class="text-faint">Consumo</dt>
+          <dd class="tabular-nums">{{ r.sessionUsed != null ? '≈ ' + r.sessionUsed + '% da sessão' : (isActive(r.status) ? 'medindo…' : 'cota do plano') }}</dd></div>
         @if (elapsed()) { <div><dt class="text-faint">Duração</dt><dd>{{ elapsed() }}</dd></div> }
       </dl>
 

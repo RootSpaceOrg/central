@@ -7,6 +7,10 @@ import { RunDialog } from './shared/components/run-dialog/run-dialog';
 import { TaskDialog } from './shared/components/task-dialog/task-dialog';
 import { TurnDialog } from './shared/components/turn-dialog/turn-dialog';
 import { UpdateDialog } from './shared/components/update-dialog/update-dialog';
+import { CentralChat } from './shared/components/central-chat/central-chat';
+import { ProjectEditDialog } from './shared/components/project-edit-dialog/project-edit-dialog';
+import { ChatService } from './shared/services/chat/chat.service';
+import { ProjectAvatar } from './shared/ui/project-avatar';
 import { UsageMeter } from './shared/components/usage-meter/usage-meter';
 import { UpdateService } from './shared/services/update/update.service';
 import { IdeasService } from './shared/services/ideas/ideas.service';
@@ -27,7 +31,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 
 @Component({
   selector: 'app-root',
-  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog],
+  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar],
   templateUrl: './app.html',
 })
 export class App {
@@ -38,6 +42,7 @@ export class App {
   protected readonly ideas = inject(IdeasService);
   protected readonly tasks = inject(TasksService);
   protected readonly update = inject(UpdateService);
+  protected readonly chat = inject(ChatService);
 
   protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
     { path: '/', label: 'Início', icon: 'home', exact: true },
@@ -46,14 +51,15 @@ export class App {
     { path: '/ideias', label: 'Ideias', icon: 'ideas' },
     { path: '/backlog', label: 'Backlog', icon: 'kanban' },
     { path: '/agentes', label: 'Agentes', icon: 'agent' },
+    { path: '/rotinas', label: 'Rotinas', icon: 'routine' },
   ];
 
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {
-    if (path === '/decisoes' && this.proposals.inbox().length) return { n: this.proposals.inbox().length, tone: 'bg-later' };
-    if (path === '/ideias' && this.ideas.fresh().length) return { n: this.ideas.fresh().length, tone: 'bg-raise text-mute' };
+    if (path === '/decisoes' && this.proposals.inbox().length) return { n: this.proposals.inbox().length, tone: 'bg-later text-night' };
+    if (path === '/ideias' && this.ideas.fresh().length) return { n: this.ideas.fresh().length, tone: 'bg-edge text-text' };
     const review = this.tasks.tasks().filter(t => t.column === 'review').length;
-    if (path === '/backlog' && review) return { n: review, tone: 'bg-frost' };
+    if (path === '/backlog' && review) return { n: review, tone: 'bg-frost text-night' };
     return null;
   }
 

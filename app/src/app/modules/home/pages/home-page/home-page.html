@@ -32,7 +32,7 @@
           Desde {{ since() | ago }}: {{ away().ok }} {{ away().ok === 1 ? 'tarefa concluída' : 'tarefas concluídas' }}
           @if (away().prs) {, <span class="text-frost">{{ away().prs }} {{ away().prs === 1 ? 'PR para revisar' : 'PRs para revisar' }}</span>}
           @if (away().failed) {, <span class="text-no">{{ away().failed }} com falha</span>}
-          , US$ {{ away().cost.toFixed(2) }} gastos.
+          @if (away().session) {, cerca de {{ away().session }}% da sessão do Claude}.
         </p>
         <div class="mt-3 space-y-2">
           @for (r of finished().slice(0, 4); track r.id) {

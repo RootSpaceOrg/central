@@ -1,6 +1,6 @@
 {
   "name": "central",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "scripts": {
     "ng": "ng",
     "start": "npm run icons && npm run build:main && ng build && electron .",
@@ -15,7 +15,9 @@
   "private": true,
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@lydell/node-pty": "^1.2.0-beta.18"
+    "@lydell/node-pty": "^1.2.0-beta.18",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@angular/build": "^21.2.29",
@@ -38,8 +40,8 @@
     "electron": "^45.2.1",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
+    "lucide-static": "^1.66.0",
     "material-icon-theme": "^5.40.0",
-    "material-symbols": "^0.48.2",
     "monaco-editor": "^0.52.2",
     "postcss": "^8.5.32",
     "prettier": "^3.8.1",

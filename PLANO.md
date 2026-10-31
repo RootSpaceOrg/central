@@ -51,6 +51,19 @@ Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), n
   parados no horário, resumo no Início. Testado: 2 tarefas, 2 commits, US$ 0,40.
 - Ícones Material Symbols; rodapé com uso do Claude (sessão, semana, por modelo) como no Orca.
 
+## Feito (v0.5)
+
+- **Agente Central** (Ctrl+J ou o primeiro ícone da barra): chat que conhece e altera tudo pela Central,
+  com projetos, backlog, ideias, decisões, agentes, turnos, rotinas e cota. Cada conversa é uma sessão do Claude Code (`--resume`).
+- **MCP da Central** (HTTP local, token por execução): 30 ferramentas. Ligado no agente Central, nos agentes,
+  nas rotinas e no terminal "Claude Code": as sessões registram follow-ups, ideias e decisões no backlog.
+- **Agentes sem repositório**: escopo "projeto inteiro" (pasta, sem worktree; seguro = só lê e organiza).
+  Tamanho (Pequeno/Médio/Grande) no lugar de US$; consumo medido em % da sessão do plano.
+- **Rotinas**: agentes com agenda (dias + horário ou a cada N h), pulam se a sessão passar do limite.
+- **PR mergeado → Feito** automático (gh, a cada sincronização e a cada 15 min).
+- **Projeto editável**: nome, ícone (letra, emoji, ícone, imagem), cor, status, descrição, pasta; excluir da Central.
+- Ícones Lucide com hover e tooltip; atualização pela release no GitHub (RootSpaceOrg/central).
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

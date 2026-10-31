@@ -62,7 +62,7 @@ export class HomePage {
       ok: f.filter(r => r.status === 'succeeded').length,
       failed: f.filter(r => r.status === 'failed').length,
       prs: f.filter(r => r.prUrl).length,
-      cost: f.reduce((n, r) => n + (r.costUsd ?? 0), 0),
+      session: f.reduce((n, r) => n + (r.sessionUsed ?? 0), 0),
     };
   });
 
