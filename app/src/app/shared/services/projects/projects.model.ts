@@ -22,6 +22,8 @@ export interface Project {
   lastCommitRepo: string | null;
   openProposals: number;
   activeRuns: number;
+  /** piloto automático: de madrugada um agente pega a tarefa do topo de "A fazer" */
+  autopilot: boolean;
 }
 
 export interface Repo {

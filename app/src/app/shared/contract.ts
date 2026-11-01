@@ -37,6 +37,8 @@ export interface ProjectDto {
   last_commit_repo: string | null;
   open_proposals: number;
   active_runs: number;
+  /** piloto automático: de madrugada um agente pega a tarefa do topo de "A fazer" */
+  autopilot: boolean;
 }
 
 export interface NewProjectInput {
@@ -56,6 +58,27 @@ export interface ProjectPatch {
   icon_value?: string | null;
   /** caminho absoluto; os repositórios são redescobertos */
   folder?: string;
+  autopilot?: boolean;
+}
+
+// ---------- piloto automático ----------
+
+/** started = agente trabalhando; waiting = já há tarefa em andamento/revisão; empty = nada em "A fazer";
+ *  blocked = tarefa sem repositório; quota = cota alta */
+export type PulseAction = 'started' | 'waiting' | 'empty' | 'blocked' | 'quota';
+
+export interface PulseItemDto {
+  slug: string;
+  name: string;
+  action: PulseAction;
+  text: string;
+  run_id?: number;
+}
+
+export interface PulseStatusDto {
+  last: { at: string; manual: boolean; items: PulseItemDto[] } | null;
+  /** janela da madrugada, ex.: 01:00–06:00 */
+  window: string;
 }
 
 export interface RepoDto {
@@ -314,7 +337,7 @@ export interface AppInfoDto {
 export interface NewTerminalInput {
   cwd: string;
   /** 'shell' abre PowerShell; 'claude' abre uma sessão interativa do Claude Code */
-  kind: 'shell' | 'claude';
+  kind: TerminalKind;
   cols: number;
   rows: number;
 }
@@ -369,11 +392,28 @@ export interface NewRoutineInput {
 
 export type RoutinePatch = Partial<NewRoutineInput>;
 
+// ---------- sessões do projeto ----------
+
+export type TerminalKind = 'shell' | 'cmd' | 'bash' | 'claude';
+/** 'chat' = conversa com o Claude na pasta do projeto; o resto é terminal */
+export type SessionKind = TerminalKind | 'chat';
+
+export interface SessionDto {
+  id: number;
+  project_slug: string;
+  kind: SessionKind;
+  title: string;
+  chat_id: number | null;
+  created_at: string;
+}
+
 // ---------- agente Central (chat) ----------
 
 export interface ChatDto {
   id: number;
   agent_id: number;
+  /** conversa de uma sessão de projeto: trabalha na pasta do projeto e pode editar código */
+  project_slug: string | null;
   title: string;
   created_at: string;
   updated_at: string;
@@ -477,6 +517,10 @@ export interface Api {
   'fs:read': (path: string) => FileDto;
   'fs:write': (path: string, content: string) => void;
   'pty:create': (input: NewTerminalInput) => number;
+  'sessions:list': (projectSlug: string) => SessionDto[];
+  'sessions:create': (projectSlug: string, kind: SessionKind, chatId?: number | null) => SessionDto;
+  'sessions:update': (id: number, patch: { title?: string; chat_id?: number }) => void;
+  'sessions:close': (id: number) => void;
   'pty:write': (id: number, data: string) => void;
   'pty:resize': (id: number, cols: number, rows: number) => void;
   'pty:kill': (id: number) => void;
@@ -502,6 +546,8 @@ export interface Api {
   'settings:get': (key: string) => string | null;
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];
+  'pulse:status': () => PulseStatusDto;
+  'pulse:run': () => PulseStatusDto;
   'routines:create': (input: NewRoutineInput) => RoutineDto;
   'routines:update': (id: number, patch: RoutinePatch) => void;
   'routines:delete': (id: number) => void;
@@ -515,7 +561,7 @@ export interface Api {
   'chat:list': (agentId: number | null) => ChatDto[];
   'chat:messages': (chatId: number) => ChatMessageDto[];
   /** manda mensagem; chatId null cria conversa nova com o agente. Devolve o id da conversa */
-  'chat:send': (chatId: number | null, agentId: number, text: string) => number;
+  'chat:send': (chatId: number | null, agentId: number, text: string, projectSlug?: string | null) => number;
   /** abre uma conversa que continua a sessão de uma execução já terminada */
   'chat:fromRun': (runId: number) => number;
   'chat:rename': (chatId: number, title: string) => void;

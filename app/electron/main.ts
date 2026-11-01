@@ -14,6 +14,8 @@ import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
 import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
 import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
+import { closeSession, createSession, listSessions, updateSession } from './sessions';
+import { pulseStatus, runPulse, watchPulse } from './pulse';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent } from './agentdefs';
 import { startMcp } from './mcp';
 import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -140,6 +142,8 @@ function registerIpc(): void {
   handle('update:build', publish => buildUpdate(publish, line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
 
   handle('routines:list', () => listRoutines());
+  handle('pulse:status', () => pulseStatus());
+  handle('pulse:run', () => runPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, true));
   handle('routines:create', input => { const r = createRoutine(input); routinesChanged(); return r; });
   handle('routines:update', (id, patch) => { updateRoutine(id, patch); routinesChanged(); });
   handle('routines:delete', id => { deleteRoutine(id); routinesChanged(); });
@@ -153,7 +157,11 @@ function registerIpc(): void {
 
   handle('chat:list', agentId => listChats(agentId));
   handle('chat:messages', id => listMessages(id));
-  handle('chat:send', (id, agentId, text) => sendChat(id, agentId, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); agentsChanged(); }));
+  handle('chat:send', (id, agentId, text, slug) => sendChat(id, agentId, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); agentsChanged(); }, slug ?? null));
+  handle('sessions:list', slug => listSessions(slug));
+  handle('sessions:create', (slug, kind, chatId) => createSession(slug, kind, chatId ?? null));
+  handle('sessions:update', (id, patch) => updateSession(id, patch));
+  handle('sessions:close', id => closeSession(id));
   handle('chat:fromRun', runId => chatFromRun(runId));
   handle('chat:rename', (id, title) => { renameChat(id, title); });
   handle('chat:stop', id => stopChat(id));
@@ -216,6 +224,10 @@ app.whenReady().then(() => {
   if (!CAPTURE) setupTray(() => win, navigate);
   watchTurns(emitRun);
   watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
+  if (!CAPTURE) watchPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, s => {
+    const started = s.last?.items.filter(i => i.action === 'started') ?? [];
+    if (started.length) toast('Piloto automático', `${started.map(i => i.name).join(', ')}: agente trabalhando até o PR.`, '/');
+  });
   startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged, agents: agentsChanged })
     .catch(e => console.error('MCP da Central não subiu', e));
   // sincroniza repositórios e, depois, leva para Feito as tarefas cujo PR foi mergeado

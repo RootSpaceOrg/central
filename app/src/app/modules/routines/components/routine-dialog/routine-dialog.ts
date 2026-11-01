@@ -7,7 +7,7 @@ import { Icon } from '../../../../shared/ui/icon';
 import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
-import { Routine, RoutineDraft, RoutinesService, describeSchedule } from '../../services/routines/routines.service';
+import { Routine, RoutineDraft, RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 
 /** Estado de abertura: null fechado; routine null = nova; draft = modelo pronto para começar. */
 export type RoutineDialogState = { routine: Routine | null; draft?: Partial<RoutineDraft> } | null;

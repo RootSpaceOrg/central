@@ -118,6 +118,28 @@ export function agentPromptFile(a: AgentDto): string {
   return file;
 }
 
+/** Sessão do Gustavo dentro de um projeto: ele conduz, o Claude lê, edita e roda build/teste/git na pasta. */
+export const SESSION_TOOLS = [...BASE_TOOLS, 'Write', 'Edit', 'Bash(git:*)', 'Bash(gh:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)',
+  'Bash(python:*)', 'Bash(pytest:*)', 'Bash(uv:*)', 'Bash(dotnet:*)', 'Bash(cat:*)', 'Bash(grep:*)', 'Bash(find:*)'];
+
+export function sessionPromptFile(slug: string): string {
+  const p = get<{ name: string; folder: string; description: string | null }>('select name, folder, description from projects where slug = ?', slug);
+  if (!p) throw new Error('Projeto não encontrado.');
+  const repos = all<{ name: string }>('select name from repos where project_slug = ? order by name', slug).map(r => r.name);
+  const text = [
+    CENTRAL_CONTEXT,
+    `## Sessão de trabalho no ${p.name}\nO Gustavo abriu esta sessão no projeto "${p.name}" (slug ${slug}), pasta ${p.folder}, e está conduzindo.
+Repositórios: ${repos.join(', ') || 'nenhum'}.${p.description ? `\nSobre: ${p.description}` : ''}
+Você pode ler e editar código e rodar build, testes e git. Nunca faça push para main, master ou develop.
+Ao terminar algo, diga o que mudou em poucas linhas. O que ficar pendente vira tarefa no backlog deste projeto.`,
+  ].join('\n\n');
+  const dir = join(app.getPath('userData'), 'agents');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `session-${slug}.md`);
+  writeFileSync(file, text);
+  return file;
+}
+
 /** Ferramentas liberadas para o agente (além das que a liberdade "full" já libera). */
 export const agentTools = (a: AgentDto) => [
   ...BASE_TOOLS,

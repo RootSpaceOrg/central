@@ -7,7 +7,7 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { RoutineDialog, RoutineDialogState } from '../../components/routine-dialog/routine-dialog';
-import { Routine, RoutineDraft, RoutinesService, describeSchedule } from '../../services/routines/routines.service';
+import { Routine, RoutineDraft, RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 
 /** Modelos para começar sem escrever do zero (todos no projeto inteiro, modo seguro: só leem e organizam). */
 const TEMPLATES: { title: string; hint: string; draft: Partial<RoutineDraft> }[] = [

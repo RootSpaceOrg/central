@@ -1,6 +1,6 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
@@ -12,14 +12,20 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { KanbanBoard } from '../../../../shared/components/kanban-board/kanban-board';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
-import { CodeWorkspace } from './components/code-workspace/code-workspace';
+import { SessionKind } from '../../../../shared/contract';
+import { SessionsService } from '../../services/sessions/sessions.service';
+import { ProjectSessions } from './components/sessions/sessions';
 import { Summary } from './components/summary/summary';
 
-type Tab = 'resumo' | 'backlog' | 'codigo' | 'agentes';
+type Tab = 'sessoes' | 'resumo' | 'backlog' | 'agentes';
+const TABS = [
+  { id: 'sessoes', label: 'Sessões', icon: 'terminal' }, { id: 'resumo', label: 'Resumo', icon: 'summary' },
+  { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'agentes', label: 'Agentes', icon: 'agent' },
+] as const;
 
 @Component({
   selector: 'app-project-page',
-  imports: [RouterLink, Icon, AgoPipe, Summary, CodeWorkspace, KanbanBoard, ProjectAvatar],
+  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar],
   templateUrl: './project-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -28,15 +34,19 @@ export class ProjectPage {
   protected readonly runs = inject(RunsService);
   protected readonly dialogs = inject(DialogsService);
 
+  private readonly sessions = inject(SessionsService);
+  private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly query = toSignal(this.route.queryParamMap);
   private readonly slug = toSignal(this.route.paramMap.pipe(map(p => p.get('slug')!)), { requireSync: true });
   protected readonly project = computed(() => this.projects.bySlug().get(this.slug()) ?? null);
   protected readonly projectRuns = computed(() => this.runs.runs().filter(r => r.projectSlug === this.slug()));
 
-  /** ?aba=codigo abre direto numa aba */
-  protected readonly tab = signal<Tab>((this.route.snapshot.queryParamMap.get('aba') as Tab) || 'resumo');
-  /** a área de código só monta na primeira visita e depois fica viva (terminais, editor) */
-  protected readonly codeMounted = signal(false);
+  protected readonly tabs = TABS;
+  /** ?aba=backlog abre direto numa aba; ?nova=chat abre uma sessão nova */
+  protected readonly tab = signal<Tab>('sessoes');
+  /** as sessões só montam na primeira visita e depois ficam vivas (terminais, editor) */
+  protected readonly sessionsMounted = signal(false);
 
   protected readonly statuses = Object.keys(STATUS_LABEL) as ProjectStatus[];
   protected readonly statusLabel = STATUS_LABEL;
@@ -44,7 +54,20 @@ export class ProjectPage {
   protected readonly isActive = isActive;
 
   constructor() {
-    effect(() => { if (this.tab() === 'codigo') this.codeMounted.set(true); });
+    effect(() => { if (this.tab() === 'sessoes') this.sessionsMounted.set(true); });
+    effect(() => {
+      const q = this.query();
+      const slug = this.slug();
+      untracked(() => {
+        const aba = q?.get('aba') as Tab | null;
+        const nova = q?.get('nova') as SessionKind | null;
+        this.tab.set(nova ? 'sessoes' : TABS.some(t => t.id === aba) ? aba! : 'sessoes');
+        if (nova) {
+          this.sessions.open(slug, nova);
+          this.router.navigate([], { queryParams: { nova: null }, queryParamsHandling: 'merge', replaceUrl: true });
+        }
+      });
+    });
   }
 
   protected go(tab: Tab): void { this.tab.set(tab); }

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 
-import { NewRoutineInput, RoutinePatch } from '../../../../shared/contract';
-import { IpcService } from '../../../../shared/services/ipc/ipc.service';
+import { NewRoutineInput, RoutinePatch } from '../../contract';
+import { IpcService } from '../ipc/ipc.service';
 
 @Injectable({ providedIn: 'root' })
 export class RoutinesApiService {

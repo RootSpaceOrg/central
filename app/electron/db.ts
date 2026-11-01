@@ -201,6 +201,15 @@ db.exec(`
     created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
   );
 
+  create table if not exists sessions (
+    id           integer primary key autoincrement,
+    project_slug text not null references projects on delete cascade,
+    kind         text not null,
+    title        text not null,
+    chat_id      integer references chats on delete set null,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
   create table if not exists settings (
     key   text primary key,
     value text not null
@@ -214,7 +223,8 @@ for (const [table, column, type] of [
   ['runs', 'scope', "text not null default 'repo'"], ['runs', 'routine_id', 'integer'],
   ['runs', 'usage_start', 'real'], ['runs', 'usage_end', 'real'],
   ['runs', 'agent_id', 'integer'], ['runs', 'session_id', 'text'], ['routines', 'agent_id', 'integer'],
-  ['chats', 'agent_id', 'integer'], ['chats', 'cwd', 'text'],
+  ['chats', 'agent_id', 'integer'], ['chats', 'cwd', 'text'], ['chats', 'project_slug', 'text'],
+  ['projects', 'autopilot', 'integer not null default 0'],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
   if (!cols.some(c => c.name === column)) db.exec(`alter table ${table} add column ${column} ${type}`);

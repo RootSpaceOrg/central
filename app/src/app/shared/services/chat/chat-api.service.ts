@@ -9,7 +9,7 @@ export class ChatApiService {
 
   list(agentId: number | null) { return this.ipc.invoke('chat:list', agentId); }
   messages(chatId: number) { return this.ipc.invoke('chat:messages', chatId); }
-  send(chatId: number | null, agentId: number, text: string) { return this.ipc.invoke('chat:send', chatId, agentId, text); }
+  send(chatId: number | null, agentId: number, text: string, projectSlug: string | null = null) { return this.ipc.invoke('chat:send', chatId, agentId, text, projectSlug); }
   fromRun(runId: number) { return this.ipc.invoke('chat:fromRun', runId); }
   rename(chatId: number, title: string) { return this.ipc.invoke('chat:rename', chatId, title); }
   stop(chatId: number) { return this.ipc.invoke('chat:stop', chatId); }

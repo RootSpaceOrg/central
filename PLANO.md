@@ -4,11 +4,15 @@ Pesquisa de base: `reports/Central orquestradora para dev solo.md`.
 
 ## Princípio
 
-**A Central trabalha, você julga.** Dois modos na mesma máquina:
-- **Piloto** (motivado): abre o projeto, código + terminal + Claude Code na mesma tela, despacha agentes.
-- **Sugestão** (sem energia): abre Decisões, uma por vez, A/D/N. O que aprova vira tarefa de agente.
+**A Central trabalha, você julga.** Sem perguntar o humor do dia:
+- **Com gás**: abre o projeto e cria sessões (conversa com o Claude, Claude Code, PowerShell, CMD, Git Bash), como no Orca.
+- **Sem gás**: o Início já mostra o que espera você (PRs para revisar, decisões, falhas). Aprovar é o trabalho.
+- **Inquietação = piloto automático**: de madrugada, cada projeto ligado pega a tarefa do topo de "A fazer" e um agente
+  leva até um PR rascunho. Entrega trabalho pronto, não mais propostas.
+  Travas: só tarefas que você escreveu ou aprovou; nada novo enquanto houver uma em revisão; pula com a cota alta.
 
-Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), não rotina.
+Cada tipo de projeto tem seu gatilho: **evoluir** (Ativo + piloto) é proativo, **suporte** (Manutenção) só reage
+a sinais (CI, Sentry, issues), **automações** (rotinas de agentes) aparecem no Início com a saúde de cada uma.
 
 ## Arquitetura
 
@@ -84,6 +88,15 @@ Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), n
 - **Paleta de comandos (Ctrl+K)**: ações, telas, projetos, agentes, tarefas e ideias; sem resultado, Enter pergunta à Central.
 - **Conversar sobre esta tarefa** (menu do card e diálogo da tarefa): abre o agente do projeto com o contexto escrito.
 - **Preferências** (engrenagem na barra lateral).
+
+## Feito (v0.8)
+
+- **Sessões no projeto** (como no Orca): aba fixa de código + abas de Claude (conversa na pasta do projeto, edita código),
+  Claude Code, PowerShell, CMD e Git Bash. Ficam salvas: reabrir o app volta as abas; conversas antigas do projeto retomam pelo "+".
+- **Piloto automático** por projeto (botão no cabeçalho ou no Início): passada de madrugada (01h–06h) com as travas acima.
+  Sem tarefa em "A fazer", abre uma decisão só (e fecha sozinha quando houver tarefa).
+- **Início novo**: sem a pergunta de energia. Esperando você (revisar → decidir → falhas), piloto automático (o que fez em cada
+  projeto), projetos Evoluindo e Em suporte com atalho para abrir sessão, automações (rotinas e saúde).
 
 ## Próximos marcos
 

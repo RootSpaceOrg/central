@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 import type { ChatDto, ChatMessageDto, ChatRole } from '../src/app/shared/contract';
-import { agentCwd, agentPromptFile, agentTools, centralAgent, getAgent } from './agentdefs';
+import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, sessionPromptFile } from './agentdefs';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
@@ -19,7 +19,7 @@ export const INTERNAL = new Set(['ToolSearch', 'TodoWrite']);
 const procs = new Map<number, ChildProcess>();
 
 export const listChats = (agentId: number | null) => all<ChatDto>(
-  `select id, agent_id, title, created_at, updated_at from chats where (? is null or agent_id = ?) order by updated_at desc limit 100`, agentId, agentId);
+  `select id, agent_id, project_slug, title, created_at, updated_at from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
 export const listMessages = (chatId: number) => all<ChatMessageDto>('select * from chat_messages where chat_id = ? order by id', chatId);
 export const deleteChat = (chatId: number) => { stopChat(chatId); run('delete from chats where id = ?', chatId); };
 export function renameChat(chatId: number, title: string): void {
@@ -53,23 +53,30 @@ export function chatFromRun(runId: number): number {
     agentId, `Execução #${r.id}: ${r.prompt.split('\n')[0].slice(0, 80)}`, r.session_id, cwd).lastInsertRowid);
 }
 
-export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void): number {
+export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void, projectSlug: string | null = null): number {
   const msg = text.trim();
   if (!msg) throw new Error('Escreva uma mensagem.');
   if (chatId && procs.has(chatId)) throw new Error('O agente ainda está respondendo a mensagem anterior.');
-  const chat = chatId ? get<{ agent_id: number | null; session_id: string | null; cwd: string | null }>('select agent_id, session_id, cwd from chats where id = ?', chatId) : null;
+  const chat = chatId ? get<{ agent_id: number | null; session_id: string | null; cwd: string | null; project_slug: string | null }>(
+    'select agent_id, session_id, cwd, project_slug from chats where id = ?', chatId) : null;
   if (chatId && !chat) throw new Error('Conversa não encontrada.');
   const agent = getAgent(chat?.agent_id ?? agentId) ?? centralAgent();
+  const slug = chat ? chat.project_slug : projectSlug;
+  // conversas antigas (antes da v0.6) não guardavam a pasta: eram todas na raiz de Development
+  let cwd = chat ? chat.cwd ?? DEV_ROOT : '';
   if (!chatId) {
-    chatId = Number(run('insert into chats (agent_id, title, cwd) values (?,?,?)', agent.id, msg.replace(/\s+/g, ' ').slice(0, 70), agentCwd(agent)).lastInsertRowid);
+    const folder = slug ? get<{ folder: string }>('select folder from projects where slug = ?', slug)?.folder : null;
+    if (slug && (!folder || !existsSync(folder))) throw new Error('A pasta do projeto não existe.');
+    cwd = folder ?? agentCwd(agent);
+    chatId = Number(run('insert into chats (agent_id, title, cwd, project_slug) values (?,?,?,?)',
+      agent.id, msg.replace(/\s+/g, ' ').slice(0, 70), cwd, slug).lastInsertRowid);
   }
   const id = chatId;
   save(id, 'user', msg, notify);
 
-  // conversas antigas (antes da v0.6) não guardavam a pasta: eram todas na raiz de Development
-  const cwd = chat?.cwd ?? (chat ? DEV_ROOT : agentCwd(agent));
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt-file', `"${agentPromptFile(agent)}"`];
-  if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
+  if (slug) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${SESSION_TOOLS.join(',')}"`);
+  else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
   else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
   if (agent.model) args.push('--model', agent.model);
   const mcp = mcpConfigPath();

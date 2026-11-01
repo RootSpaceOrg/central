@@ -43,6 +43,7 @@ export function listProjects(): ProjectDto[] {
     const l = last.find(x => x.slug === p.slug);
     return {
       ...p,
+      autopilot: !!p.autopilot,
       folder_exists: existsSync(p.folder),
       commits_7d: t?.d7 ?? 0,
       commits_30d: t?.d30 ?? 0,
@@ -63,7 +64,7 @@ export function createProject(input: NewProjectInput): ProjectDto {
   const name = input.name?.trim();
   if (!name) throw new Error('Dê um nome ao projeto.');
   if (!input.folder?.trim()) throw new Error('Escolha a pasta do projeto.');
-  if (!isAbsolute(input.folder.trim())) throw new Error('Use o caminho completo da pasta, por exemplo C:\Users\voce\Development\Projeto.');
+  if (!isAbsolute(input.folder.trim())) throw new Error('Use o caminho completo da pasta, por exemplo C:\\Users\\voce\\Development\\Projeto.');
   if (!STATUSES.includes(input.status)) throw new Error('Status inválido.');
   const folder = resolve(input.folder.trim());
   if (get('select 1 from projects where folder = ?', folder)) throw new Error('Essa pasta já é de outro projeto.');
@@ -95,10 +96,11 @@ export function updateProject(slug: string, patch: ProjectPatch): void {
     if (get('select 1 from projects where folder = ? and slug <> ?', patch.folder, slug)) throw new Error('Essa pasta já é de outro projeto.');
   }
   const fields = Object.entries(patch)
-    .filter(([k]) => ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder'].includes(k));
+    .filter(([k]) => ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'autopilot'].includes(k))
+    .map(([k, v]) => [k, k === 'autopilot' ? (v ? 1 : 0) : v] as const);
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,
-    ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | null), slug);
+    ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | number | null), slug);
 }
 
 /** Tira o projeto da Central. Pasta, repositórios e worktrees continuam no disco. */

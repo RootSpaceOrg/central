@@ -25,6 +25,7 @@ const toProject = (d: ProjectDto): Project => ({
   lastCommitRepo: d.last_commit_repo,
   openProposals: d.open_proposals,
   activeRuns: d.active_runs,
+  autopilot: d.autopilot,
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -100,6 +101,11 @@ export class ProjectsService {
   setStatus(slug: string, status: ProjectStatus): void {
     this.patchLocal(slug, { status });
     this.api.update(slug, { status }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
+  }
+
+  setAutopilot(slug: string, autopilot: boolean): void {
+    this.patchLocal(slug, { autopilot });
+    this.api.update(slug, { autopilot }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   setDescription(slug: string, description: string): void {

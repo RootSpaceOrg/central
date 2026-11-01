@@ -104,9 +104,11 @@ export class App {
       .filter(s => s !== p.status)
       .map(s => ({ label: `Marcar como ${STATUS_LABEL[s].toLowerCase()}`, icon: s === 'dead' ? 'archive' as const : 'flag' as const, run: () => this.projects.setStatus(p.slug, s) }));
     this.menu.open(e, [
-      { label: 'Abrir', icon: 'summary', run: () => go() },
+      { label: 'Abrir', icon: 'terminal', run: () => go() },
+      { label: 'Resumo', icon: 'summary', run: () => go('resumo') },
       { label: 'Backlog', icon: 'kanban', run: () => go('backlog') },
-      { label: 'Código', icon: 'code', run: () => go('codigo') },
+      { label: 'Conversa com o Claude', icon: 'central', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'chat' } }) },
+      { label: 'Novo terminal', icon: 'terminal', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'shell' } }) },
       null,
       { label: 'Nova tarefa', icon: 'plus', run: () => this.dialogs.newTask({ projectSlug: p.slug }) },
       { label: 'Mandar para um agente', icon: 'play', run: () => this.dialogs.newRun({ projectSlug: p.slug }) },

@@ -5,13 +5,21 @@
               title="Editar projeto" aria-label="Editar projeto"><app-project-avatar [project]="p" [size]="46" /></button>
       <div class="min-w-0 flex-1">
         <h1 class="truncate font-display text-[28px] font-bold leading-tight tracking-tight">{{ p.name }}</h1>
-        <div class="mt-2 flex w-fit gap-0.5 rounded-full border border-edge bg-panel p-0.5" role="radiogroup" aria-label="Status do projeto">
+        <div class="mt-2 flex flex-wrap items-center gap-3">
+        <div class="flex w-fit gap-0.5 rounded-full border border-edge bg-panel p-0.5" role="radiogroup" aria-label="Status do projeto">
           @for (s of statuses; track s) {
             <button type="button" role="radio" [attr.aria-checked]="p.status === s" (click)="projects.setStatus(p.slug, s)"
                     class="rounded-full px-3 py-1 text-[12.5px] font-semibold"
                     [class]="p.status === s ? (s === 'dead' ? 'bg-no/20 text-no' : 'bg-raise text-text') : 'text-faint hover:text-mute'">
               {{ statusLabel[s] }}</button>
           }
+        </div>
+        <button type="button" role="switch" [attr.aria-checked]="p.autopilot" (click)="projects.setAutopilot(p.slug, !p.autopilot)"
+                class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition"
+                [class]="p.autopilot ? 'border-[#B48CFF]/50 bg-[#B48CFF]/15 text-[#C6A6FF]' : 'border-edge text-faint hover:text-mute'"
+                title="De madrugada, um agente pega a tarefa do topo de &quot;A fazer&quot; e leva até um PR rascunho. Não começa outra enquanto houver uma em revisão.">
+          <app-icon name="night" [size]="13" [fill]="p.autopilot" />Piloto automático {{ p.autopilot ? 'ligado' : 'desligado' }}
+        </button>
         </div>
       </div>
       <div class="flex shrink-0 flex-wrap justify-end gap-2">
@@ -29,12 +37,12 @@
     </div>
 
     <nav class="mt-5 flex gap-6" role="tablist" aria-label="Seções do projeto">
-      @for (t of [{ id: 'resumo', label: 'Resumo', icon: 'summary' }, { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'codigo', label: 'Código', icon: 'code' }, { id: 'agentes', label: 'Agentes', icon: 'agent' }]; track t.id) {
-        <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" (click)="go($any(t.id))"
+      @for (t of tabs; track t.id) {
+        <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" (click)="go(t.id)"
                 class="-mb-px flex items-center gap-2 border-b-2 pb-3 font-semibold"
                 [class]="tab() === t.id ? 'text-text' : 'border-transparent text-mute hover:text-text'"
                 [style.border-color]="tab() === t.id ? p.color : null">
-          <app-icon [name]="$any(t.icon)" [size]="15" />{{ t.label }}
+          <app-icon [name]="t.icon" [size]="15" />{{ t.label }}
           @if (t.id === 'agentes' && projectRuns().length) { <span class="text-[12px] text-faint">{{ projectRuns().length }}</span> }
         </button>
       }
@@ -53,8 +61,8 @@
       </div>
     }
 
-    @if (codeMounted()) {
-      <app-code-workspace class="absolute inset-0" [hidden]="tab() !== 'codigo'" [slug]="p.slug" [folder]="p.folder" />
+    @if (sessionsMounted()) {
+      <app-project-sessions class="absolute inset-0" [hidden]="tab() !== 'sessoes'" [slug]="p.slug" [folder]="p.folder" />
     }
 
     @if (tab() === 'agentes') {

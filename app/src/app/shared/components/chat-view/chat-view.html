@@ -1,4 +1,5 @@
-@let agent = chat.agent();
+@let chat = s();
+@let agent = avatar();
 <div #list class="min-h-0 flex-1 overflow-y-auto" [class]="compact() ? 'px-5 py-5' : 'px-8 py-7'" aria-live="polite">
   <div class="mx-auto space-y-4" [class.max-w-3xl]="!compact()">
     @for (item of chat.items(); track item.kind === 'steps' ? 's' + item.id : item.message.id) {
@@ -45,8 +46,8 @@
       @if (agent) {
         <div class="pt-4" [class.text-center]="!compact()">
           <app-project-avatar [project]="agent" [size]="compact() ? 44 : 64" [class.mx-auto]="!compact()" />
-          <p class="mt-4 font-display text-xl font-semibold">{{ agent.builtin ? 'Em que posso ajudar?' : 'Conversar com ' + agent.name }}</p>
-          <p class="mt-1 text-mute">{{ agent.description || 'Pergunte ou peça algo dentro do papel deste agente.' }}</p>
+          <p class="mt-4 font-display text-xl font-semibold">{{ chat.projectSlug ? 'Claude no ' + agent.name : chat.agent()?.builtin ? 'Em que posso ajudar?' : 'Conversar com ' + agent.name }}</p>
+          <p class="mt-1 text-mute">{{ chat.projectSlug ? 'Sessão na pasta do projeto: lê, edita código e roda build, testes e git.' : agent.description || 'Pergunte ou peça algo dentro do papel deste agente.' }}</p>
           <div class="mt-6 grid gap-2" [class]="compact() ? '' : 'grid-cols-2 text-left'">
             @for (s of suggestions(); track s) {
               <button type="button" (click)="send(s)"

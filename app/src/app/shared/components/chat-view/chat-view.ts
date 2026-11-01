@@ -1,6 +1,6 @@
 import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 
-import { ChatService } from '../../services/chat/chat.service';
+import { ChatService, ChatSession } from '../../services/chat/chat.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
 import { MarkdownPipe } from '../../ui/markdown';
@@ -21,8 +21,16 @@ const CENTRAL_SUGGESTIONS = [
   host: { class: 'flex min-h-0 flex-col' },
 })
 export class ChatView {
-  protected readonly chat = inject(ChatService);
+  private readonly service = inject(ChatService);
   private readonly projects = inject(ProjectsService);
+  /** conversa de uma aba de sessão; sem ela, usa a conversa compartilhada (painel e tela Agentes) */
+  readonly session = input<ChatSession | null>(null);
+  protected readonly s = computed(() => this.session() ?? this.service);
+  /** nas sessões de projeto quem fala é o Claude no projeto: mostra o ícone do projeto */
+  protected readonly avatar = computed(() => {
+    const slug = this.s().projectSlug;
+    return (slug ? this.projects.bySlug().get(slug) : null) ?? this.s().agent();
+  });
   private readonly list = viewChild<ElementRef<HTMLElement>>('list');
   private readonly input = viewChild<ElementRef<HTMLTextAreaElement>>('input');
 
@@ -34,7 +42,14 @@ export class ChatView {
   protected readonly copied = signal<number | null>(null);
 
   protected readonly suggestions = computed(() => {
-    const a = this.chat.agent();
+    const slug = this.s().projectSlug;
+    if (slug) return [
+      'O que mudou neste projeto nos últimos dias?',
+      'Qual a próxima tarefa do backlog? Vamos começar.',
+      'Rode os testes e me diga o que está quebrado.',
+      'Revise o que está sem commit e sugira os commits.',
+    ];
+    const a = this.s().agent();
     if (!a || a.builtin) return CENTRAL_SUGGESTIONS;
     const project = a.projectSlug ? this.projects.bySlug().get(a.projectSlug)?.name : null;
     return [
@@ -46,22 +61,22 @@ export class ChatView {
 
   constructor() {
     effect(() => {
-      this.chat.messages();
-      this.chat.currentBusy();
+      this.s().messages();
+      this.s().currentBusy();
       const el = this.list()?.nativeElement;
       if (el) queueMicrotask(() => el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }));
     });
     effect(() => {
-      this.chat.current();
-      this.chat.agentId();
+      this.s().current();
+      this.s().agentId();
       queueMicrotask(() => this.input()?.nativeElement.focus());
     });
     effect(() => {
       // o rascunho abre o painel lateral: só ele consome (a tela Agentes tem outro ChatView)
-      const draft = this.chat.draft();
+      const draft = this.service.draft();
       if (draft === null || !this.compact()) return;
       this.text.set(draft);
-      this.chat.draft.set(null);
+      this.service.draft.set(null);
       queueMicrotask(() => { const el = this.input()?.nativeElement; el?.focus(); el?.setSelectionRange(draft.length, draft.length); });
     });
   }
@@ -69,8 +84,8 @@ export class ChatView {
   focus(): void { this.input()?.nativeElement.focus(); }
 
   protected send(text = this.text()): void {
-    if (!text.trim() || this.chat.currentBusy()) return;
-    this.chat.send(text.trim());
+    if (!text.trim() || this.s().currentBusy()) return;
+    this.s().send(text.trim());
     this.text.set('');
   }
 

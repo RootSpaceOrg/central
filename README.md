@@ -28,7 +28,7 @@ npm start             # build completo e abre o app
 - Self-checks: `node electron/backlog.check.mjs`, `electron/updater.check.mjs`, `electron/routines.check.mjs`,
   `scripts/file-icons.check.mjs`, `scripts/markdown.check.mjs`.
 
-Depuração: `--data=<pasta>` usa outro banco; `--route=/projetos/x?aba=codigo` abre numa tela;
+Depuração: `--data=<pasta>` usa outro banco; `--route=/projetos/x?aba=backlog` (ou `?nova=chat`) abre numa tela;
 `--capture=arquivo.png` salva um print e fecha (`--exec64=<js em base64>` roda um script antes).
 
 ## Requisitos
