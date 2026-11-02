@@ -8,6 +8,7 @@ import { SessionsApiService } from './sessions-api.service';
 
 export type { SessionKind };
 export interface Session { id: number; projectSlug: string; kind: SessionKind; title: string; chatId: number | null }
+export interface ClaudeSession { id: string; cwd: string; title: string; updatedAt: Date; sizeKb: number; imported: boolean }
 
 /** Tipos de sessão do "+", com o ícone original de cada ferramenta (SVGs do Material Icon Theme em /file-icons). */
 export const SESSION_KINDS: { kind: SessionKind; label: string; hint?: string; img: string }[] = [
@@ -67,6 +68,22 @@ export class SessionsService {
       this.error.set(errorMessage(e));
       return null;
     }
+  }
+
+  /** Sessões do Claude Code no disco (para importar). */
+  async claudeSessions(): Promise<ClaudeSession[]> {
+    return (await this.api.claudeSessions()).map(d => ({
+      id: d.session_id, cwd: d.cwd, title: d.title, updatedAt: new Date(d.updated_at), sizeKb: d.size_kb, imported: d.imported_chat_id !== null,
+    }));
+  }
+
+  /** Traz uma sessão do Claude Code para o projeto como conversa (com o histórico) e abre a aba. */
+  async importClaude(id: string, slug: string): Promise<Session> {
+    const s = toSession(await this.api.importClaude(id, slug));
+    await this.load();
+    this.chat.loadChats();
+    this.select(slug, s.id);
+    return s;
   }
 
   async close(s: Session): Promise<void> {

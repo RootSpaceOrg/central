@@ -51,8 +51,14 @@ export function decide(id: number, verdict: Verdict, reason: string | null): voi
   run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
   const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
   if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {
+    // decisões do piloto e dos agentes dizem o repositório no texto: a tarefa já nasce sabendo onde trabalhar
+    const text = `${p.title}
+${p.body ?? ''}
+${p.next_action ?? ''}`.toLowerCase();
+    const repo = all<{ path: string; name: string }>('select path, name from repos where project_slug = ?', p.project_slug)
+      .find(r => text.includes(r.path.toLowerCase()) || text.includes(`repo ${r.name.toLowerCase()}`));
     createTask({
-      project_slug: p.project_slug, repo_path: null, title: p.title,
+      project_slug: p.project_slug, repo_path: repo?.path ?? null, title: p.title,
       body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`].filter(Boolean).join('\n\n') || null,
       column: 'todo', priority: p.tier === 2 ? 0 : 1, proposal_id: id,
     });

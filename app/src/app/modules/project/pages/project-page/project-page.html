@@ -1,9 +1,9 @@
 @if (project(); as p) {
-  <header class="shrink-0 border-b border-edge px-10 pt-6">
-    <div class="flex items-start gap-5">
+  <header class="shrink-0 border-b border-edge px-8 pt-6 xl:px-10">
+    <div class="flex flex-wrap items-start gap-x-5 gap-y-3">
       <button type="button" class="mt-1 rounded-2xl transition hover:scale-105 hover:ring-2 hover:ring-edge" (click)="dialogs.editProject.set(p.slug)"
               title="Editar projeto" aria-label="Editar projeto"><app-project-avatar [project]="p" [size]="46" /></button>
-      <div class="min-w-0 flex-1">
+      <div class="min-w-[280px] flex-1">
         <h1 class="truncate font-display text-[28px] font-bold leading-tight tracking-tight">{{ p.name }}</h1>
         <div class="mt-2 flex flex-wrap items-center gap-3">
         <div class="flex w-fit gap-0.5 rounded-full border border-edge bg-panel p-0.5" role="radiogroup" aria-label="Status do projeto">
@@ -14,10 +14,10 @@
               {{ statusLabel[s] }}</button>
           }
         </div>
-        <button type="button" role="switch" [attr.aria-checked]="p.autopilot" (click)="projects.setAutopilot(p.slug, !p.autopilot)"
+        <button type="button" [attr.aria-pressed]="p.autopilot" (click)="dialogs.autopilot.set(p.slug)"
                 class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition"
                 [class]="p.autopilot ? 'border-[#B48CFF]/50 bg-[#B48CFF]/15 text-[#C6A6FF]' : 'border-edge text-faint hover:text-mute'"
-                title="De madrugada, um agente pega a tarefa do topo de &quot;A fazer&quot; e leva até um PR rascunho. Não começa outra enquanto houver uma em revisão.">
+                [title]="p.autopilot ? 'Direção: ' + p.autopilotBrief : 'Ligar o piloto automático: diga para onde levar o projeto'">
           <app-icon name="night" [size]="13" [fill]="p.autopilot" />Piloto automático {{ p.autopilot ? 'ligado' : 'desligado' }}
         </button>
         </div>

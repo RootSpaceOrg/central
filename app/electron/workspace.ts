@@ -66,14 +66,15 @@ const SHELLS: Record<string, [string, string[]]> = {
 const terminals = new Map<number, pty.IPty>();
 let nextTerminal = 1;
 
-export function createTerminal(input: NewTerminalInput, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
+export function createTerminal(input: NewTerminalInput, promptFile: string | null, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
   const cwd = guard(input.cwd);
   if (!existsSync(cwd)) throw new Error(`A pasta ${cwd} não existe. Ajuste a pasta do projeto em Editar projeto.`);
   let [file, args] = SHELLS[input.kind === 'claude' ? 'shell' : input.kind] ?? SHELLS.shell;
   if (input.kind === 'claude') {
     // a sessão interativa também enxerga e atualiza a Central (backlog, ideias, decisões)
     const mcp = mcpConfigPath();
-    args = [...args, '-NoExit', '-Command', mcp ? `claude --mcp-config '${mcp}'` : 'claude'];
+    const extra = [mcp ? `--mcp-config '${mcp}'` : '', promptFile ? `--append-system-prompt-file '${promptFile}'` : ''].filter(Boolean).join(' ');
+    args = [...args, '-NoExit', '-Command', `claude ${extra}`.trim()];
   }
   const term = pty.spawn(file, args, {
     name: 'xterm-256color', cwd, cols: input.cols || 100, rows: input.rows || 30,

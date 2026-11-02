@@ -1,4 +1,4 @@
-import { Component, OnDestroy, effect, inject, untracked } from '@angular/core';
+import { Component, ElementRef, OnDestroy, effect, inject, untracked, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -8,6 +8,8 @@ import { SessionsService } from '../../../../shared/services/sessions/sessions.s
 import { Icon } from '../../../../shared/ui/icon';
 import { TEMPLATES, assign, leaf, leaves, split } from '../../services/grids/grid-tree';
 import { GridPreset, GridsService } from '../../services/grids/grids.service';
+import { AddSessions } from './components/add-sessions/add-sessions';
+import { GridMinimap } from './components/grid-minimap/grid-minimap';
 import { GridNodeView } from './components/grid-node/grid-node';
 
 /**
@@ -16,7 +18,7 @@ import { GridNodeView } from './components/grid-node/grid-node';
  */
 @Component({
   selector: 'app-grid-page',
-  imports: [Icon, GridNodeView],
+  imports: [Icon, GridNodeView, GridMinimap, AddSessions],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     @if (!layout.focus()) {
@@ -31,16 +33,31 @@ import { GridNodeView } from './components/grid-node/grid-node';
         <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="newGrid($event)"
                 title="Nova grade" aria-label="Nova grade"><app-icon name="plus" [size]="15" /></button>
         <span class="flex-1"></span>
-        <span class="mr-3 text-[12px] text-faint">Arraste o cabeçalho de um painel para mover. Divisórias redimensionam.</span>
+        <span class="mr-3 hidden text-[12px] text-faint xl:inline">Arraste o cabeçalho de um painel para mover. Divisórias redimensionam.</span>
+        <button type="button" class="btn btn-sm btn-primary" (click)="grids.addOpen.set(true)"><app-icon name="plus" [size]="14" />Adicionar sessões</button>
         <button type="button" class="btn btn-sm" (click)="layout.setFocus(true)" title="Modo foco (F11)"><app-icon name="focus" [size]="14" />Foco</button>
       </div>
     } @else {
       <button type="button" class="fixed right-3 bottom-3 z-40 flex items-center gap-1.5 rounded-lg border border-edge bg-panel/90 px-2.5 py-1 text-[12px] text-mute opacity-30 transition hover:opacity-100"
               (click)="layout.setFocus(false)" title="Sair do modo foco (F11)"><app-icon name="unfocus" [size]="13" />Sair do foco</button>
     }
-    @if (grids.active(); as g) {
-      <app-grid-node class="min-h-0 flex-1" [class]="layout.focus() ? 'p-1' : 'p-2'" [node]="g.root" />
-    }`,
+    <div #area class="grid-bg relative min-h-0 flex-1" [class]="layout.focus() ? 'p-1.5' : 'p-3'">
+      @if (grids.active(); as g) { <app-grid-node class="h-full" [node]="g.root" /> }
+      @if (grids.dragging()) { <app-grid-minimap class="absolute bottom-5 left-1/2 z-30 -translate-x-1/2" /> }
+    </div>
+    <app-add-sessions [(open)]="grids.addOpen" />`,
+  styles: [`
+    /* quadriculado com degradê: linhas finas que somem nas bordas + duas luzes de cor */
+    .grid-bg {
+      background-color: #0f131a;
+      background-image:
+        radial-gradient(900px 520px at 12% -10%, rgb(127 162 255 / 0.20), transparent 60%),
+        radial-gradient(800px 520px at 105% 110%, rgb(180 140 255 / 0.16), transparent 60%),
+        linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+      background-size: auto, auto, 28px 28px, 28px 28px;
+    }
+  `],
 })
 export class GridPage implements OnDestroy {
   protected readonly grids = inject(GridsService);
@@ -50,7 +67,13 @@ export class GridPage implements OnDestroy {
   private readonly router = inject(Router);
   private readonly query = toSignal(inject(ActivatedRoute).queryParamMap);
 
+  private readonly area = viewChild<ElementRef<HTMLElement>>('area');
+  private readonly observer = new ResizeObserver(([e]) => {
+    if (e.contentRect.height) this.grids.aspect.set(e.contentRect.width / e.contentRect.height);
+  });
+
   constructor() {
+    effect(() => { const el = this.area()?.nativeElement; if (el) this.observer.observe(el); });
     // sessões fechadas em outro lugar viram painel vazio
     effect(() => {
       this.sessions.byId();
@@ -95,6 +118,7 @@ export class GridPage implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.observer.disconnect();
     if (this.layout.focus()) this.layout.setFocus(false);
   }
 }

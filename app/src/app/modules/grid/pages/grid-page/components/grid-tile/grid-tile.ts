@@ -10,7 +10,7 @@ import { SESSION_IMG, SESSION_KINDS, Session, SessionsService } from '../../../.
 import { TerminalsService } from '../../../../../../shared/services/terminals/terminals.service';
 import { Icon } from '../../../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
-import { DropEdge, GridLeaf, assign, move, remove, split } from '../../../../services/grids/grid-tree';
+import { DropEdge, GridLeaf, assign, leaf, move, rects, remove, split } from '../../../../services/grids/grid-tree';
 import { GridsService } from '../../../../services/grids/grids.service';
 
 /** Onde aparece o destaque ao arrastar um painel por cima: metade da borda, ou o centro (troca). */
@@ -22,10 +22,15 @@ const ZONE: Record<DropEdge, string> = {
 @Component({
   selector: 'app-grid-tile',
   imports: [Icon, ProjectAvatar, SessionView],
-  host: { class: 'flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-edge bg-night' },
+  host: {
+    class: 'flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border shadow-[0_10px_30px_-18px_rgb(0_0_0/0.9)]',
+    '[class]': "session() ? 'border-edge bg-night' : 'border-dashed border-faint/40 bg-night/40 backdrop-blur-sm'",
+    // a sessão é o nome da animação: ela desliza para o novo lugar mesmo quando o painel é recriado
+    '[style.view-transition-name]': "'tile-' + (leaf().sessionId ?? leaf().id)",
+  },
   template: `
     <header class="flex h-8 shrink-0 cursor-grab items-center gap-2 border-b border-edge bg-panel pr-1 pl-2 active:cursor-grabbing"
-            draggable="true" (dragstart)="dragStart($event)" (dragend)="grids.dragging.set(null)" (contextmenu)="more($event)">
+            draggable="true" (dragstart)="dragStart($event)" (dragend)="grids.dragging.set(null); grids.hover.set(null)" (contextmenu)="more($event)">
       <app-icon name="grip" [size]="13" class="shrink-0 text-faint" />
       @if (session(); as s) {
         <img [src]="img[s.kind]" alt="" class="size-3.5 shrink-0" />
@@ -39,6 +44,7 @@ const ZONE: Record<DropEdge, string> = {
         <span class="text-[12.5px] text-faint">Painel vazio</span>
       }
       <span class="flex-1"></span>
+      <button type="button" class="tile-btn" (click)="plus($event)" title="Nova sessão ao lado" aria-label="Nova sessão ao lado"><app-icon name="plus" [size]="14" /></button>
       <button type="button" class="tile-btn" (click)="splitTile('row')" title="Dividir para a direita" aria-label="Dividir para a direita"><app-icon name="splitRight" [size]="14" /></button>
       <button type="button" class="tile-btn" (click)="splitTile('col')" title="Dividir para baixo" aria-label="Dividir para baixo"><app-icon name="splitDown" [size]="14" /></button>
       <button type="button" class="tile-btn" (click)="more($event)" title="Mais" aria-label="Mais opções do painel"><app-icon name="more" [size]="14" /></button>
@@ -51,6 +57,10 @@ const ZONE: Record<DropEdge, string> = {
       } @else {
         <!-- seletor: projeto → tipo de sessão, ou uma sessão que já existe -->
         <div class="absolute inset-0 overflow-y-auto p-5">
+          <div class="mb-4 flex items-center gap-3">
+            <p class="flex-1 font-display text-[15px] font-semibold">O que abrir aqui?</p>
+            <button type="button" class="btn btn-sm" (click)="grids.addOpen.set(true)"><app-icon name="grid" [size]="14" />Várias de uma vez</button>
+          </div>
           <p class="text-[12.5px] font-semibold text-faint">Projeto</p>
           <div class="mt-2 flex flex-wrap gap-1.5">
             @for (p of projects.living(); track p.slug) {
@@ -83,7 +93,7 @@ const ZONE: Record<DropEdge, string> = {
 
       <!-- arrastando outro painel: escolha onde soltar -->
       @if (grids.dragging() && grids.dragging() !== leaf().id) {
-        <div class="absolute inset-0 z-20" (dragover)="over($event)" (dragleave)="edge.set(null)" (drop)="drop($event)">
+        <div class="absolute inset-0 z-20" (dragover)="over($event)" (dragleave)="leave()" (drop)="drop($event)">
           @if (edge(); as e) { <div class="pointer-events-none absolute rounded-lg border-2 border-frost bg-frost/15 transition-all {{ zone[e] }}"></div> }
         </div>
       }
@@ -123,10 +133,30 @@ export class GridTile {
     return slug ? this.sessions.of(slug).filter(s => !this.grids.placed().has(s.id)) : [];
   });
 
-  protected setSession(id: number | null): void { this.grids.update(r => assign(r, this.leaf().id, id)); }
-  protected closeTile(): void { this.grids.update(r => remove(r, this.leaf().id)); }
+  protected setSession(id: number | null): void { this.grids.change(r => assign(r, this.leaf().id, id)); }
+  protected closeTile(): void { this.grids.change(r => remove(r, this.leaf().id)); }
 
-  protected splitTile(dir: 'row' | 'col'): void { this.grids.update(r => split(r, this.leaf().id, dir)); }
+  protected splitTile(dir: 'row' | 'col'): void { this.grids.change(r => split(r, this.leaf().id, dir)); }
+
+  /** "+" do cabeçalho: sessão nova do mesmo projeto ao lado deste painel (pelo lado mais comprido). */
+  protected plus(e: MouseEvent): void {
+    const slug = this.session()?.projectSlug ?? this.slug();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    this.menu.open(new MouseEvent('click', { clientX: r.left - 180, clientY: r.bottom + 4 }), [
+      ...(slug ? SESSION_KINDS.map(k => ({ label: k.label, img: k.img, hint: this.projects.bySlug().get(slug)?.name, run: () => this.besides(slug, k.kind) })) : []),
+      null,
+      { label: 'Várias sessões, outros projetos…', icon: 'grid', run: () => this.grids.addOpen.set(true) },
+    ]);
+  }
+
+  private async besides(slug: string, kind: SessionKind): Promise<void> {
+    const s = await this.sessions.open(slug, kind, null, false);
+    if (!s) return;
+    this.grids.change(root => {
+      const box = rects(root).get(this.leaf().id);
+      return split(root, this.leaf().id, !box || box.w * this.grids.aspect() >= box.h ? 'row' : 'col', leaf(s.id));
+    });
+  }
 
   protected async create(kind: SessionKind): Promise<void> {
     const slug = this.slug();
@@ -147,7 +177,15 @@ export class GridTile {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
     const d = Math.min(x, 1 - x, y, 1 - y);
-    this.edge.set(d > 0.25 ? 'center' : d === x ? 'left' : d === 1 - x ? 'right' : d === y ? 'top' : 'bottom');
+    const edge: DropEdge = d > 0.25 ? 'center' : d === x ? 'left' : d === 1 - x ? 'right' : d === y ? 'top' : 'bottom';
+    if (edge === this.edge()) return;
+    this.edge.set(edge);
+    this.grids.hover.set({ to: this.leaf().id, edge });
+  }
+
+  protected leave(): void {
+    this.edge.set(null);
+    if (this.grids.hover()?.to === this.leaf().id) this.grids.hover.set(null);
   }
 
   protected drop(e: DragEvent): void {
@@ -156,7 +194,8 @@ export class GridTile {
     const edge = this.edge();
     this.edge.set(null);
     this.grids.dragging.set(null);
-    if (from && edge) this.grids.update(r => move(r, from, this.leaf().id, edge));
+    this.grids.hover.set(null);
+    if (from && edge) this.grids.change(r => move(r, from, this.leaf().id, edge));
   }
 
   protected more(e: MouseEvent): void {
@@ -182,6 +221,6 @@ export class GridTile {
 
   private restart(s: Session): void {
     const folder = this.projects.bySlug().get(s.projectSlug)?.folder;
-    if (folder) this.terminals.start(s.id, folder, s.kind as TerminalKind);
+    if (folder) this.terminals.start(s.id, folder, s.kind as TerminalKind, s.projectSlug);
   }
 }

@@ -37,4 +37,11 @@ eq(ids(root), [null], 'nunca fica vazia');
 root = g.prune(g.TEMPLATES[1].make(), () => false);
 eq(ids(root), [null, null], 'modelo de duas colunas');
 eq(ids(g.prune({ id: 'x', dir: 'row', sizes: [1, 1], children: [g.leaf(7), g.leaf(8)] }, id => id === 8)), [null, 8], 'sessão apagada vira vazio');
+// encaixe automático: vazio primeiro, depois o maior painel pelo lado comprido
+let auto = g.addSessions(g.leaf(), [1, 2, 3], 2);
+eq(ids(auto), [1, 2, 3], 'três sessões');
+eq(auto.dir, 'row', 'tela larga divide lado a lado primeiro');
+const r = g.rects(auto);
+eq(Math.round([...r.values()].reduce((a, x) => a + x.w * x.h, 0) * 1000), 1000, 'retângulos cobrem a área');
+eq(ids(g.addSessions(g.TEMPLATES[1].make(), [5], 2)), [5, null], 'ocupa o painel vazio');
 console.log('ok');

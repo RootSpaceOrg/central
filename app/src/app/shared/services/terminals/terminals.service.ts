@@ -52,7 +52,7 @@ export class TerminalsService {
   }
 
   /** Abre o processo da sessão (ou reabre, se ele terminou). */
-  async start(sessionId: number, cwd: string, kind: TerminalKind): Promise<void> {
+  async start(sessionId: number, cwd: string, kind: TerminalKind, projectSlug: string | null = null): Promise<void> {
     if (this.starting.has(sessionId)) return;
     this.starting.add(sessionId);
     this.stop(sessionId);
@@ -66,7 +66,7 @@ export class TerminalsService {
     term.loadAddon(fit);
     term.open(el);
     try {
-      const pty = await this.api.create({ cwd, kind, cols: 100, rows: 28 });
+      const pty = await this.api.create({ cwd, kind, project_slug: projectSlug, cols: 100, rows: 28 });
       term.onData(d => this.api.write(pty, d));
       this.set(sessionId, { pty, alive: true, term, fit, el });
       term.write(this.early.get(pty) ?? '');

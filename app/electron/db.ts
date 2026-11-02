@@ -225,6 +225,7 @@ for (const [table, column, type] of [
   ['runs', 'agent_id', 'integer'], ['runs', 'session_id', 'text'], ['routines', 'agent_id', 'integer'],
   ['chats', 'agent_id', 'integer'], ['chats', 'cwd', 'text'], ['chats', 'project_slug', 'text'],
   ['projects', 'autopilot', 'integer not null default 0'],
+  ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
   if (!cols.some(c => c.name === column)) db.exec(`alter table ${table} add column ${column} ${type}`);

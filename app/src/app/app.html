@@ -1,7 +1,7 @@
 <div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[1fr]' : 'grid-rows-[40px_1fr_26px]'">
   <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
   <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
-    <span class="grid size-6 place-items-center rounded-lg bg-frost text-[13px] font-extrabold text-night font-display">C</span>
+    <img src="logo.png" alt="" class="size-6 rounded-lg" />
     <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
     <span class="flex-1"></span>
     <button type="button" class="no-drag flex w-[min(380px,40vw)] items-center gap-2 rounded-lg border border-edge bg-panel px-3 py-1 text-[12.5px] text-faint transition hover:border-faint hover:text-mute"
@@ -138,3 +138,5 @@
 <app-context-menu />
 <app-settings-dialog />
 <app-command-palette />
+<app-import-session-dialog />
+<app-autopilot-dialog />

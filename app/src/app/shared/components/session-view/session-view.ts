@@ -85,7 +85,7 @@ export class SessionView implements OnDestroy {
   restart(): void {
     const s = this.session();
     const folder = this.projects.bySlug().get(s.projectSlug)?.folder;
-    if (folder) this.terminals.start(s.id, folder, s.kind as TerminalKind);
+    if (folder) this.terminals.start(s.id, folder, s.kind as TerminalKind, s.projectSlug);
   }
 
   focus(): void { this.terminals.terms().get(this.session().id)?.term.focus(); }

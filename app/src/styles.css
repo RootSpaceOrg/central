@@ -128,3 +128,6 @@
 /* xterm dentro do painel */
 .xterm { padding: 8px 0 0 12px; height: 100%; }
 .xterm-viewport { background: transparent !important; }
+
+/* Grade: painéis deslizam ao mudar de lugar (View Transitions) */
+::view-transition-group(*) { animation-duration: 260ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }

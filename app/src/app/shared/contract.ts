@@ -39,7 +39,14 @@ export interface ProjectDto {
   active_runs: number;
   /** piloto automático: de madrugada um agente pega a tarefa do topo de "A fazer" */
   autopilot: boolean;
+  /** para onde o Gustavo quer levar o projeto (vai em todo prompt do piloto) */
+  autopilot_brief: string;
+  autopilot_mode: AutopilotMode;
 }
+
+/** tasks = só executa o que está em "A fazer"; plan = sem tarefa, planeja e propõe como decisões;
+ *  trust = sem tarefa, planeja e já coloca em "A fazer" */
+export type AutopilotMode = 'tasks' | 'plan' | 'trust';
 
 export interface NewProjectInput {
   name: string;
@@ -59,13 +66,15 @@ export interface ProjectPatch {
   /** caminho absoluto; os repositórios são redescobertos */
   folder?: string;
   autopilot?: boolean;
+  autopilot_brief?: string;
+  autopilot_mode?: AutopilotMode;
 }
 
 // ---------- piloto automático ----------
 
 /** started = agente trabalhando; waiting = já há tarefa em andamento/revisão; empty = nada em "A fazer";
  *  blocked = tarefa sem repositório; quota = cota alta */
-export type PulseAction = 'started' | 'waiting' | 'empty' | 'blocked' | 'quota';
+export type PulseAction = 'started' | 'planning' | 'waiting' | 'empty' | 'blocked' | 'quota';
 
 export interface PulseItemDto {
   slug: string;
@@ -338,6 +347,8 @@ export interface NewTerminalInput {
   cwd: string;
   /** 'shell' abre PowerShell; 'claude' abre uma sessão interativa do Claude Code */
   kind: TerminalKind;
+  /** Claude Code do projeto: recebe o contexto da Central */
+  project_slug?: string | null;
   cols: number;
   rows: number;
 }
@@ -405,6 +416,18 @@ export interface SessionDto {
   title: string;
   chat_id: number | null;
   created_at: string;
+}
+
+/** Sessão do Claude Code achada em ~/.claude/projects (para importar num projeto). */
+export interface ClaudeSessionDto {
+  session_id: string;
+  /** pasta onde a sessão rodou (o --resume precisa dela) */
+  cwd: string;
+  title: string;
+  updated_at: string;
+  size_kb: number;
+  /** já importada: id da conversa na Central */
+  imported_chat_id: number | null;
 }
 
 // ---------- agente Central (chat) ----------
@@ -523,6 +546,8 @@ export interface Api {
   'sessions:create': (projectSlug: string, kind: SessionKind, chatId?: number | null) => SessionDto;
   'sessions:update': (id: number, patch: { title?: string; chat_id?: number }) => void;
   'sessions:close': (id: number) => void;
+  'claude:sessions': () => ClaudeSessionDto[];
+  'claude:import': (sessionId: string, projectSlug: string) => SessionDto;
   'pty:write': (id: number, data: string) => void;
   'pty:resize': (id: number, cols: number, rows: number) => void;
   'pty:kill': (id: number) => void;
@@ -549,7 +574,8 @@ export interface Api {
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];
   'pulse:status': () => PulseStatusDto;
-  'pulse:run': () => PulseStatusDto;
+  /** projectSlug: só esse projeto ("Rodar agora" no diálogo do piloto) */
+  'pulse:run': (projectSlug?: string | null) => PulseStatusDto;
   'routines:create': (input: NewRoutineInput) => RoutineDto;
   'routines:update': (id: number, patch: RoutinePatch) => void;
   'routines:delete': (id: number) => void;

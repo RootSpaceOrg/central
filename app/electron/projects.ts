@@ -86,6 +86,10 @@ export function updateProject(slug: string, patch: ProjectPatch): void {
   if (patch.status && !STATUSES.includes(patch.status)) throw new Error('Status inválido.');
   if (patch.name !== undefined && !patch.name.trim()) throw new Error('O nome não pode ficar vazio.');
   if (patch.icon_kind && !ICON_KINDS.includes(patch.icon_kind)) throw new Error('Tipo de ícone inválido.');
+  if (patch.autopilot_mode && !['tasks', 'plan', 'trust'].includes(patch.autopilot_mode)) throw new Error('Modo do piloto inválido.');
+  if (patch.autopilot && !patch.autopilot_brief?.trim() && !get<{ b: string }>('select autopilot_brief b from projects where slug = ?', slug)?.b.trim()) {
+    throw new Error('Diga para onde o piloto deve levar o projeto antes de ligar.');
+  }
   if (patch.icon_kind === 'image' && !/^data:image\/(png|jpeg|webp|svg\+xml|gif);base64,/.test(patch.icon_value ?? '')) {
     throw new Error('Imagem inválida.');
   }
@@ -96,7 +100,8 @@ export function updateProject(slug: string, patch: ProjectPatch): void {
     if (get('select 1 from projects where folder = ? and slug <> ?', patch.folder, slug)) throw new Error('Essa pasta já é de outro projeto.');
   }
   const fields = Object.entries(patch)
-    .filter(([k]) => ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'autopilot'].includes(k))
+    // campo ausente chega como undefined pelo IPC: não mexe nele (senão vira null e quebra colunas NOT NULL, ex.: folder)
+    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'autopilot', 'autopilot_brief', 'autopilot_mode'].includes(k))
     .map(([k, v]) => [k, k === 'autopilot' ? (v ? 1 : 0) : v] as const);
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,

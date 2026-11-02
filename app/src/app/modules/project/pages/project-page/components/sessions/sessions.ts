@@ -1,5 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
 import { Router } from '@angular/router';
+import { DialogsService } from '../../../../../../shared/services/dialogs/dialogs.service';
 
 import { SessionView } from '../../../../../../shared/components/session-view/session-view';
 import { SessionKind } from '../../../../../../shared/contract';
@@ -55,6 +56,7 @@ export class ProjectSessions {
   protected readonly chat = inject(ChatService);
   private readonly menu = inject(ContextMenuService);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(DialogsService);
 
   readonly slug = input.required<string>();
   readonly folder = input.required<string>();
@@ -74,6 +76,7 @@ export class ProjectSessions {
     const past = this.chat.projectChats(this.slug()).filter(c => !this.list().some(s => s.chatId === c.id)).slice(0, 8);
     const items: MenuEntry[] = SESSION_KINDS.map(k => ({ label: k.label, img: k.img, hint: k.hint, run: () => this.open(k.kind) }));
     if (past.length) items.push(null, ...past.map(c => ({ label: c.title, icon: 'timer' as const, hint: 'retomar', run: () => this.open('chat', c.id) })));
+    items.push(null, { label: 'Importar sessão do Claude Code…', img: 'file-icons/claude.svg', hint: 'Orca, terminal', run: () => this.dialogs.importSession.set({ slug: this.slug() }) });
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     this.menu.open(new MouseEvent('click', { clientX: r.left, clientY: r.bottom + 4 }), items);
   }
@@ -82,7 +85,7 @@ export class ProjectSessions {
     this.menu.open(e, [
       { label: 'Renomear', icon: 'edit', run: () => this.rename(s) },
       { label: 'Levar para a Grade', icon: 'grid', run: () => this.router.navigate(['/grade'], { queryParams: { sessao: s.id } }) },
-      ...(s.kind !== 'chat' ? [{ label: 'Reiniciar terminal', icon: 'sync' as const, run: () => this.terminals.start(s.id, this.folder(), s.kind as never) }] : []),
+      ...(s.kind !== 'chat' ? [{ label: 'Reiniciar terminal', icon: 'sync' as const, run: () => this.terminals.start(s.id, this.folder(), s.kind as never, s.projectSlug) }] : []),
       null,
       { label: 'Fechar', icon: 'close', run: () => this.sessions.close(s) },
     ]);

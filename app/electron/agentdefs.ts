@@ -131,7 +131,9 @@ export function sessionPromptFile(slug: string): string {
     `## Sessão de trabalho no ${p.name}\nO Gustavo abriu esta sessão no projeto "${p.name}" (slug ${slug}), pasta ${p.folder}, e está conduzindo.
 Repositórios: ${repos.join(', ') || 'nenhum'}.${p.description ? `\nSobre: ${p.description}` : ''}
 Você pode ler e editar código e rodar build, testes e git. Nunca faça push para main, master ou develop.
-Ao terminar algo, diga o que mudou em poucas linhas. O que ficar pendente vira tarefa no backlog deste projeto.`,
+Ao terminar algo, diga o que mudou em poucas linhas. O que ficar pendente vira tarefa no backlog deste projeto.
+Se a conversa começou fora da Central (sessão importada do Claude Code ou do Orca), agora ela faz parte da Central:
+use as ferramentas \`central\` para consultar backlog, ideias e decisões antes de responder sobre o que está pendente.`,
   ].join('\n\n');
   const dir = join(app.getPath('userData'), 'agents');
   mkdirSync(dir, { recursive: true });

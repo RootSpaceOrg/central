@@ -7,6 +7,6 @@ export class PulseApiService {
   private readonly ipc = inject(IpcService);
 
   status() { return this.ipc.invoke('pulse:status'); }
-  run() { return this.ipc.invoke('pulse:run'); }
+  run(slug: string | null = null) { return this.ipc.invoke('pulse:run', slug); }
   onChanged(cb: () => void) { return this.ipc.on('backlog:changed', cb); }
 }

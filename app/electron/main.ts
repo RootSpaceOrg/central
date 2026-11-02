@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,8 +15,9 @@ import { getUsage } from './usage';
 import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
 import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
+import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { pulseStatus, runPulse, watchPulse } from './pulse';
-import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent } from './agentdefs';
+import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
@@ -86,8 +87,13 @@ function registerIpc(): void {
     const ext = file.split('.').pop()!.toLowerCase();
     const mime = ext === 'svg' ? 'svg+xml' : ext === 'jpg' ? 'jpeg' : ext;
     const buf = readFileSync(file);
-    if (buf.length > 400 * 1024) throw new Error('Imagem grande demais (máximo 400 KB).');
-    return `data:image/${mime};base64,${buf.toString('base64')}`;
+    if (buf.length <= 400 * 1024) return `data:image/${mime};base64,${buf.toString('base64')}`;
+    // foto grande: reduz para ícone (png/jpg; o nativeImage do Windows não lê webp/gif/svg)
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) throw new Error('Imagem grande demais (máximo 400 KB). Use PNG ou JPG, que a Central reduz sozinha.');
+    const { width, height } = img.getSize();
+    const small = img.resize(width >= height ? { width: 256 } : { height: 256 }).toPNG();
+    return `data:image/png;base64,${small.toString('base64')}`;
   });
   handle('projects:sync', slug => { syncProjects(slug, changed); });
   handle('repos:list', slug => listRepos(slug));
@@ -106,7 +112,7 @@ function registerIpc(): void {
   handle('fs:read', path => readFile(path));
   handle('fs:write', (path, content) => writeFile(path, content));
 
-  handle('pty:create', input => createTerminal(input, (id, data) => send('pty:data', { id, data }), (id, code) => send('pty:exit', { id, code })));
+  handle('pty:create', input => createTerminal(input, input.kind === 'claude' && input.project_slug ? sessionPromptFile(input.project_slug) : null, (id, data) => send('pty:data', { id, data }), (id, code) => send('pty:exit', { id, code })));
   handle('pty:write', (id, data) => { writeTerminal(id, data); });
   handle('pty:resize', (id, cols, rows) => resizeTerminal(id, cols, rows));
   handle('pty:kill', id => killTerminal(id));
@@ -144,7 +150,7 @@ function registerIpc(): void {
 
   handle('routines:list', () => listRoutines());
   handle('pulse:status', () => pulseStatus());
-  handle('pulse:run', () => runPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, true));
+  handle('pulse:run', slug => runPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, true, slug ?? null));
   handle('routines:create', input => { const r = createRoutine(input); routinesChanged(); return r; });
   handle('routines:update', (id, patch) => { updateRoutine(id, patch); routinesChanged(); });
   handle('routines:delete', id => { deleteRoutine(id); routinesChanged(); });
@@ -163,6 +169,8 @@ function registerIpc(): void {
   handle('sessions:create', (slug, kind, chatId) => createSession(slug, kind, chatId ?? null));
   handle('sessions:update', (id, patch) => updateSession(id, patch));
   handle('sessions:close', id => closeSession(id));
+  handle('claude:sessions', () => listClaudeSessions());
+  handle('claude:import', (id, slug) => importClaudeSession(id, slug));
   handle('chat:fromRun', runId => chatFromRun(runId));
   handle('chat:rename', (id, title) => { renameChat(id, title); });
   handle('chat:stop', id => stopChat(id));
@@ -180,6 +188,7 @@ function registerIpc(): void {
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1480, height: 940, minWidth: 1024, minHeight: 640,
+    icon: join(__dirname, '..', 'build', 'icon.png'),
     backgroundColor: '#141922',
     title: 'Central',
     titleBarStyle: 'hidden',

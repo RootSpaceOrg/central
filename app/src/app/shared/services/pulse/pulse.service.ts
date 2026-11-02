@@ -14,7 +14,7 @@ const toStatus = (d: PulseStatusDto): PulseStatus => ({
 });
 
 export const PULSE_LABEL: Record<PulseAction, string> = {
-  started: 'Agente trabalhando', waiting: 'Esperando você', empty: 'Sem tarefa', blocked: 'Travado', quota: 'Cota alta',
+  started: 'Agente trabalhando', planning: 'Planejando', waiting: 'Esperando você', empty: 'Sem tarefa', blocked: 'Travado', quota: 'Cota alta',
 };
 
 /** Piloto automático: o que a última passada da madrugada fez em cada projeto. */
@@ -34,11 +34,11 @@ export class PulseService {
   load(): void { this.api.status().then(s => this.status.set(toStatus(s))); }
 
   /** "Rodar agora": a mesma passada da madrugada, fora da janela (respeita as travas e a cota). */
-  async runNow(): Promise<void> {
+  async runNow(slug: string | null = null): Promise<void> {
     this.running.set(true);
     this.error.set(null);
     try {
-      this.status.set(toStatus(await this.api.run()));
+      this.status.set(toStatus(await this.api.run(slug)));
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {

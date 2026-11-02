@@ -25,6 +25,8 @@ import { Icon, IconName } from './shared/ui/icon';
 import { ContextMenu } from './shared/ui/context-menu';
 import { SettingsDialog } from './shared/components/settings-dialog/settings-dialog';
 import { CommandPalette } from './shared/components/command-palette/command-palette';
+import { ImportSessionDialog } from './shared/components/import-session-dialog/import-session-dialog';
+import { AutopilotDialog } from './shared/components/autopilot-dialog/autopilot-dialog';
 import { PrefsApiService } from './shared/services/prefs/prefs-api.service';
 import { ContextMenuService, MenuEntry } from './shared/services/context-menu/context-menu.service';
 import { AgentsService } from './shared/services/agents/agents.service';
@@ -41,7 +43,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 @Component({
   selector: 'app-root',
   host: { '(document:keydown.f11)': 'toggleFocus($event)' },
-  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette],
+  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog, AutopilotDialog],
   templateUrl: './app.html',
 })
 export class App {

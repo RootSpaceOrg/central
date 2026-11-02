@@ -84,6 +84,37 @@ export function prune(root: GridNode, exists: (id: number) => boolean): GridNode
   return leaves(root).filter(l => l.sessionId !== null && !exists(l.sessionId)).reduce((r, l) => assign(r, l.id, null), root);
 }
 
+export interface Rect { x: number; y: number; w: number; h: number }
+
+/** Retângulo de cada painel em frações da área (0..1): para o minimapa e para achar o maior painel. */
+export function rects(n: GridNode, r: Rect = { x: 0, y: 0, w: 1, h: 1 }, out = new Map<string, Rect>()): Map<string, Rect> {
+  if (!isSplit(n)) return out.set(n.id, r);
+  const total = n.sizes.reduce((a, b) => a + b, 0);
+  let at = 0;
+  n.children.forEach((c, i) => {
+    const f = n.sizes[i] / total;
+    rects(c, n.dir === 'row' ? { x: r.x + at * r.w, y: r.y, w: f * r.w, h: r.h } : { x: r.x, y: r.y + at * r.h, w: r.w, h: f * r.h }, out);
+    at += f;
+  });
+  return out;
+}
+
+/**
+ * Põe várias sessões na grade: primeiro nos painéis vazios, depois dividindo o maior painel pelo lado mais comprido
+ * (aspect = largura/altura da área, para "mais comprido" ser o que a tela mostra).
+ */
+export function addSessions(root: GridNode, ids: number[], aspect = 16 / 9): GridNode {
+  for (const id of ids) {
+    const empty = leaves(root).find(l => l.sessionId === null);
+    if (empty) { root = assign(root, empty.id, id); continue; }
+    const all = rects(root);
+    // empate: o último painel (a ordem de leitura fica a ordem em que você escolheu)
+    const [bigId, big] = [...all].reduce((m, x) => (x[1].w * x[1].h >= m[1].w * m[1].h - 1e-9 ? x : m));
+    root = split(root, bigId, big.w * aspect >= big.h ? 'row' : 'col', leaf(id));
+  }
+  return root;
+}
+
 /** Modelos para começar uma grade nova. */
 export const TEMPLATES: { id: string; label: string; make: () => GridNode }[] = [
   { id: 'one', label: 'Um painel', make: () => leaf() },

@@ -1,8 +1,8 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { ApplicationRef, Injectable, computed, inject, signal } from '@angular/core';
 
 import { SessionsService } from '../../../../shared/services/sessions/sessions.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
-import { GridNode, TEMPLATES, leaves, newId, prune } from './grid-tree';
+import { DropEdge, GridNode, TEMPLATES, addSessions, leaves, move, newId, prune } from './grid-tree';
 
 /** Preset de janela de trabalho: um nome e a árvore de painéis (com as sessões de qualquer projeto). */
 export interface GridPreset { id: string; name: string; root: GridNode }
@@ -14,6 +14,7 @@ const KEY = 'grids';
 export class GridsService {
   private readonly settings = inject(SettingsApiService);
   private readonly sessions = inject(SessionsService);
+  private readonly appRef = inject(ApplicationRef);
   private saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly presets = signal<GridPreset[]>([]);
@@ -22,6 +23,18 @@ export class GridsService {
   readonly active = computed<GridPreset | null>(() => this.presets().find(p => p.id === this.activeId()) ?? this.presets()[0] ?? null);
   /** painel sendo arrastado (para mostrar onde soltar) */
   readonly dragging = signal<string | null>(null);
+  /** painel "Adicionar sessões" aberto */
+  readonly addOpen = signal(false);
+  /** onde o painel arrastado cairia agora (o minimapa mostra o resultado) */
+  readonly hover = signal<{ to: string; edge: DropEdge } | null>(null);
+  /** largura/altura da área da grade (para dividir pelo lado mais comprido) */
+  readonly aspect = signal(16 / 9);
+  /** árvore como ficaria se soltasse agora */
+  readonly preview = computed(() => {
+    const root = this.active()?.root;
+    const from = this.dragging(), h = this.hover();
+    return root && from && h ? move(root, from, h.to, h.edge) : root ?? null;
+  });
   /** sessões que já estão em algum painel da grade ativa */
   readonly placed = computed(() => new Set(this.active() ? leaves(this.active()!.root).map(l => l.sessionId) : []));
 
@@ -40,6 +53,22 @@ export class GridsService {
     if (!p) return;
     this.presets.update(list => list.map(x => (x.id === p.id ? { ...x, root: fn(x.root) } : x)));
     this.save();
+  }
+
+  /**
+   * Muda a árvore com animação: os painéis deslizam até o novo lugar (View Transitions do Chromium).
+   * O nome de cada painel é a sessão, então ela "viaja" mesmo quando o painel é recriado ao mover.
+   */
+  change(fn: (root: GridNode) => GridNode): void {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    if (!doc.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return this.update(fn);
+    doc.startViewTransition(() => { this.update(fn); this.appRef.tick(); });
+  }
+
+  /** Várias sessões de uma vez: painéis vazios primeiro, depois divide o maior. */
+  add(ids: number[]): void {
+    const fresh = ids.filter(id => !this.placed().has(id));
+    if (fresh.length) this.change(r => addSessions(r, fresh, this.aspect()));
   }
 
   /** Sessões fechadas em outro lugar viram painel vazio. */
