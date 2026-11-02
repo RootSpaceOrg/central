@@ -15,7 +15,7 @@ const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase();
   imports: [Icon, AgoPipe],
   template: `
     <dialog #dlg (close)="dialogs.importSession.set(null)" aria-labelledby="imp-title"
-            class="m-auto flex h-[min(680px,86vh)] w-[min(760px,94vw)] flex-col rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+            class="m-auto open:flex h-[min(680px,86vh)] w-[min(760px,94vw)] flex-col rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
       <header class="flex items-start gap-4 px-7 pt-6 pb-3">
         <img src="file-icons/claude.svg" alt="" class="mt-1 size-7" />
         <div class="flex-1">

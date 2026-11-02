@@ -180,6 +180,9 @@ export function describe(name: string, input: any): string {
     memory_supersede: `Atualizou o fato #${input?.id ?? ''}`,
     Read: `Leu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-2).join('/')}`, Grep: `Buscou "${input?.pattern ?? ''}"`, Glob: `Listou ${input?.pattern ?? ''}`,
     Agent: `Subagente: ${input?.description ?? ''}`, Task: `Subagente: ${input?.description ?? ''}`,
+    TaskCreate: `Plano: ${input?.subject ?? ''}`, TaskUpdate: `Plano: passo ${input?.taskId ?? ''} ${input?.status === 'completed' ? 'concluído' : input?.status === 'in_progress' ? 'em andamento' : 'atualizado'}`,
+    TodoWrite: 'Atualizou o plano', TaskList: 'Conferiu o plano', TaskGet: 'Conferiu o plano',
+    list_milestones: 'Consultou o roadmap', create_milestone: `Criou o marco "${input?.title ?? ''}"`, update_milestone: `Atualizou o marco #${input?.id ?? ''}`,
     WebSearch: `Pesquisou "${input?.query ?? ''}"`, WebFetch: 'Leu uma página', Bash: `Rodou ${String(input?.command ?? '').slice(0, 60)}`,
     Write: `Escreveu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`, Edit: `Editou ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`,
   };

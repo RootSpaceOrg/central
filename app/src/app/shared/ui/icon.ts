@@ -4,7 +4,7 @@ import {
   Activity, Archive, ArchiveRestore, ArrowUpFromLine, Bot, ChartNoAxesColumn, Check, ChevronRight, CircleStop, Clock, Code, Download,
   Ellipsis, ExternalLink, File, Flag, Folder, FolderOpen, GitBranch, GitMerge, House, Inbox, KanbanSquare, Lightbulb,
   ListTree, MessageSquare, Moon, Pencil, Play, Plus, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
-  BatteryLow, Zap, X, LayoutGrid, Maximize2, Minimize2, Columns2, Rows2, GripVertical, Waypoints,
+  BatteryLow, Zap, X, LayoutGrid, Maximize2, Minimize2, Columns2, Rows2, GripVertical, Waypoints, Building2, Coffee,
 } from 'lucide-static';
 
 /** Nome usado no app → SVG do Lucide (strings estáticas do pacote, sem rede). */
@@ -56,6 +56,8 @@ const SVGS = {
   splitDown: Rows2,
   grip: GripVertical,
   graph: Waypoints,
+  office: Building2,
+  coffee: Coffee,
 } as const;
 
 export type IconName = keyof typeof SVGS;

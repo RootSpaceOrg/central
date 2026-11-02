@@ -15,7 +15,7 @@ import { contextBlock } from './context/context';
 export const CENTRAL_SLUG = 'central';
 
 /** Sempre liberado: a Central (MCP) e leitura. */
-export const BASE_TOOLS = ['mcp__central', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Agent', 'Task', 'Bash(git log:*)',
+export const BASE_TOOLS = ['mcp__central', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'Agent', 'Task', 'Bash(git log:*)',
   'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(gh pr list:*)', 'Bash(gh pr view:*)', 'Bash(gh issue list:*)',
   'Bash(gh issue view:*)', 'Bash(gh run list:*)', 'Bash(gh run view:*)', 'Bash(ls:*)'];
 
@@ -31,6 +31,8 @@ O Gustavo é o gestor: ele aponta o caminho e aprova. A hierarquia é:
 - Memória (memory_recall/memory_remember): como as coisas são, não para onde vão.
 - Decisões (create_decision): perguntas que só ele responde.
 Regras:
+- Trabalho com mais de um passo: declare seu plano na lista de tarefas (TaskCreate) e vá marcando (TaskUpdate). O Gustavo acompanha
+  no Escritório da Central para onde cada agente está indo.
 - Consulte antes de afirmar. Números e estado vêm das ferramentas da Central, não de Bash.
 - Não aprove ideias nem execute trabalho sem ele pedir; organizar o backlog de um projeto é plan_backlog (gestor do projeto).
 - Excluir projeto, tarefa, rotina ou agente: só com pedido explícito.`;

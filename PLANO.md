@@ -166,6 +166,19 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
 - **Modelo e raciocínio por conversa** na caixa de mensagem (Opus/Sonnet/Haiku/Fable; Baixo → Máximo, `--effort`), salvos na
   conversa; a última escolha vira o padrão das novas. Botão de parar no mesmo lugar.
 
+## Feito (v0.14)
+
+- **Roadmap por projeto** (aba Rumo): marcos em Agora / Próximo / Depois, arrastáveis, com progresso pelas tarefas ligadas
+  (direto ou via ideia). Hierarquia: rumo → marcos → ideias aprovadas → tarefas. O gestor liga tarefas a marcos ao planejar;
+  agentes veem o roadmap no contexto e têm `list_milestones`/`create_milestone`/`update_milestone` no MCP. No Início, cada
+  projeto mostra seus marcos de Agora.
+- **Plano declarado**: agentes e sessões declaram para onde vão (TaskCreate/TodoWrite, 3–6 passos) e marcam o progresso;
+  a Central acompanha ao vivo.
+- **Escritório**: o time trabalhando como um andar. Uma sala por projeto com o marco de Agora na parede; cada sessão/execução
+  é uma mesa com o que está fazendo (balão), o plano com progresso, os subagentes ("estagiários") e há quanto tempo. Corredor
+  (projetos parados e seu marco), Copa (agentes parados) e "Saíram há pouco" (execuções das últimas 3 h). Tudo do que já chega
+  ao vivo, sem polling novo.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

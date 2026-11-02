@@ -11,6 +11,7 @@ import { Proposal, Verdict } from '../../../../shared/services/proposals/proposa
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { DirectionService } from '../../../../shared/services/direction/direction.service';
 import { LiveService } from '../../../../shared/services/live/live.service';
+import { RoadmapService } from '../../../../shared/services/roadmap/roadmap.service';
 import { SessionsService } from '../../../../shared/services/sessions/sessions.service';
 import { RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 import { RUN_STATUS_LABEL } from '../../../../shared/services/runs/runs.model';
@@ -45,6 +46,7 @@ export class HomePage {
   protected readonly agents = inject(AgentsService);
   protected readonly direction = inject(DirectionService);
   protected readonly live = inject(LiveService);
+  protected readonly roadmap = inject(RoadmapService);
   private readonly sessions = inject(SessionsService);
 
   /** conversas de sessão e Claude Code no terminal trabalhando agora */

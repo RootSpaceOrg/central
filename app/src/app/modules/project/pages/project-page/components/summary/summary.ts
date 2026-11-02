@@ -10,10 +10,11 @@ import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Heartbeat } from '../../../../../../shared/ui/heartbeat';
 import { Icon } from '../../../../../../shared/ui/icon';
 import { DirectionPanel } from '../direction/direction-panel';
+import { RoadmapPanel } from '../roadmap/roadmap-panel';
 
 @Component({
   selector: 'app-summary',
-  imports: [RouterLink, AgoPipe, Heartbeat, Icon, DirectionPanel],
+  imports: [RouterLink, AgoPipe, Heartbeat, Icon, DirectionPanel, RoadmapPanel],
   templateUrl: './summary.html',
   host: { class: 'block h-full overflow-y-auto' },
 })

@@ -7,12 +7,14 @@
 import type { ActivityDto, SubagentDto } from '../src/app/shared/contract';
 
 const SUBAGENT = new Set(['Agent', 'Task']);
-const INTERNAL = new Set(['ToolSearch', 'TodoWrite']);
+const INTERNAL = new Set(['ToolSearch']);
+/** ferramentas do plano: viram a lista "para onde está indo", não passos */
+const PLAN = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite', 'TaskList', 'TaskGet']);
 
 const secs = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)}s` : `${Math.floor(ms / 60_000)}min${Math.round((ms % 60_000) / 1000)}s`);
 
 export class ActivityTracker {
-  readonly activity: ActivityDto = { started_at: new Date().toISOString(), step: null, subagents: [] };
+  readonly activity: ActivityDto = { started_at: new Date().toISOString(), step: null, subagents: [], plan: [] };
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -36,6 +38,7 @@ export class ActivityTracker {
     if (msg.type === 'assistant') {
       for (const b of msg.message?.content ?? []) {
         if (b.type !== 'tool_use' || INTERNAL.has(b.name)) continue;
+        if (PLAN.has(b.name)) { if (!parent && this.plan(b.name, b.input)) changed = true; continue; }
         const sub = parent ? this.activity.subagents.find(s => s.id === parent) : null;
         if (sub) { sub.step = this.describe(b.name, b.input); sub.steps++; changed = true; }
         else if (!parent && SUBAGENT.has(b.name)) {
@@ -62,6 +65,33 @@ export class ActivityTracker {
     if (changed) this.emit();
   }
 
+  /**
+   * Plano da sessão principal. TaskCreate não traz o id (vem no resultado): o Claude Code numera 1, 2, 3… na ordem.
+   * TodoWrite (versões antigas) manda a lista inteira de uma vez.
+   */
+  private plan(name: string, input: any): boolean {
+    const plan = this.activity.plan;
+    if (name === 'TaskCreate') {
+      plan.push({ id: String(plan.length + 1), title: String(input?.subject ?? input?.description ?? 'Tarefa'), active: input?.activeForm ?? null, status: 'pending' });
+      return true;
+    }
+    if (name === 'TaskUpdate') {
+      const item = plan.find(p => p.id === String(input?.taskId));
+      if (!item) return false;
+      if (['pending', 'in_progress', 'completed'].includes(input?.status)) item.status = input.status;
+      if (input?.status === 'deleted') plan.splice(plan.indexOf(item), 1);
+      if (input?.subject) item.title = String(input.subject);
+      if (input?.activeForm) item.active = String(input.activeForm);
+      return true;
+    }
+    if (name === 'TodoWrite' && Array.isArray(input?.todos)) {
+      this.activity.plan = input.todos.map((t: any, i: number) => ({ id: String(i + 1), title: String(t.content ?? ''), active: t.activeForm ?? null,
+        status: ['pending', 'in_progress', 'completed'].includes(t.status) ? t.status : 'pending' }));
+      return true;
+    }
+    return false;
+  }
+
   private emit(): void {
     if (this.timer) return;
     this.timer = setTimeout(() => { this.timer = null; this.onChange(this.activity); }, 300);
@@ -85,7 +115,7 @@ export const listActivity = () => [...live.values()];
 
 /** Começa a acompanhar uma conversa ou execução. */
 export function track(scope: Scope, ref: number, describe: (name: string, input: unknown) => string, onSubagentDone: (text: string) => void): ActivityTracker {
-  return new ActivityTracker(describe, a => { live.set(`${scope}:${ref}`, { ...a, scope, ref, subagents: a.subagents.map(s => ({ ...s })) }); notify(scope, ref, live.get(`${scope}:${ref}`)!); },
+  return new ActivityTracker(describe, a => { live.set(`${scope}:${ref}`, { ...a, scope, ref, subagents: a.subagents.map(s => ({ ...s })), plan: a.plan.map(p => ({ ...p })) }); notify(scope, ref, live.get(`${scope}:${ref}`)!); },
     onSubagentDone);
 }
 

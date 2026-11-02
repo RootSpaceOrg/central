@@ -31,6 +31,9 @@
           @if (badge(n.path); as b) {
             <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold ring-2 ring-night {{ b.tone }}">{{ b.n }}</span>
           }
+          @if (n.path === '/escritorio' && working()) {
+            <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-yes px-1 text-[10.5px] font-bold text-night ring-2 ring-night">{{ working() }}</span>
+          }
           @if (n.path === '/execucoes' && runs.active().length) {
             <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-yes ring-2 ring-night"></span>
           }

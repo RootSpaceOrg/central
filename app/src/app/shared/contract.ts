@@ -241,6 +241,7 @@ export interface TaskDto {
   run_status: RunStatus | null;
   created_at: string;
   updated_at: string;
+  milestone_id: number | null;
 }
 
 export interface NewTaskInput {
@@ -261,6 +262,7 @@ export interface TaskPatch {
   priority?: TaskPriority;
   /** posição dentro da coluna (0 = topo) */
   position?: number;
+  milestone_id?: number | null;
 }
 
 export interface ImportResultDto {
@@ -504,6 +506,29 @@ export interface NewFactInput {
   pinned?: boolean;
 }
 
+// ---------- roadmap ----------
+
+export type Horizon = 'now' | 'next' | 'later' | 'done';
+
+export interface MilestoneDto {
+  id: number;
+  project_slug: string;
+  title: string;
+  description: string | null;
+  horizon: Horizon;
+  /** alvo livre: "dez", "Q1", "antes da feira" */
+  target: string | null;
+  position: number;
+  created_at: string;
+  done_at: string | null;
+  /** tarefas ligadas (direto ou pelas ideias do marco) e quantas estão feitas */
+  tasks: number;
+  tasks_done: number;
+  ideas: number;
+}
+
+export interface MilestoneInput { title?: string; description?: string | null; horizon?: Horizon; target?: string | null; position?: number }
+
 // ---------- atividade ao vivo (sessões e execuções trabalhando, subagentes) ----------
 
 export interface SubagentDto {
@@ -519,12 +544,17 @@ export interface SubagentDto {
   steps: number;
 }
 
+/** Um item do plano que o agente declarou (lista de tarefas do Claude Code). */
+export interface PlanItemDto { id: string; title: string; active: string | null; status: 'pending' | 'in_progress' | 'completed' }
+
 export interface ActivityDto {
   /** trabalhando desde */
   started_at: string;
   /** passo atual da sessão principal */
   step: string | null;
   subagents: SubagentDto[];
+  /** para onde está indo: o plano declarado, com o que está em andamento */
+  plan: PlanItemDto[];
 }
 
 /** chat = conversa (ref = id da conversa); run = execução de agente (ref = id da execução) */
@@ -657,6 +687,13 @@ export interface Api {
   'sessions:close': (id: number) => void;
   'claude:sessions': () => ClaudeSessionDto[];
   'activity:list': () => LiveActivityDto[];
+  /** null = de todos os projetos */
+  'milestones:list': (projectSlug: string | null) => MilestoneDto[];
+  'milestones:create': (projectSlug: string, input: MilestoneInput) => MilestoneDto;
+  'milestones:update': (id: number, input: MilestoneInput) => void;
+  'milestones:delete': (id: number) => void;
+  /** nova ordem dentro de um horizonte */
+  'milestones:reorder': (ids: number[], horizon: Horizon) => void;
   'context:status': () => ContextStatusDto[];
   'context:reindex': (projectSlug: string, force: boolean) => void;
   'context:graph': (projectSlug: string) => GraphDto;

@@ -19,10 +19,10 @@ import { track, untrack } from './activity';
 const MAX_PARALLEL = 4;
 const MAX_BUDGET = 50;
 // Modo "edits": edita arquivos sem perguntar e só roda os comandos desta lista.
-const SAFE_TOOLS = ['Agent', 'Task', 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)', 'Bash(python:*)',
+const SAFE_TOOLS = ['Agent', 'Task', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)', 'Bash(python:*)',
   'Bash(pytest:*)', 'Bash(uv:*)', 'Bash(ls:*)', 'Bash(cat:*)', 'Bash(grep:*)', 'Bash(find:*)', 'mcp__central'];
 // Projeto inteiro em modo seguro: só lê e organiza (backlog, ideias, decisões pela Central).
-const READ_TOOLS = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Agent', 'Task', 'Bash(git log:*)', 'Bash(git status:*)',
+const READ_TOOLS = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'TodoWrite', 'Agent', 'Task', 'Bash(git log:*)', 'Bash(git status:*)',
   'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(git branch:*)', 'Bash(gh pr list:*)', 'Bash(gh pr view:*)', 'Bash(gh issue list:*)',
   'Bash(gh issue view:*)', 'Bash(gh run list:*)', 'Bash(ls:*)', 'mcp__central'];
 
@@ -288,7 +288,9 @@ function framePrompt(r: RunDto, where: Where): string {
 Você tem as ferramentas \`central\` (MCP) da Central do Gustavo, onde vivem projetos, backlog, ideias e decisões. Use-as para deixar o backlog verdadeiro:
 ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova essa tarefa: a Central faz isso quando você terminar.\n` : ''}- O que ficou faltando ou o que você descobriu e vale fazer: crie tarefa no backlog ${r.project_slug ? `do projeto "${r.project_slug}"` : 'do projeto certo'} (create_task, coluna backlog) ou ideia (create_idea).
 - O que depende de uma decisão do Gustavo: crie uma decisão (create_decision) com o próximo passo sugerido.
-- Não exclua nada pela Central.`;
+- Não exclua nada pela Central.
+- Comece declarando seu plano na lista de tarefas (TaskCreate, 3 a 6 passos) e marque cada um (TaskUpdate) ao avançar:
+  é assim que o Gustavo vê para onde você está indo.`;
 
   if (where.kind === 'workspace') {
     return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.

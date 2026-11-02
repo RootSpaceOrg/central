@@ -24,6 +24,7 @@ import { createProject, deleteProject, listProjects, listRepos, recent, syncProj
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
 import { getDirection, planBacklog, setDirection } from './direction';
+import { createMilestone, listMilestones, updateMilestone } from './roadmap';
 import { codeImpact, codeMap, codeNeighbors, codeSymbol, searchCode } from './context/context';
 import { createFact, recallFacts, supersedeFact } from './context/memory';
 
@@ -101,10 +102,11 @@ function build(h: Hooks): McpServer {
     project_slug: z.string(), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     repo_path: z.string().optional().describe('caminho do repositório, se já souber onde o trabalho acontece'),
     idea_id: z.number().int().optional().describe('ideia aprovada de onde a tarefa nasceu (a ideia passa para "em andamento")'),
-  }, a => createTask({ project_slug: a.project_slug, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
+    milestone_id: z.number().int().optional().describe('marco do roadmap que a tarefa avança'),
+  }, a => createTask({ project_slug: a.project_slug, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
   tool('update_task', 'Edita ou move uma tarefa (coluna, prioridade, título, descrição, projeto, repositório).', {
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
-    project_slug: z.string().optional(), repo_path: z.string().optional(),
+    project_slug: z.string().optional(), repo_path: z.string().optional(), milestone_id: z.number().int().optional(),
   }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column ? 0 : undefined }), h.backlog);
   tool('delete_task', 'Exclui uma tarefa. Só use se o Gustavo pediu.', { id: z.number().int() }, ({ id }) => deleteTask(id), h.backlog);
 
@@ -126,6 +128,16 @@ function build(h: Hooks): McpServer {
   tool('update_direction', 'Atualiza o rumo do projeto (nova versão; a anterior fica no histórico). Só quando o Gustavo pediu ou quando o que você viu deixou o rumo desatualizado; explique o motivo em note.', {
     project_slug: z.string(), text: z.string().describe('rumo completo em markdown curto: Objetivo, Foco agora, Não fazer, Próximos marcos'), note: z.string().describe('por que mudou'),
   }, a => setDirection(a.project_slug, a.text, 'agente', a.note), h.projects);
+  const horizon = z.enum(['now', 'next', 'later', 'done']).describe('now = Agora, next = Próximo, later = Depois, done = Feito');
+  tool('list_milestones', 'Roadmap do projeto: marcos em Agora / Próximo / Depois / Feito, com progresso das tarefas ligadas.', { project_slug: z.string() }, a =>
+    listMilestones(a.project_slug).map(m => ({ id: m.id, title: m.title, horizon: m.horizon, target: m.target, tasks: `${m.tasks_done}/${m.tasks}`, description: m.description })));
+  tool('create_milestone', 'Cria um marco no roadmap do projeto (resultado que importa, não uma tarefa).', {
+    project_slug: z.string(), title: z.string(), description: z.string().optional(), horizon: horizon.optional(), target: z.string().optional().describe('alvo livre: "dez", "Q1"'),
+  }, a => createMilestone(a.project_slug, a), h.backlog);
+  tool('update_milestone', 'Edita um marco ou muda o horizonte (ex.: concluído → done).', {
+    id: z.number().int(), title: z.string().optional(), description: z.string().optional(), horizon: horizon.optional(), target: z.string().optional(),
+  }, ({ id, ...i }) => updateMilestone(id, i), h.backlog);
+
   tool('plan_backlog', 'Põe o gestor do projeto para organizar o backlog a partir do rumo e das ideias aprovadas (roda como execução de agente). Use quando o Gustavo pedir para planejar/organizar um projeto.', {
     project_slug: z.string(), request: z.string().optional().describe('pedido específico do Gustavo'),
   }, a => { const r = planBacklog(a.project_slug, a.request ?? null, h.emit); return `Gestor trabalhando (execução #${r.id}).`; }, h.backlog);

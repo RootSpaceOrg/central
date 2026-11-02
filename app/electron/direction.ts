@@ -9,6 +9,7 @@ import type { DirectionDto, RunDto } from '../src/app/shared/contract';
 import { Emit, startRun } from './agents';
 import { all, get, run } from './db';
 import { SIZE_BUDGET } from './routines';
+import { roadmapBlock } from './roadmap';
 
 export const getDirection = (slug: string) =>
   get<DirectionDto>('select * from directions where project_slug = ? order by id desc limit 1', slug) ?? null;
@@ -35,6 +36,7 @@ export function directionBlock(slug: string): string {
   return [
     g ? `## Rumo do grupo ${pname} (este projeto é uma frente dele)\n${g.text}` : '',
     d ? `## Rumo do projeto (o Gustavo define; siga-o)\n${d.text}` : '',
+    roadmapBlock(slug),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -64,6 +66,8 @@ O que fazer, nesta ordem:
 2. Para cada ideia aprovada sem tarefas: quebre em tarefas pequenas (cada uma cabe num PR) com create_task, passando idea_id,
    repo_path (caminho completo do repositório) e um corpo com o que fazer e como saber que terminou.
 3. Reordene pelo rumo: o que avança o foco atual vai para "todo" (A fazer) com prioridade alta; o resto fica em "backlog".
+   Roadmap: ligue cada tarefa ao marco que ela avança (milestone_id). Se faltar um marco claro para o que o rumo pede, crie (create_milestone,
+   horizonte now/next/later) e mova marcos concluídos para done.
    Tarefas que contrariam o rumo: não apague; mova para backlog e diga no resumo.
 4. Se descobrir algo que precisa de decisão dele, crie uma decisão (create_decision). Ideia nova que vale guardar: create_idea.
 5. Se o rumo estiver desatualizado pelo que você viu (algo já feito, foco mudou), proponha a nova versão com update_direction e diga o motivo.

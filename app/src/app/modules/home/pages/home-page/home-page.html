@@ -89,6 +89,13 @@
                   } @else {
                     <span class="flex items-center gap-1.5 text-faint"><app-icon name="flag" [size]="12" />Sem rumo. Escrever para onde este projeto vai.</span>
                   }
+                  @for (m of (roadmap.nowBySlug().get(p.slug) ?? []).slice(0, 2); track m.id) {
+                    <span class="mt-1.5 flex items-center gap-2 text-[12px] text-mute">
+                      <span class="shrink-0 rounded bg-frost/15 px-1 text-[10.5px] font-semibold text-frost">AGORA</span>
+                      <span class="min-w-0 flex-1 truncate">{{ m.title }}</span>
+                      @if (m.tasks) { <span class="tabular-nums text-faint">{{ m.tasksDone }}/{{ m.tasks }}</span> }
+                    </span>
+                  }
                 </a>
                 <div class="mt-3 flex flex-wrap items-center gap-2">
                   <button type="button" class="btn btn-sm" (click)="session(p.slug, 'chat')"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Claude</button>

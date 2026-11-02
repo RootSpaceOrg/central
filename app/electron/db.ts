@@ -221,6 +221,19 @@ db.exec(`
   );
   create index if not exists directions_by_project on directions(project_slug, id);
 
+  -- roadmap do projeto: marcos em Agora / Próximo / Depois (sem data obrigatória; alvo opcional, ex.: "dez", "Q1")
+  create table if not exists milestones (
+    id           integer primary key autoincrement,
+    project_slug text not null references projects on delete cascade,
+    title        text not null,
+    description  text,
+    horizon      text not null default 'next' check (horizon in ('now','next','later','done')),
+    target       text,
+    position     integer not null default 0,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    done_at      text
+  );
+
   -- memória do projeto: fatos duráveis (decisão, convenção, armadilha…) com proveniência, ligados a nós do índice de código
   create table if not exists facts (
     id             integer primary key autoincrement,
@@ -272,7 +285,8 @@ for (const [table, column, type] of [
   ['projects', 'autopilot', 'integer not null default 0'],
   ['ideas', 'author', "text not null default 'gustavo'"], ['ideas', 'approved_at', 'text'],
   ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
-  ['projects', 'parent_slug', 'text'], ['projects', 'position', 'integer not null default 0'],
+  ['projects', 'parent_slug', 'text'],
+  ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];

@@ -19,7 +19,7 @@ interface Pending { key: number; slug: string; kind: SessionKind }
   imports: [Icon, ProjectAvatar],
   template: `
     <dialog #dlg (close)="open.set(false)" aria-labelledby="add-title"
-            class="m-auto flex h-[min(720px,88vh)] w-[min(860px,94vw)] flex-col rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+            class="m-auto open:flex h-[min(720px,88vh)] w-[min(860px,94vw)] flex-col rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
       <header class="flex items-start gap-4 px-7 pt-6 pb-3">
         <div class="flex-1">
           <h2 id="add-title" class="font-display text-xl font-semibold">Adicionar sessões à grade</h2>

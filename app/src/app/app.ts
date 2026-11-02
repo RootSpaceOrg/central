@@ -62,6 +62,8 @@ export class App {
   private readonly router = inject(Router);
   protected readonly layout = inject(LayoutService);
   private readonly live = inject(LiveService);
+  /** quantos estão trabalhando agora (selo do Escritório) */
+  protected readonly working = computed(() => this.live.items().size + this.live.terminalsBusy().size);
   private readonly sessionsService = inject(SessionsService);
 
   protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
@@ -70,6 +72,7 @@ export class App {
     { path: '/triagem', label: 'Triagem (decisões e ideias novas)', icon: 'inbox' },
     { path: '/ideias', label: 'Ideias', icon: 'ideas' },
     { path: '/backlog', label: 'Backlog', icon: 'kanban' },
+    { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
     { path: '/agentes', label: 'Agentes', icon: 'agent' },
     { path: '/execucoes', label: 'Execuções', icon: 'activity' },
     { path: '/rotinas', label: 'Rotinas', icon: 'routine' },

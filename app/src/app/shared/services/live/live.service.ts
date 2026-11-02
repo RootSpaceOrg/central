@@ -5,13 +5,21 @@ import { IpcService } from '../ipc/ipc.service';
 import { TerminalsService } from '../terminals/terminals.service';
 
 export interface Subagent { id: string; type: string; description: string; startedAt: number; finishedAt: number | null; step: string | null; steps: number }
-export interface LiveActivity { scope: 'chat' | 'run'; ref: number; startedAt: number; step: string | null; subagents: Subagent[] }
+export interface PlanItem { id: string; title: string; active: string | null; status: 'pending' | 'in_progress' | 'completed' }
+export interface LiveActivity { scope: 'chat' | 'run'; ref: number; startedAt: number; step: string | null; subagents: Subagent[]; plan: PlanItem[] }
 
 const toModel = (d: LiveActivityDto): LiveActivity => ({
   scope: d.scope, ref: d.ref, startedAt: Date.parse(d.started_at), step: d.step,
   subagents: d.subagents.map(s => ({ id: s.id, type: s.type, description: s.description, startedAt: Date.parse(s.started_at),
     finishedAt: s.finished_at ? Date.parse(s.finished_at) : null, step: s.step, steps: s.steps })),
+  plan: (d.plan ?? []).map(p => ({ ...p })),
 });
+
+/** O que está fazendo agora: o passo do plano em andamento (o agente declarou) ou o último passo visto. */
+export function doing(a: LiveActivity): string | null {
+  const cur = a.plan.find(p => p.status === 'in_progress');
+  return cur ? cur.active ?? cur.title : a.step;
+}
 
 /** "42s", "3:07", "1h12" */
 export function elapsed(from: number, to: number): string {

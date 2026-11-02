@@ -120,7 +120,7 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
 
 const TASK_SELECT = `
   select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.priority, t.position, t.pr_url,
-         t.proposal_id, t.idea_id, t.created_at, t.updated_at,
+         t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at,
          r.id run_id, r.status run_status
   from tasks t
   left join runs r on r.id = (select max(id) from runs where task_id = t.id)`;
@@ -132,7 +132,7 @@ export const listTasks = (slug: string | null) => all<TaskDto>(`${TASK_SELECT}
   where (? is null and p.status <> 'dead' or t.project_slug = ?)
   order by t.position, t.priority, t.created_at desc`, slug, slug);
 
-export function createTask(input: NewTaskInput & { proposal_id?: number | null; idea_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
+export function createTask(input: NewTaskInput & { proposal_id?: number | null; idea_id?: number | null; milestone_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Dê um título à tarefa.');
   if (!get('select 1 from projects where slug = ?', input.project_slug)) throw new Error('Escolha um projeto.');
@@ -144,6 +144,7 @@ export function createTask(input: NewTaskInput & { proposal_id?: number | null; 
     Math.min(Math.max(Number(input.priority) || 0, 0), 3), top - 1,
     input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
   const id = Number(lastInsertRowid);
+  if (input.milestone_id && get('select 1 from milestones where id = ?', input.milestone_id)) run('update tasks set milestone_id = ? where id = ?', input.milestone_id, id);
   if (input.idea_id) {
     if (!get('select 1 from ideas where id = ?', input.idea_id)) throw new Error('Ideia não encontrada.');
     run('update tasks set idea_id = ? where id = ?', input.idea_id, id);
@@ -157,7 +158,7 @@ export function updateTask(id: number, patch: TaskPatch): void {
   if (!task) throw new Error('Tarefa não encontrada.');
   if (patch.column && !COLUMNS.includes(patch.column)) throw new Error('Coluna inválida.');
 
-  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority'] as const).filter(k => k in patch);
+  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id'] as const).filter(k => k in patch && patch[k] !== undefined);
   if (simple.length) {
     run(`update tasks set ${simple.map(k => `${k} = ?`).join(', ')}, updated_at = ? where id = ?`,
       ...simple.map(k => (patch[k] ?? null) as string | number | null), now(), id);
