@@ -57,6 +57,10 @@ export function chatFromRun(runId: number): number {
 
 const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 
+/** Texto ao vivo das respostas: o main liga ao evento da tela. */
+let onStream: (chatId: number, text: string) => void = () => {};
+export function onChatStream(fn: typeof onStream): void { onStream = fn; }
+
 export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void, projectSlug: string | null = null,
   options: ChatOptions | null = null): number {
   // modelo: apelido (opus, sonnet…) ou nome completo; nada que vire outra opção na linha de comando
@@ -83,7 +87,8 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   const chosen = get<{ model: string; effort: string }>('select model, effort from chats where id = ?', id)!;
   save(id, 'user', msg, notify);
 
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
+  // --include-partial-messages: o texto chega em pedaços enquanto o Claude escreve (a tela mostra ao vivo)
+  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
   if (slug) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${SESSION_TOOLS.join(',')}"`);
   else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
   else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
@@ -100,16 +105,34 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
 
   let answered = false;
   const tracker = track('chat', id, describe, text => save(id, 'tool', text, notify));
+  let streaming = '';
+  let streamTimer: ReturnType<typeof setTimeout> | undefined;
+  const flushSoon = () => { streamTimer ??= setTimeout(() => { streamTimer = undefined; onStream(id, streaming); }, 80); };
   createInterface({ input: child.stdout }).on('line', line => {
     let m: any;
     try { m = JSON.parse(line); } catch { return; }
     if (m.session_id && m.session_id !== chat?.session_id) run('update chats set session_id = ? where id = ?', m.session_id, id);
     tracker.handle(m);
+    // pedaço de texto da resposta principal (subagentes não): acumula e manda para a tela no máximo a cada 80 ms
+    if (m.type === 'stream_event' && !m.parent_tool_use_id) {
+      const ev = m.event;
+      if (ev?.type === 'content_block_start' && ev.content_block?.type === 'text') streaming = '';
+      if (ev?.type === 'content_block_delta' && ev.delta?.type === 'text_delta') { streaming += ev.delta.text; flushSoon(); }
+      return;
+    }
     // passos de subagente ficam recuados no histórico; o texto deles não é a resposta da conversa
     const sub = tracker.isSubagentStep(m);
     if (m.type === 'assistant') {
       for (const b of m.message?.content ?? []) {
-        if (b.type === 'text' && b.text.trim() && !sub) { answered = true; save(id, 'assistant', b.text.trim(), notify); }
+        if (b.type === 'text' && b.text.trim() && !sub) {
+          answered = true;
+          // a mensagem completa substitui o texto ao vivo
+          streaming = '';
+          clearTimeout(streamTimer);
+          streamTimer = undefined;
+          onStream(id, '');
+          save(id, 'assistant', b.text.trim(), notify);
+        }
         if (b.type === 'tool_use' && !INTERNAL.has(b.name)) {
           recordTouch(b.name, b.input, { chatId: id });
           save(id, 'tool', `${sub ? '↳ ' : ''}${describe(b.name, b.input)}`, notify);
@@ -125,6 +148,8 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   child.on('close', code => {
     procs.delete(id);
     untrack('chat', id, tracker);
+    clearTimeout(streamTimer);
+    onStream(id, '');
     if (code !== 0 && !answered) save(id, 'error', stderr.trim() || 'Resposta interrompida.', notify);
     notify(id, null, false);
   });

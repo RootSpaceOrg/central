@@ -145,3 +145,8 @@
 
 /* conversas: item fora da tela não é desenhado (o tamanho guardado evita a barra de rolagem pular) */
 .chat-item { content-visibility: auto; contain-intrinsic-size: auto 90px; }
+
+/* resposta sendo escrita: cursor piscando no fim */
+.typing > :last-child::after { content: ''; display: inline-block; width: .5em; height: 1em; margin-left: 2px; vertical-align: -0.15em;
+  background: var(--color-frost); animation: caret 1s steps(2) infinite; }
+@keyframes caret { 50% { opacity: 0; } }

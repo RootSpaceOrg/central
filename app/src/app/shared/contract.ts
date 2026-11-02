@@ -740,6 +740,8 @@ export interface Events {
   'update:log': { line: string };
   /** mensagem nova do agente Central (texto, ferramenta usada, erro) ou fim da resposta */
   'chat:event': { chat_id: number; message: ChatMessageDto | null; busy: boolean };
+  /** resposta sendo escrita (texto acumulado até agora; '' = acabou, a mensagem completa vem em chat:event) */
+  'chat:stream': { chat_id: number; text: string };
   /** atividade de uma conversa/execução mudou (null = parou) */
   'activity': { scope: 'chat' | 'run'; ref: number; activity: LiveActivityDto | null };
   'routines:changed': null;

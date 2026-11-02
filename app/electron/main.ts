@@ -13,7 +13,7 @@ import {
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
 import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
-import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
+import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
@@ -258,6 +258,7 @@ app.whenReady().then(() => {
   // índice de código: um processo à parte indexa os projetos e acompanha as mudanças
   startContext(slug => contextChanged(slug));
   onActivity((scope, ref, activity) => send('activity', { scope, ref, activity: activity as never }));
+  onChatStream((chat_id, text) => send('chat:stream', { chat_id, text }));
   setTimeout(() => {
     indexAll();
     for (const p of all<{ slug: string }>(`select slug from projects where status <> 'dead'`)) importClaudeMemory(p.slug);

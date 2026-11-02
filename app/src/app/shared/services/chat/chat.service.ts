@@ -41,6 +41,8 @@ export class ChatSession {
     return (id ? this.agents.byId().get(id) : null) ?? this.agents.central();
   });
   readonly currentBusy = computed(() => this.current() !== null && this.busy().has(this.current()!));
+  /** resposta sendo escrita nesta conversa (vazio = nada ao vivo) */
+  readonly streaming = computed(() => { const id = this.current(); return id ? this.streams().get(id) ?? '' : ''; });
   readonly items = computed<ChatItem[]>(() => {
     const out: ChatItem[] = [];
     for (const m of this.messages()) {
@@ -57,6 +59,8 @@ export class ChatSession {
     protected readonly api: ChatApiService,
     protected readonly agents: AgentsService,
     readonly busy: WritableSignal<Set<number>>,
+    /** texto sendo escrito agora, por conversa (compartilhado) */
+    readonly streams: WritableSignal<ReadonlyMap<number, string>>,
     /** mensagens já carregadas, por conversa (compartilhado): trocar de aba não busca de novo */
     protected readonly cache: Map<number, ChatMessage[]>,
     /** conversa de sessão de projeto: trabalha na pasta e edita código */
@@ -134,9 +138,14 @@ export class ChatService extends ChatSession {
   projectChats(slug: string) { return this.chats().filter(c => c.projectSlug === slug); }
 
   constructor() {
-    super(inject(ChatApiService), inject(AgentsService), signal(new Set<number>()), new Map());
+    super(inject(ChatApiService), inject(AgentsService), signal(new Set<number>()), signal(new Map()), new Map());
     this.reload = () => this.loadChats();
     this.wire(this);
+    this.api.onStream(({ chat_id, text }) => {
+      const m = new Map(this.streams());
+      if (text) m.set(chat_id, text); else m.delete(chat_id);
+      this.streams.set(m);
+    });
     this.api.onEvent(({ chat_id, message, busy }) => {
       this.busy.update(s => { const n = new Set(s); if (busy) n.add(chat_id); else n.delete(chat_id); return n; });
       // uma vez no cache (novo array: quem mostra percebe a mudança), depois cada conversa aberta atualiza
@@ -152,7 +161,7 @@ export class ChatService extends ChatSession {
 
   /** Conversa independente (aba de sessão do projeto). Chame release() quando a aba fechar. */
   spawn(projectSlug: string): ChatSession {
-    const s = new ChatSession(this.api, this.agents, this.busy, this.cache, projectSlug);
+    const s = new ChatSession(this.api, this.agents, this.busy, this.streams, this.cache, projectSlug);
     s.reload = () => this.loadChats();
     this.wire(s);
     this.live.add(s);
