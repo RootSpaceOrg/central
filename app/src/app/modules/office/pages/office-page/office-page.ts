@@ -42,6 +42,7 @@ interface Worker {
 }
 
 const GESTOR = '[gestor:planejar]';
+const FILTER_KEY = 'central.office.filter';
 const CLAUDE = '#D97757';
 
 /** Sala de um agente: a que ele escolheu, ou deduzida pelo papel (a Central fica na gestão). */
@@ -131,6 +132,36 @@ export class OfficePage {
     return this.agents.agents().filter(a => !working.has(a.id));
   });
 
+  // ---------- filtro por projeto (frente conta como o projeto-pai; '' = sem projeto) ----------
+  protected readonly filter = signal<ReadonlySet<string>>(new Set(JSON.parse(localStorage.getItem(FILTER_KEY) ?? '[]') as string[]));
+  private readonly topOf = (slug: string | null) => (slug ? this.projects.bySlug().get(slug)?.parentSlug ?? slug : '');
+  private readonly shown = (slug: string | null) => !this.filter().size || this.filter().has(this.topOf(slug));
+  protected readonly visible = computed(() => this.workers().filter(w => this.shown(w.slug)));
+  /** chips: projetos de cima + "sem projeto", com quantos trabalhando */
+  protected readonly chips = computed(() => {
+    const count = new Map<string, number>();
+    for (const w of this.workers()) count.set(this.topOf(w.slug), (count.get(this.topOf(w.slug)) ?? 0) + 1);
+    return [
+      ...this.projects.living().filter(p => !p.parentSlug).map(p => ({ id: p.slug, label: p.name, project: p, n: count.get(p.slug) ?? 0 })),
+      { id: '', label: 'Sem projeto', project: null, n: count.get('') ?? 0 },
+    ];
+  });
+
+  protected toggle(id: string | null): void {
+    const next = new Set(id === null ? [] : this.filter());
+    if (id !== null) { if (next.has(id)) next.delete(id); else next.add(id); }
+    this.filter.set(next);
+    localStorage.setItem(FILTER_KEY, JSON.stringify([...next]));
+  }
+
+  /** quem senta em cada sala (legenda do 3D) */
+  protected readonly members = computed(() => {
+    const out: Partial<Record<RoomId, string[]>> = {};
+    for (const a of this.agents.agents()) (out[agentRoom(a)] ??= []).push(a.name);
+    (out.eng ??= []).push('sessões dos projetos');
+    return out;
+  });
+
   /** quem está no andar */
   protected readonly people = computed<Person[]>(() => {
     const projectOf = (slug: string | null) => (slug ? this.projects.bySlug().get(slug) ?? null : null);
@@ -140,11 +171,12 @@ export class OfficePage {
         key: w.key, room: w.room, name: w.name, hair: w.hair, shirt: p?.color ?? '#6b7385', working: true,
         doing: w.phase ? `${PHASES[w.phase].label} · ${w.doing ?? 'pensando…'}` : w.doing,
         tag: p?.name ?? null, plan: w.plan.length ? [this.planDone(w), w.plan.length] : null, subs: w.subagents.filter(x => !x.finishedAt).length,
+        hidden: !this.shown(w.slug),
       };
     });
     for (const a of this.idle()) {
       const p = projectOf(a.projectSlug);
-      out.push({ key: `a${a.id}`, room: 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', working: false, doing: null, tag: p?.name ?? null, plan: null, subs: 0 });
+      out.push({ key: `a${a.id}`, room: 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', working: false, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
     }
     return out;
   });

@@ -178,6 +178,8 @@ export function describe(name: string, input: any): string {
     code_neighbors: `Viu as ligações de ${String(input?.key ?? '').split(/[#:]/).pop()}`, code_impact: 'Calculou o impacto da mudança',
     memory_recall: 'Consultou a memória do projeto', memory_remember: `Guardou na memória: "${String(input?.text ?? '').slice(0, 60)}"`,
     memory_supersede: `Atualizou o fato #${input?.id ?? ''}`,
+    remember: `Lembrou${input?.para === 'todos' ? ' (para todos)' : ''}: "${String(input?.text ?? '').slice(0, 60)}"`, recall: 'Consultou a memória',
+    forget: `Esqueceu a memória #${input?.id ?? ''}`, set_status: `${String(input?.phase ?? '')}: ${String(input?.doing ?? '').slice(0, 60)}`,
     Read: `Leu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-2).join('/')}`, Grep: `Buscou "${input?.pattern ?? ''}"`, Glob: `Listou ${input?.pattern ?? ''}`,
     Agent: `Subagente: ${input?.description ?? ''}`, Task: `Subagente: ${input?.description ?? ''}`,
     TaskCreate: `Plano: ${input?.subject ?? ''}`, TaskUpdate: `Plano: passo ${input?.taskId ?? ''} ${input?.status === 'completed' ? 'concluído' : input?.status === 'in_progress' ? 'em andamento' : 'atualizado'}`,

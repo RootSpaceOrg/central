@@ -1,57 +1,115 @@
-<div class="mx-auto max-w-[1280px] px-10 pt-9 pb-16">
+<div class="mx-auto max-w-[1400px] px-10 pt-9 pb-16">
   <p class="text-mute first-letter:uppercase">{{ today }}</p>
   <h1 class="mt-1 font-display text-[34px] font-bold leading-tight tracking-tight">Visão geral</h1>
-  <p class="mt-2 max-w-3xl text-[15px] leading-relaxed text-mute">
-    {{ projects.living().length }} projetos vivos, {{ commits7d() }} commits nos últimos 7 dias.
-    @if (proposals.inbox().length) {
-      <a routerLink="/triagem" class="text-later hover:underline">{{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão espera' : 'decisões esperam' }} você.</a>
+  <p class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] text-mute">
+    <span>{{ projects.living().length }} projetos vivos</span>
+    @for (h of order; track h) {
+      @if (tally()[h]) {
+        <span class="flex items-center gap-1.5"><span class="size-2 rounded-full" [style.background]="HEALTH[h].color"></span>{{ tally()[h] }} {{ HEALTH[h].label.toLowerCase() }}</span>
+      }
     }
     @if (runs.active().length) {
-      <a routerLink="/execucoes" class="text-yes hover:underline">{{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }} agora.</a>
+      <a routerLink="/escritorio" class="text-yes hover:underline">{{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }}</a>
     }
-    @if (quiet()) { Sem movimento esta semana: {{ quiet() }}. }
   </p>
 
-  <!-- pulso dos projetos -->
-  <section class="mt-9" aria-labelledby="pulso">
+  <!-- o que precisa de você -->
+  <section class="mt-8" aria-labelledby="needs">
+    <h2 id="needs" class="mb-3 font-display text-xl font-semibold">Precisa de você</h2>
+    @if (needs().length) {
+      <ul class="overflow-hidden rounded-2xl border border-edge bg-panel">
+        @for (n of allNeeds() ? needs() : needs().slice(0, 6); track $index) {
+          @let l = link(n, n.c.p.slug);
+          <li class="border-b border-edge last:border-0">
+            <a [routerLink]="l.route" [queryParams]="l.query" class="flex items-center gap-3 px-5 py-2.5 hover:bg-raise/50">
+              <span class="size-2 shrink-0 rounded-full" [style.background]="n.level === 'risco' ? HEALTH.risco.color : HEALTH.atencao.color"></span>
+              <app-project-avatar [project]="n.c.p" [size]="20" />
+              <span class="w-44 shrink-0 truncate text-[13px] font-semibold" [style.color]="n.c.p.color">{{ n.c.name }}</span>
+              <span class="min-w-0 flex-1 truncate text-[14px] first-letter:uppercase">{{ n.text }}</span>
+              <span class="shrink-0 text-faint">›</span>
+            </a>
+          </li>
+        }
+      </ul>
+      @if (needs().length > 6) {
+        <button type="button" class="mt-2 text-[13px] text-frost hover:underline" (click)="allNeeds.set(!allNeeds())">
+          {{ allNeeds() ? 'Mostrar menos' : 'Ver todos (' + needs().length + ')' }}</button>
+      }
+    } @else {
+      <p class="rounded-2xl border border-dashed border-edge px-5 py-4 text-mute">Nada esperando você. Os projetos estão em dia.</p>
+    }
+  </section>
+
+  <!-- saúde dos projetos -->
+  <section class="mt-10" aria-labelledby="saude">
     <div class="mb-3 flex items-baseline justify-between">
-      <h2 id="pulso" class="font-display text-xl font-semibold">Pulso dos projetos</h2>
-      <span class="text-[13px] text-faint">commits por dia, últimos 14 dias</span>
+      <h2 id="saude" class="font-display text-xl font-semibold">Saúde dos projetos</h2>
+      <span class="text-[13px] text-faint">o mais grave primeiro</span>
     </div>
-
-    <div class="overflow-hidden rounded-2xl border border-edge bg-panel">
-      @for (p of board(); track p.slug) {
-        <a [routerLink]="['/projetos', p.slug]"
-           class="grid grid-cols-[minmax(200px,1.1fr)_minmax(220px,1.4fr)_70px_minmax(220px,1.5fr)] items-center gap-6 border-b border-edge px-5 py-4 last:border-0 hover:bg-raise/50">
-          <div class="flex min-w-0 items-center gap-3">
-            <app-project-avatar [project]="p" [size]="34" />
-            <div class="min-w-0">
-              <p class="truncate font-display text-[16px] font-semibold">{{ p.name }}</p>
-              <p class="text-[12.5px] text-mute">{{ statusLabel[p.status] }}, {{ p.repoCount }} {{ p.repoCount === 1 ? 'repo' : 'repos' }}</p>
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+      @for (c of cards(); track c.p.slug) {
+        @let h = HEALTH[c.health];
+        <a [routerLink]="['/projetos', c.p.slug]" class="flex flex-col rounded-2xl border border-edge bg-panel p-5 transition-colors hover:border-faint"
+           [style.box-shadow]="'inset 0 3px 0 ' + h.color">
+          <div class="flex items-start gap-3">
+            <app-project-avatar [project]="c.p" [size]="36" />
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-display text-[17px] font-semibold">{{ c.name }}</p>
+              <p class="truncate text-[12.5px] text-mute">
+                {{ statusLabel[c.p.status] }} ·
+                @if (c.last) { atualizado {{ c.last.at | ago }} } @else { sem atividade recente }
+              </p>
             </div>
+            <span class="shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-bold" [style.color]="h.color" [style.background]="h.color + '1f'">{{ h.label }}</span>
           </div>
 
-          <app-heartbeat class="h-8" [values]="p.spark" [color]="p.color" [height]="30" />
-
-          <p class="text-right">
-            <span class="block font-display text-xl font-semibold tabular-nums">{{ p.commits7d }}</span>
-            <span class="block text-[11.5px] text-faint">7 dias</span>
-          </p>
-
-          <div class="min-w-0">
-            @if (p.lastCommitAt) {
-              <p class="truncate text-[13.5px]">{{ p.lastCommitSubject }}</p>
-              <p class="truncate text-[12.5px] text-mute">{{ p.lastCommitRepo }}, {{ p.lastCommitAt | ago }}</p>
-            } @else {
-              <p class="text-[13.5px] text-faint">Nenhum commit em 60 dias</p>
-            }
-            @if (attention(p).length) {
-              <p class="mt-1 truncate text-[12.5px] text-later">{{ attention(p).join(' e ') }}</p>
-            }
+          <div class="mt-3 flex items-end gap-3">
+            <app-heartbeat class="h-7 min-w-0 flex-1" [values]="c.p.spark" [color]="c.p.color" [height]="28" />
+            <span class="shrink-0 text-right text-[12px] text-faint"><b class="font-display text-[17px] text-text tabular-nums">{{ c.p.commits7d }}</b> commits/7d</span>
           </div>
+          @if (c.last) { <p class="mt-1 truncate text-[12.5px] text-mute" [title]="c.last.text">{{ c.last.text }}</p> }
+
+          <dl class="mt-3 grid grid-cols-[72px_1fr] gap-x-3 gap-y-1.5 border-t border-edge pt-3 text-[13px]">
+            <dt class="text-faint">Backlog</dt>
+            <dd class="min-w-0 truncate">
+              {{ c.backlog.todo }} a fazer · {{ c.backlog.doing }} fazendo · {{ c.backlog.review }} revisão
+              @if (c.backlog.urgent) { · <b class="text-no">{{ c.backlog.urgent }} urgente{{ c.backlog.urgent > 1 ? 's' : '' }}</b> }
+            </dd>
+            <dt class="text-faint">Agora</dt>
+            <dd class="min-w-0">
+              @if (c.now; as m) {
+                <span class="flex items-center gap-2">
+                  <span class="min-w-0 flex-1 truncate">{{ m.title }}@if (m.more) { <span class="text-faint"> +{{ m.more }}</span> }</span>
+                  @if (m.total) {
+                    <span class="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-raise"><span class="block h-full rounded-full bg-yes" [style.width.%]="m.done / m.total * 100"></span></span>
+                    <span class="shrink-0 tabular-nums text-faint">{{ m.done }}/{{ m.total }}</span>
+                  }
+                </span>
+              } @else { <span class="text-faint">sem marco</span> }
+            </dd>
+            <dt class="text-faint">Rumo</dt>
+            <dd>@if (c.rumoAt) { revisado {{ c.rumoAt | ago }} } @else { <span class="text-faint">não escrito</span> }</dd>
+            <dt class="text-faint">Triagem</dt>
+            <dd>
+              @if (c.triage.ideas || c.triage.decisions) {
+                {{ c.triage.ideas }} {{ c.triage.ideas === 1 ? 'ideia' : 'ideias' }} · {{ c.triage.decisions }} {{ c.triage.decisions === 1 ? 'decisão' : 'decisões' }}
+              } @else { <span class="text-faint">vazia</span> }
+            </dd>
+          </dl>
+
+          @if (c.signals.length) {
+            <ul class="mt-3 space-y-1 border-t border-edge pt-3">
+              @for (s of c.signals.slice(0, 3); track $index) {
+                <li class="flex items-center gap-2 text-[12.5px]" [style.color]="s.level === 'risco' ? HEALTH.risco.color : HEALTH.atencao.color">
+                  <span class="size-1.5 shrink-0 rounded-full bg-current"></span><span class="truncate first-letter:uppercase">{{ s.text }}</span>
+                </li>
+              }
+              @if (c.signals.length > 3) { <li class="text-[12px] text-faint">+ {{ c.signals.length - 3 }}</li> }
+            </ul>
+          }
         </a>
       } @empty {
-        <div class="p-10 text-center text-mute">
+        <div class="rounded-2xl border border-edge bg-panel p-10 text-center text-mute lg:col-span-2">
           @if (projects.loaded()) {
             Nenhum projeto ainda.
             <button type="button" class="btn btn-primary ml-3" (click)="dialogs.newProject()">Adicionar projeto</button>
@@ -61,10 +119,10 @@
     </div>
   </section>
 
-  <div class="mt-10 grid grid-cols-[1.6fr_1fr] gap-10">
+  <div class="mt-10 grid grid-cols-1 gap-10 xl:grid-cols-[1.6fr_1fr]">
     <!-- o que foi feito -->
     <section aria-labelledby="feito">
-      <h2 id="feito" class="mb-3 font-display text-xl font-semibold">O que foi feito</h2>
+      <h2 id="feito" class="mb-3 font-display text-xl font-semibold">O que foi feito na semana</h2>
       @for (d of days(); track d.label) {
         <h3 class="sticky top-0 z-10 bg-night py-2 text-[13px] font-semibold text-mute">{{ d.label }}</h3>
         <ol class="mb-4">
@@ -86,24 +144,7 @@
       }
     </section>
 
-    <aside class="space-y-10">
-      <section aria-labelledby="dec">
-        <div class="mb-3 flex items-baseline justify-between">
-          <h2 id="dec" class="font-display text-xl font-semibold">Esperando você</h2>
-          @if (proposals.inbox().length) { <a routerLink="/triagem" class="text-[13px] text-frost hover:underline">Decidir agora</a> }
-        </div>
-        @for (p of proposals.inbox().slice(0, 4); track p.id) {
-          <a routerLink="/triagem" class="mb-2 block rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
-            @if (p.projectSlug) {
-              <span class="text-[12.5px] font-semibold" [style.color]="color(p.projectSlug)">{{ projects.bySlug().get(p.projectSlug)?.name }}</span>
-            }
-            <p class="leading-snug">{{ p.title }}</p>
-          </a>
-        } @empty {
-          <p class="text-mute">Nenhuma decisão pendente.</p>
-        }
-      </section>
-
+    <aside>
       <section aria-labelledby="ag">
         <div class="mb-3 flex items-baseline justify-between">
           <h2 id="ag" class="font-display text-xl font-semibold">Agentes</h2>

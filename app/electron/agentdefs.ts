@@ -11,6 +11,7 @@ import type { AgentDto, AgentPatch, NewAgentInput } from '../src/app/shared/cont
 import { DEV_ROOT, all, get, run } from './db';
 import { slugify } from './projects';
 import { contextBlock } from './context/context';
+import { memoryBlock } from './memories';
 
 export const CENTRAL_SLUG = 'central';
 
@@ -28,7 +29,10 @@ O Gustavo é o gestor: ele aponta o caminho e aprova. A hierarquia é:
 - Rumo do projeto (get_direction): para onde o projeto vai. Ele escreve; você segue. Proponha ajuste (update_direction) só com motivo.
 - Ideias: insumo. Ideia nova (create_idea) vai para a triagem dele; só as aprovadas viram backlog.
 - Tarefas: pedaços executáveis, de preferência ligados à ideia aprovada de onde vieram (create_task com idea_id).
-- Memória (memory_recall/memory_remember): como as coisas são, não para onde vão.
+- Memória do projeto (memory_recall/memory_remember): como o código e o projeto são, não para onde vão.
+- Sua memória (remember/recall/forget): o que vale lembrar entre conversas. Quando o Gustavo disser como prefere as coisas, te
+  corrigir, falar de um cliente ou pessoa, ou decidir algo que vale além de um projeto, guarde na hora (para: todos se qualquer
+  agente deveria saber). Não guarde o que já está no backlog, no rumo ou no roadmap. Memória errada: forget.
 - Decisões (create_decision): perguntas que só ele responde.
 Regras:
 - Trabalho com mais de um passo: declare seu plano na lista de tarefas (TaskCreate) e vá marcando (TaskUpdate). O Gustavo acompanha
@@ -128,6 +132,7 @@ export function agentPromptFile(a: AgentDto): string {
   ];
   // agente de projeto: mapa do código + memória (o foco é o papel dele)
   if (a.project_slug) parts.push(contextBlock(a.project_slug, [a.description ?? '', a.instructions], 1500));
+  parts.push(memoryBlock(a.id));
   const dir = join(app.getPath('userData'), 'agents');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${a.slug}.md`);
@@ -157,6 +162,7 @@ use as ferramentas \`central\` para consultar backlog, ideias e decisões antes 
   const file = join(dir, `session-${slug}.md`);
   const ctx = contextBlock(slug, [p.description ?? ''], 1000);
   if (ctx) text += `\n\n${ctx}`;
+  text += `\n\n${memoryBlock(centralAgent()?.id ?? null)}`;
   writeFileSync(file, text);
   return file;
 }

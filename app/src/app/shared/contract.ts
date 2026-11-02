@@ -509,6 +509,29 @@ export interface NewFactInput {
   pinned?: boolean;
 }
 
+// ---------- memória dos agentes ----------
+
+export type MemoryKind = 'preferencia' | 'fato' | 'decisao' | 'pessoa' | 'como_fazer';
+
+export interface MemoryDto {
+  id: number;
+  /** null = de todos os agentes */
+  agent_id: number | null;
+  kind: MemoryKind;
+  text: string;
+  /** 'gustavo' ou o agente que guardou */
+  author: string;
+  /** de onde veio (conversa/execução) */
+  source: string | null;
+  pinned: boolean;
+  status: 'active' | 'retired';
+  created_at: string;
+  retired_at: string | null;
+  retired_reason: string | null;
+}
+
+export interface NewMemoryInput { agent_id: number | null; kind: MemoryKind; text: string; pinned?: boolean }
+
 // ---------- roadmap ----------
 
 export type Horizon = 'now' | 'next' | 'later' | 'done';
@@ -732,6 +755,12 @@ export interface Api {
   'context:search': (projectSlug: string, query: string) => CodeHitDto[];
   /** o que um agente recebe no prompt para este foco (prévia na tela) */
   'context:block': (projectSlug: string, focus: string, budget: number) => string;
+  /** memória de um agente, a compartilhada ('shared') ou tudo ('all'); retired inclui as esquecidas */
+  'memories:list': (scope: number | 'shared' | 'all', retired?: boolean) => MemoryDto[];
+  'memories:create': (input: NewMemoryInput) => MemoryDto;
+  'memories:update': (id: number, patch: { text?: string; kind?: MemoryKind; pinned?: boolean; agent_id?: number | null }) => void;
+  'memories:forget': (id: number, reason: string) => void;
+  'memories:delete': (id: number) => void;
   'facts:list': (projectSlug: string) => FactDto[];
   'facts:create': (input: NewFactInput) => FactDto;
   'facts:update': (id: number, patch: { text?: string; kind?: FactKind; pinned?: boolean; links?: string[] }) => void;

@@ -12,10 +12,24 @@
     </div>
   </header>
 
+  <!-- filtro por projeto -->
+  <div class="mt-5 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por projeto">
+    <button type="button" class="rounded-full border px-3 py-1 text-[12.5px] font-semibold transition-colors" (click)="toggle(null)" [attr.aria-pressed]="!filter().size"
+            [class]="!filter().size ? 'border-frost/60 bg-frost/10 text-text' : 'border-edge text-mute hover:text-text'">Todos</button>
+    @for (c of chips(); track c.id) {
+      <button type="button" class="flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-1.5 text-[12.5px] transition-colors" (click)="toggle(c.id)" [attr.aria-pressed]="filter().has(c.id)"
+              [class]="filter().has(c.id) ? 'border-frost/60 bg-frost/10 text-text' : 'border-edge text-mute hover:text-text'" [class.pl-3]="!c.project">
+        @if (c.project) { <app-project-avatar [project]="c.project" [size]="18" /> }
+        {{ c.label }}
+        @if (c.n) { <span class="rounded-full bg-yes/20 px-1.5 text-[11px] font-bold tabular-nums text-yes">{{ c.n }}</span> }
+      </button>
+    }
+  </div>
+
   <!-- quadro de status: uma caixa por quem está trabalhando (o que disse que está fazendo, ou o que a ferramenta mostra) -->
-  @if (workers().length) {
-    <section class="mt-6 grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3" aria-label="Quadro de status">
-      @for (w of workers(); track w.key) {
+  @if (visible().length) {
+    <section class="mt-4 grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3" aria-label="Quadro de status">
+      @for (w of visible(); track w.key) {
         @let ph = phaseOf(w);
         <button type="button" class="group flex flex-col rounded-2xl border bg-panel px-4 py-3 text-left transition-colors hover:border-faint"
                 [class]="selected() === w.key ? 'border-frost/70' : 'border-edge'" [style.box-shadow]="'inset 3px 0 0 ' + ph.color"
@@ -45,7 +59,7 @@
 
   <!-- o andar -->
   <div class="office-sky mt-6 overflow-hidden rounded-3xl border border-edge shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
-    <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
+    <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [members]="members()" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
                       (pick)="pick($event)" (open)="openKey($event)" />
   </div>
 
@@ -54,7 +68,7 @@
     <section aria-labelledby="mesas">
       <h2 id="mesas" class="mb-3 font-display text-[15px] font-semibold">Mesas</h2>
       <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        @for (w of workers(); track w.key) {
+        @for (w of visible(); track w.key) {
           <article [id]="'desk-' + w.key" class="rounded-2xl border bg-panel p-4 transition-colors"
                    [class]="selected() === w.key ? 'border-frost/70 bg-frost/[0.05]' : 'border-edge'" (click)="selected.set(w.key)">
             <div class="flex items-center gap-3">

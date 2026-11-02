@@ -9,6 +9,7 @@ import { moveTaskForRun } from './backlog';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { mcpConfigPath } from './mcp-config';
+import { memoryBlock } from './memories';
 import { getUsage } from './usage';
 import { git, gitOr } from './git';
 import { slugify } from './projects';
@@ -225,6 +226,7 @@ async function execute(id: number, emit: Emit): Promise<void> {
     const ctx = contextBlock(r.project_slug, [r.prompt], r.scope === 'repo' ? 2000 : 1500);
     if (ctx) frame += `\n\n${ctx}`;
   }
+  if (!agent) frame += `\n\n${memoryBlock(null)}`;
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-budget-usd', String(r.budget_usd)];
   const mcp = mcpConfigPath({ kind: 'run', id });
   if (mcp) args.push('--mcp-config', `"${mcp}"`);

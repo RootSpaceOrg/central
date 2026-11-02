@@ -234,6 +234,21 @@ db.exec(`
     done_at      text
   );
 
+  -- memória dos agentes: do agente (agent_id) ou de todos (agent_id null); esquecer retira com o motivo
+  create table if not exists memories (
+    id             integer primary key autoincrement,
+    agent_id       integer references agents on delete cascade,
+    kind           text not null,
+    text           text not null,
+    author         text not null default 'gustavo',
+    source         text,
+    pinned         integer not null default 0,
+    status         text not null default 'active',
+    created_at     text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    retired_at     text,
+    retired_reason text
+  );
+
   -- histórico do roadmap: quem mexeu (gustavo ou agente), o quê e por quê
   create table if not exists milestone_events (
     id           integer primary key autoincrement,

@@ -215,6 +215,21 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
 - Sem declaração, a etapa é **deduzida das ferramentas**: editar = construindo, ler/buscar = investigando, testes/tsc/build =
   testando, git diff = revisando, commit/PR = entregando, plano = planejando, subagente = delegando.
 
+## Feito (v0.18)
+
+- **Memória dos agentes** (além dos fatos de projeto): cada agente lembra entre conversas (dele) e há a memória de todos
+  (sobre o Gustavo, clientes, decisões entre projetos). Entra sozinha no prompt de agentes, sessões e execuções; os agentes
+  guardam pelo MCP (`remember` com para: mim/todos, `recall`, `forget`), sabendo quem são pela URL do MCP. Aba Memória em
+  Agentes: dele / de todos / esquecidas; editar, fixar, mudar de escopo, esquecer com motivo. Testado: o Marketing guardou
+  "posts do KultivAi fecham com pergunta" e, numa conversa nova, o post saiu fechando com pergunta.
+- **Escritório**: filtro por projeto (chips com quantos trabalhando; frente conta no projeto-pai; fica salvo) no quadro, no
+  3D e nas mesas, sem ninguém sair andando. Nome de cada sala pintado no chão e legenda "Salas" (o que é cada sala e quem
+  senta nela; passar o mouse acende o piso).
+- **Visão geral = saúde dos projetos**: "Precisa de você" (de todos os projetos, risco primeiro: urgentes, execuções que
+  falharam, decisões, PRs em revisão, tarefas paradas, triagem…) e um cartão por projeto com saúde (em risco / atenção /
+  parado / saudável) e os porquês, última atualização, ritmo, backlog, marco de Agora, rumo e triagem. Manutenção cobra
+  menos; congelado só risco.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

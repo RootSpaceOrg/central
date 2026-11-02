@@ -58,6 +58,8 @@
                   class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'conversas' ? 'bg-raise' : 'text-mute hover:text-text'">Conversas</button>
           <button type="button" role="tab" [attr.aria-selected]="pane() === 'execucoes'" (click)="pane.set('execucoes')"
                   class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'execucoes' ? 'bg-raise' : 'text-mute hover:text-text'">Execuções</button>
+          <button type="button" role="tab" [attr.aria-selected]="pane() === 'memoria'" (click)="pane.set('memoria')"
+                  class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'memoria' ? 'bg-raise' : 'text-mute hover:text-text'">Memória</button>
         </div>
         @if (pane() === 'conversas') {
           <button type="button" (click)="chat.newChat(a.id)" class="mx-3 mb-2 flex items-center gap-2 rounded-xl border border-dashed border-edge px-3 py-2 text-[13px] text-mute transition hover:border-faint hover:text-text"
@@ -79,6 +81,15 @@
               <li class="px-3 py-4 text-[13px] text-mute">Nenhuma conversa ainda.</li>
             }
           </ul>
+        } @else if (pane() === 'memoria') {
+          <nav class="space-y-0.5 px-2" aria-label="Memória">
+            @for (v of [{ id: 'dele', label: 'Dele', n: memories.of(a.id).length }, { id: 'todos', label: 'De todos os agentes', n: memories.of(null).length }, { id: 'esquecidas', label: 'Esquecidas', n: memories.retiredFor(a.id).length }]; track v.id) {
+              <button type="button" (click)="memView.set($any(v.id))" [attr.aria-current]="memView() === v.id"
+                      class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13.5px] transition-colors hover:bg-raise/70" [class.bg-raise]="memView() === v.id">
+                {{ v.label }}<span class="tabular-nums text-faint">{{ v.n }}</span></button>
+            }
+          </nav>
+          <p class="mt-auto px-5 pb-4 text-[12px] leading-relaxed text-faint">Os agentes guardam sozinhos quando você conta como prefere as coisas, corrige algo ou fala de um cliente.</p>
         } @else {
           <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
             @for (r of agentRuns(); track r.id) {
@@ -99,7 +110,8 @@
         }
       </aside>
 
-      <app-chat-view class="min-h-0" />
+      @if (pane() === 'memoria') { <app-memory-panel class="min-h-0" [agent]="a" [view]="memView()" /> }
+      @else { <app-chat-view class="min-h-0" /> }
     </div>
   </section>
 } @else {

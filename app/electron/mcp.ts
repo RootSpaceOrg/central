@@ -21,6 +21,7 @@ import {
 } from './backlog';
 import { get } from './db';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
+import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
 import { setStatus } from './activity';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
@@ -241,6 +242,25 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('memory_supersede', 'Marca um fato como inválido (com motivo) e opcionalmente registra o substituto.', {
     id: z.number().int(), reason: z.string(), replacement: z.string().max(400).optional(),
   }, a => supersedeFact(a.id, a.reason, a.replacement ?? null, 'agente') ?? 'ok', h.projects);
+  // ---------- memória do agente (entre conversas) ----------
+  const me = callerAgent(caller);
+  tool('remember', 'Guarda algo para lembrar nas próximas conversas: preferência do Gustavo, correção que ele fez, pessoa/cliente, decisão que vale além de um projeto, jeito de fazer. Curto e auto-contido. Fato de código de um projeto vai em memory_remember.', {
+    text: z.string().max(400), kind: z.enum(['preferencia', 'fato', 'decisao', 'pessoa', 'como_fazer']),
+    para: z.enum(['mim', 'todos']).describe('mim = sobre o SEU trabalho/papel (ex.: regras dos seus posts, do seu suporte); todos = sobre o Gustavo em geral ou algo que outros agentes também precisam (preferências gerais, clientes, decisões entre projetos). Na dúvida, mim.'),
+  }, a => {
+    const m = createMemory({ agent_id: a.para === 'mim' && me ? me : null, kind: a.kind, text: a.text, author: 'agente', source: caller ? `${caller.kind} #${caller.id}` : null });
+    return `Guardado (#${m.id}, ${m.agent_id ? 'sua' : 'de todos'}).`;
+  }, h.agents);
+  tool('recall', 'Procura na sua memória e na de todos os agentes (o prompt já traz as principais; use para buscar algo específico).', { query: z.string().optional() },
+    a => recallMemories(me, a.query ?? ''));
+  tool('forget', 'Esquece uma memória que ficou errada ou velha (sai do prompt, fica registrado o motivo).', { id: z.number().int(), reason: z.string() }, a => {
+    const m = get<{ agent_id: number | null }>('select agent_id from memories where id = ?', a.id);
+    if (!m) return 'Memória não encontrada.';
+    if (m.agent_id && m.agent_id !== me) return 'Essa memória é de outro agente.';
+    forgetMemory(a.id, a.reason, 'agente');
+    return 'Esquecida.';
+  }, h.agents);
+
   // ---------- status ao vivo (só quando a sessão foi aberta pela Central e sabemos quem chama) ----------
   if (caller) {
     tool('set_status', 'Mostra no painel do Gustavo (Escritório) o que você está fazendo agora. Chame ao começar cada etapa do trabalho: curto e concreto.', {

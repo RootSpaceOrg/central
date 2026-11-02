@@ -17,6 +17,7 @@ import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameC
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
+import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
@@ -192,6 +193,11 @@ function registerIpc(): void {
   handle('context:node', key => nodeDetail(key));
   handle('context:search', (slug, q) => searchHits(slug, q));
   handle('context:block', (slug, focus, budget) => contextBlock(slug, focus ? [focus] : [], budget));
+  handle('memories:list', (scope, retired) => listMemories(scope, !!retired));
+  handle('memories:create', input => { const m = createMemory(input); agentsChanged(); return m; });
+  handle('memories:update', (id, patch) => { updateMemory(id, patch); agentsChanged(); });
+  handle('memories:forget', (id, reason) => { forgetMemory(id, reason); agentsChanged(); });
+  handle('memories:delete', id => { deleteMemory(id); agentsChanged(); });
   handle('facts:list', slug => listFacts(slug));
   handle('facts:create', input => { const f = createFact(input); contextChanged(input.project_slug); return f; });
   handle('facts:update', (id, patch) => { updateFact(id, patch); contextChanged(factProject(id)); });

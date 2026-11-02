@@ -26,6 +26,8 @@ export interface Person {
   plan: [number, number] | null;
   /** subagentes rodando (estagiários ao lado da mesa) */
   subs: number;
+  /** fora do filtro: some na hora (sem andar até o elevador) */
+  hidden?: boolean;
 }
 
 const WALL_H = 2.4;
@@ -99,6 +101,28 @@ function plant(parent: Object3D, x: number, z: number): void {
   leaves.position.set(x, 0.58, z); leaves.castShadow = true; parent.add(leaves);
 }
 
+/** texto deitado no chão (lê de frente na vista inicial); userData.w = largura em ladrilhos */
+function floorLabel(text: string, color: string): Mesh {
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d')!;
+  const font = '800 64px "Segoe UI", system-ui, sans-serif';
+  g.font = font;
+  c.width = Math.ceil(g.measureText(text).width) + 24;
+  c.height = 84;
+  g.font = font;
+  g.fillStyle = color;
+  g.textBaseline = 'middle';
+  g.fillText(text, 12, 44);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
+  const h = 0.55, w = (c.width / c.height) * h;
+  const m = new Mesh(new PlaneGeometry(w, h), new MeshLambertMaterial({ map: t, transparent: true, opacity: 0.75, depthWrite: false, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.25 }));
+  m.rotation.x = -Math.PI / 2;
+  m.userData['w'] = w;
+  return m;
+}
+
 // ---------- boneco (voxel) ----------
 
 interface Avatar {
@@ -156,6 +180,7 @@ interface Actor {
   turnAt: number;
   phase: number;
   leaving: boolean;
+  hidden: boolean;
   subs: { av: Avatar; label: CSS2DObject }[];
 }
 
@@ -177,6 +202,7 @@ export class OfficeWorld {
   private readonly screens = new Map<string, MeshLambertMaterial>();
   private readonly graphs: CanvasTexture[] = [];
   private readonly stickies = new Group();
+  private readonly floors = new Map<RoomId, MeshLambertMaterial>();
   private readonly actors = new Map<string, Actor>();
   private readonly ray = new Raycaster();
   private readonly ro: ResizeObserver;
@@ -250,12 +276,20 @@ export class OfficeWorld {
   private build(): void {
     const f = this.floor;
     const slab = (x: number, z: number, w: number, d: number, a: string, b: string) => {
-      const m = new Mesh(boxGeo(w, 0.1, d), new MeshLambertMaterial({ map: checker(a, b, w, d) }));
+      const material = new MeshLambertMaterial({ map: checker(a, b, w, d) });
+      const m = new Mesh(boxGeo(w, 0.1, d), material);
       m.position.set(x + w / 2, -0.05, z + d / 2);
       m.receiveShadow = true;
       f.add(m);
+      return material;
     };
-    for (const r of ROOMS) slab(r.x, r.y, r.w, r.d, r.floor[0], r.floor[1]);
+    for (const r of ROOMS) {
+      this.floors.set(r.id, slab(r.x, r.y, r.w, r.d, r.floor[0], r.floor[1]));
+      // nome pintado no chão, perto da porta (como sinalização de piso)
+      const label = floorLabel(r.label.toUpperCase(), r.accent);
+      label.position.set(r.x + 0.35 + label.userData['w'] / 2, 0.006, r.y + r.d - 0.55);
+      f.add(label);
+    }
     slab(0, 6, MAP_W, 2, '#2c313c', '#272c36');
 
     // paredes externas: cada lado é um grupo que some quando a câmera está do lado de fora dele
@@ -372,6 +406,8 @@ export class OfficeWorld {
       }
       a.at = to;
       a.working = p.working;
+      a.hidden = !!p.hidden;
+      a.av.root.visible = !a.hidden;
       a.av.shirt.color.set(p.shirt);
       a.av.hair.color.set(p.hair);
       (a.ring.material as MeshLambertMaterial).color.set(p.hair);
@@ -391,7 +427,7 @@ export class OfficeWorld {
       a.el.say.hidden = true;
     }
     // monitores acesos
-    const lit = new Set([...this.actors.values()].filter(a => a.working && !a.leaving && a.at?.seated).map(a => a.at!.seat));
+    const lit = new Set([...this.actors.values()].filter(a => a.working && !a.leaving && !a.hidden && a.at?.seated).map(a => a.at!.seat));
     for (const [seat, m] of this.screens) m.emissive.set(lit.has(seat) ? '#6f95e6' : '#000000');
     this.setStickies(milestones);
     this.first = false;
@@ -420,7 +456,7 @@ export class OfficeWorld {
     this.floor.add(av.root);
     const a: Actor = {
       key: p.key, av, label, el: { root, say, nick }, ring, pos: new Vector2(), path: [], at: null, working: p.working,
-      facing: Math.random() * Math.PI * 2, turnAt: 0, phase: Math.random() * 10, leaving: false, subs: [],
+      facing: Math.random() * Math.PI * 2, turnAt: 0, phase: Math.random() * 10, leaving: false, hidden: false, subs: [],
     };
     this.actors.set(p.key, a);
     return a;
@@ -469,6 +505,15 @@ export class OfficeWorld {
     this.stickies.userData['key'] = key;
     this.stickies.clear();
     colors.slice(0, 12).forEach((c, i) => box(this.stickies, 0.42, 0.36, 0.02, c, 1.75 + (i % 6) * 0.66, i < 6 ? 1.52 : 1.06, 0, false));
+  }
+
+  /** acende o piso de uma sala (legenda); null apaga */
+  highlight(room: RoomId | null): void {
+    for (const [id, m] of this.floors) {
+      m.emissive.set(id === room ? ROOM.get(id)!.accent : '#000000');
+      m.emissiveIntensity = id === room ? 0.22 : 0;
+    }
+    this.moving = performance.now() + 200;
   }
 
   // ---------- câmera ----------
@@ -585,13 +630,13 @@ export class OfficeWorld {
       av.head.rotation.x = 0;
       av.root.position.y = 0;
     }
-    a.label.visible = true;
+    a.label.visible = !a.hidden;
     a.el.say.style.visibility = walking ? 'hidden' : '';
 
     // estagiários em pé ao lado da mesa, virados para quem está sentado
     a.subs.forEach((sub, i) => {
       const [dx, dz] = SUB_SPOTS[i];
-      sub.av.root.visible = sub.label.visible = seated;
+      sub.av.root.visible = sub.label.visible = seated && !a.hidden;
       sub.av.root.position.set(a.pos.x + dx, 0, a.pos.y + dz);
       sub.av.root.rotation.y = Math.atan2(-dx, -dz);
       sub.av.armL.rotation.x = Math.sin(s * 2 + i) * 0.1;

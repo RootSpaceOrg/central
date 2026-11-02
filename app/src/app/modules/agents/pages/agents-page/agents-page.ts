@@ -14,13 +14,15 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { AgentDialog, AgentDialogState } from '../../components/agent-dialog/agent-dialog';
+import { MemoryPanel, MemoryView } from '../../components/memory-panel/memory-panel';
+import { MemoriesService } from '../../../../shared/services/memories/memories.service';
 
-type Pane = 'conversas' | 'execucoes';
+type Pane = 'conversas' | 'execucoes' | 'memoria';
 
 /** Agentes: escolhe um agente, vê as sessões dele (conversas e execuções) e conversa. */
 @Component({
   selector: 'app-agents-page',
-  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, ChatView, AgentDialog],
+  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, ChatView, AgentDialog, MemoryPanel],
   templateUrl: './agents-page.html',
   host: { class: 'grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)]' },
 })
@@ -36,6 +38,8 @@ export class AgentsPage {
 
   protected readonly dialog = signal<AgentDialogState>(null);
   protected readonly pane = signal<Pane>('conversas');
+  protected readonly memView = signal<MemoryView>('dele');
+  protected readonly memories = inject(MemoriesService);
   protected readonly runLabel = RUN_STATUS_LABEL;
   protected readonly isActive = isActive;
 
