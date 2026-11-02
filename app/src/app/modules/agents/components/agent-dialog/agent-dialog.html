@@ -80,6 +80,14 @@
         </div>
       </div>
 
+      <label class="block">
+        <span class="mb-1.5 block font-semibold">Sala no Escritório</span>
+        <select class="field w-full" [value]="room()" (change)="room.set($any($event.target).value)">
+          @for (r of rooms; track r.id) { <option [value]="r.id" [selected]="room() === r.id">{{ r.label }}</option> }
+        </select>
+        <span class="mt-1 block text-[12.5px] text-mute">Onde ele senta quando está trabalhando. Automática deduz pelo papel.</span>
+      </label>
+
       <app-icon-picker [(kind)]="iconKind" [(value)]="iconValue" [(color)]="color" />
 
       @if (agent() && !builtin()) {

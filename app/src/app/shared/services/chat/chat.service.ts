@@ -154,7 +154,8 @@ export class ChatService extends ChatSession {
         this.cache.set(chat_id, [...cached, toMessage(message)]);
         for (const s of this.live) s.receive(chat_id);
       }
-      if (!busy) this.loadChats();
+      // terminou, ou é uma conversa que a lista ainda não conhece (aberta pelo MCP, triagem, outro lugar)
+      if (!busy || !this.chats().some(c => c.id === chat_id)) this.loadChats();
     });
     this.loadChats();
   }

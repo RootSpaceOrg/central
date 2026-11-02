@@ -3,7 +3,7 @@ import { Component, ElementRef, computed, effect, inject, input, output, signal,
 import { IconPicker } from '../../../../shared/components/pickers/icon-picker';
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 import { ProjectIconKind, RunPermission } from '../../../../shared/contract';
-import { Agent, AgentsService, MODELS, TOOL_SUGGESTIONS } from '../../../../shared/services/agents/agents.service';
+import { Agent, AgentsService, MODELS, ROOM_CHOICES, TOOL_SUGGESTIONS } from '../../../../shared/services/agents/agents.service';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
@@ -36,6 +36,8 @@ export class AgentDialog {
   protected readonly toolInput = signal('');
   protected readonly permission = signal<RunPermission>('edits');
   protected readonly model = signal('');
+  protected readonly room = signal('');
+  protected readonly rooms = ROOM_CHOICES;
   protected readonly confirmDelete = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -72,7 +74,7 @@ export class AgentDialog {
       const saved = await this.agents.save(this.agent()?.id ?? null, {
         name: this.name().trim(), description: this.description().trim() || null, color: this.color(), iconKind: this.iconKind(),
         iconValue: this.iconValue(), projectSlug: this.projectSlug() || null, instructions: this.instructions(), tools: this.tools(),
-        permission: this.permission(), model: this.model(),
+        permission: this.permission(), model: this.model(), room: this.room(),
       });
       this.closed.emit(saved.id);
     } catch (err) {
@@ -99,6 +101,6 @@ export class AgentDialog {
     this.name.set(a?.name ?? ''); this.description.set(a?.description ?? ''); this.color.set(a?.color ?? '#7FA2FF');
     this.iconKind.set(a?.iconKind ?? 'emoji'); this.iconValue.set(a ? a.iconValue : '🤖'); this.projectSlug.set(a?.projectSlug ?? '');
     this.instructions.set(a?.instructions ?? ''); this.tools.set(a?.tools ?? []); this.permission.set(a?.permission ?? 'edits');
-    this.model.set(a?.model ?? ''); this.toolInput.set(''); this.confirmDelete.set(false); this.error.set(null); this.busy.set(false);
+    this.model.set(a?.model ?? ''); this.room.set(a?.room ?? ''); this.toolInput.set(''); this.confirmDelete.set(false); this.error.set(null); this.busy.set(false);
   }
 }

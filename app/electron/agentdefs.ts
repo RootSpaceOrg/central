@@ -53,12 +53,15 @@ export const getAgent = (id: number) => listAgents().find(a => a.id === id) ?? n
 export const centralAgent = () => listAgents().find(a => a.slug === CENTRAL_SLUG)!;
 
 const ICONS = ['letter', 'emoji', 'lucide', 'image'];
+/** salas do Escritório ('' = a Central deduz pelo papel) */
+const ROOMS = ['gestao', 'eng', 'monitor', 'creative', 'business'];
 
 function validate(i: Partial<NewAgentInput>): void {
   if (i.name !== undefined && !i.name.trim()) throw new Error('Dê um nome ao agente.');
   if (i.project_slug && !get('select 1 from projects where slug = ?', i.project_slug)) throw new Error('Projeto não encontrado.');
   if (i.permission && !['edits', 'full'].includes(i.permission)) throw new Error('Liberdade inválida.');
   if (i.icon_kind && !ICONS.includes(i.icon_kind)) throw new Error('Tipo de ícone inválido.');
+  if (i.room && !ROOMS.includes(i.room)) throw new Error('Sala inválida.');
   if ((i.icon_value?.length ?? 0) > 560_000) throw new Error('Imagem grande demais (máximo 400 KB).');
 }
 
@@ -67,10 +70,10 @@ export function createAgent(i: NewAgentInput): AgentDto {
   if (!i.name?.trim()) throw new Error('Dê um nome ao agente.');
   let slug = slugify(i.name) || 'agente';
   for (let n = 2; get('select 1 from agents where slug = ?', slug); n++) slug = `${slugify(i.name)}-${n}`;
-  const { lastInsertRowid } = run(`insert into agents (slug, name, description, color, icon_kind, icon_value, project_slug, instructions, tools, permission, model)
-      values (?,?,?,?,?,?,?,?,?,?,?)`,
+  const { lastInsertRowid } = run(`insert into agents (slug, name, description, color, icon_kind, icon_value, project_slug, instructions, tools, permission, model, room)
+      values (?,?,?,?,?,?,?,?,?,?,?,?)`,
     slug, i.name.trim(), i.description?.trim() || null, i.color ?? '#7FA2FF', i.icon_kind ?? 'letter', i.icon_value ?? null,
-    i.project_slug || null, i.instructions?.trim() ?? '', (i.tools ?? []).join(','), i.permission ?? 'edits', i.model ?? '');
+    i.project_slug || null, i.instructions?.trim() ?? '', (i.tools ?? []).join(','), i.permission ?? 'edits', i.model ?? '', i.room ?? '');
   return getAgent(Number(lastInsertRowid))!;
 }
 
@@ -78,7 +81,7 @@ export function updateAgent(id: number, patch: AgentPatch): void {
   const cur = getAgent(id);
   if (!cur) throw new Error('Agente não encontrado.');
   validate(patch);
-  const cols = ['name', 'description', 'color', 'icon_kind', 'icon_value', 'project_slug', 'instructions', 'permission', 'model'] as const;
+  const cols = ['name', 'description', 'color', 'icon_kind', 'icon_value', 'project_slug', 'instructions', 'permission', 'model', 'room'] as const;
   const fields: [string, string | null][] = cols.filter(k => k in patch).map(k => [k, ((patch[k] as string | null | undefined) ?? null)]);
   if (cur.builtin) for (const k of ['name', 'project_slug']) { const i = fields.findIndex(f => f[0] === k); if (i >= 0) fields.splice(i, 1); }
   if ('tools' in patch) fields.push(['tools', (patch.tools ?? []).join(',')]);

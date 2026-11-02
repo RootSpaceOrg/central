@@ -17,13 +17,15 @@ export interface Agent {
   tools: string[];
   permission: RunPermission;
   model: string;
+  /** sala no Escritório ('' = automática) */
+  room: string;
   builtin: boolean;
   chats: number;
   routines: number;
   runs: number;
 }
 
-export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKind' | 'iconValue' | 'projectSlug' | 'instructions' | 'tools' | 'permission' | 'model'>;
+export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKind' | 'iconValue' | 'projectSlug' | 'instructions' | 'tools' | 'permission' | 'model' | 'room'>;
 
 /** Ferramentas extras conhecidas, para sugerir no editor (o MCP precisa estar configurado no Claude Code). */
 export const TOOL_SUGGESTIONS: { value: string; label: string }[] = [
@@ -38,6 +40,12 @@ export const TOOL_SUGGESTIONS: { value: string; label: string }[] = [
 export const MODELS = [
   { value: '', label: 'Padrão' }, { value: 'opus', label: 'Opus' }, { value: 'sonnet', label: 'Sonnet' }, { value: 'haiku', label: 'Haiku' },
   { value: 'fable', label: 'Fable' },
+];
+
+/** Salas do Escritório (editor do agente); '' = deduzida pelo papel */
+export const ROOM_CHOICES = [
+  { id: '', label: 'Automática (pelo papel)' }, { id: 'gestao', label: 'Gestão' }, { id: 'eng', label: 'Engenharia' },
+  { id: 'monitor', label: 'Monitoração' }, { id: 'creative', label: 'Estúdio criativo' }, { id: 'business', label: 'Negócios' },
 ];
 
 /** Na conversa: apelido → nome com versão (o apelido pega sempre o modelo mais recente da família). */
@@ -56,7 +64,7 @@ export const EFFORTS = [
 const toModel = (d: AgentDto): Agent => ({
   id: d.id, slug: d.slug, name: d.name, description: d.description, color: d.color, iconKind: d.icon_kind, iconValue: d.icon_value,
   projectSlug: d.project_slug, instructions: d.instructions, tools: d.tools ? d.tools.split(',').filter(Boolean) : [],
-  permission: d.permission, model: d.model, builtin: d.builtin, chats: d.chats, routines: d.routines, runs: d.runs,
+  permission: d.permission, model: d.model, room: d.room ?? '', builtin: d.builtin, chats: d.chats, routines: d.routines, runs: d.runs,
 });
 
 /** Agentes definidos (Central, Suporte KultivAi, Marketing…). */
@@ -81,7 +89,7 @@ export class AgentsService {
   async save(id: number | null, d: AgentDraft): Promise<Agent> {
     const input = {
       name: d.name, description: d.description || null, color: d.color, icon_kind: d.iconKind, icon_value: d.iconValue,
-      project_slug: d.projectSlug, instructions: d.instructions, tools: d.tools, permission: d.permission, model: d.model,
+      project_slug: d.projectSlug, instructions: d.instructions, tools: d.tools, permission: d.permission, model: d.model, room: d.room,
     };
     try {
       if (id) { await this.api.update(id, input); this.load(); return { ...this.byId().get(id)!, ...d }; }

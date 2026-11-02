@@ -608,6 +608,8 @@ export interface AgentDto {
   permission: RunPermission;
   /** '' = padrão do Claude Code; ou sonnet, opus, haiku */
   model: string;
+  /** sala no Escritório: '' = deduzida pelo papel; gestao, eng, monitor, creative, business */
+  room: string;
   builtin: boolean;
   created_at: string;
   chats: number;
@@ -626,6 +628,7 @@ export interface NewAgentInput {
   tools?: string[];
   permission?: RunPermission;
   model?: string;
+  room?: string;
 }
 
 export type AgentPatch = Partial<NewAgentInput>;

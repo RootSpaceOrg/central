@@ -287,6 +287,7 @@ for (const [table, column, type] of [
   ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
   ['projects', 'parent_slug', 'text'],
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
+  ['agents', 'room', "text not null default ''"],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];

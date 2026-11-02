@@ -3,7 +3,7 @@
     <div class="flex-1">
       <h1 class="flex items-center gap-3 font-display text-[32px] font-bold leading-tight tracking-tight">
         <app-icon name="office" [size]="28" class="text-frost" />Escritório</h1>
-      <p class="mt-1 text-mute">Quem está trabalhando, no quê e para onde está indo. Clique numa mesa para entrar.</p>
+      <p class="mt-1 text-mute">O time no andar: cada um na sala do seu tipo de trabalho, dizendo o que está fazendo. Clique numa pessoa; duplo clique entra na conversa.</p>
     </div>
     <div class="flex gap-2 text-[13px]">
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b class="text-frost">{{ workers().length }}</b> trabalhando</span>
@@ -12,131 +12,93 @@
     </div>
   </header>
 
-  <!-- salas com gente trabalhando -->
-  <div class="mt-7 grid grid-cols-1 gap-5 2xl:grid-cols-2">
-    @for (room of rooms(); track room.slug) {
-      <section class="room" [style.--room]="room.project?.color ?? '#7FA2FF'" [attr.aria-label]="'Sala ' + (room.project?.name ?? 'da Central')">
-        <header class="flex flex-wrap items-center gap-3 border-b border-edge/70 px-5 py-3">
-          @if (room.project; as p) {
-            <app-project-avatar [project]="p" [size]="26" />
-            <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'rumo' }" class="font-display text-[17px] font-semibold hover:underline">{{ p.name }}</a>
-          } @else {
-            <span class="grid size-[26px] place-items-center rounded-lg bg-frost/20 text-frost"><app-icon name="spark" [size]="15" /></span>
-            <span class="font-display text-[17px] font-semibold">Sala da Central</span>
-          }
-          <span class="flex-1"></span>
-          <!-- o marco de agora, "na parede" -->
-          @for (m of roadmap.nowBySlug().get(room.slug ?? '') ?? []; track m.id) {
-            <span class="flex items-center gap-2 rounded-full border border-edge bg-night/70 py-0.5 pr-2.5 pl-2 text-[12px]" title="Marco em Agora">
-              <app-icon name="flag" [size]="12" class="text-frost" />{{ m.title }}
-              @if (m.tasks) { <span class="tabular-nums text-faint">{{ m.tasksDone }}/{{ m.tasks }}</span> }
-            </span>
-          }
-        </header>
-        <div class="flex flex-wrap gap-4 p-5">
-          @for (w of room.workers; track w.key) {
-            <button type="button" class="desk" (click)="w.open()" [attr.aria-label]="w.name + ': ' + w.title">
-              <!-- monitor ligado -->
-              <span class="desk-screen" aria-hidden="true"></span>
-              <span class="flex items-center gap-3">
-                <span class="relative shrink-0">
-                  @if (w.avatar) { <app-project-avatar [project]="w.avatar" [size]="38" /> }
-                  @else { <span class="grid size-[38px] place-items-center rounded-xl bg-raise"><img [src]="w.img" alt="" class="size-5" /></span> }
-                  <span class="absolute -right-0.5 -bottom-0.5 size-3 rounded-full bg-yes ring-2 ring-night pulse"></span>
-                </span>
-                <span class="min-w-0 flex-1 text-left">
-                  <span class="block truncate font-semibold">{{ w.name }}</span>
-                  <span class="block truncate text-[12px] text-faint">{{ w.role }}</span>
-                </span>
-                <span class="shrink-0 tabular-nums text-[12px] text-frost">{{ live.since(w.since) }}</span>
-              </span>
-              <span class="mt-2 block truncate text-left text-[12.5px] text-mute" [title]="w.title">{{ w.title }}</span>
-              <!-- balão: o que está fazendo agora -->
-              <span class="bubble">
-                <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="min-w-0 truncate">{{ w.doing ?? 'Pensando…' }}</span>
-              </span>
-              <!-- para onde está indo: o plano que declarou -->
-              @if (w.plan.length) {
-                <span class="mt-2.5 block text-left">
-                  <span class="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
-                    Plano <span class="h-1 flex-1 overflow-hidden rounded-full bg-raise"><span class="block h-full rounded-full bg-yes transition-all" [style.width.%]="planDone(w) / w.plan.length * 100"></span></span>
-                    <span class="tabular-nums normal-case">{{ planDone(w) }}/{{ w.plan.length }}</span>
-                  </span>
-                  @for (p of w.plan.slice(0, 6); track p.id) {
-                    <span class="flex items-center gap-1.5 py-[1px] text-[12px]" [class]="p.status === 'completed' ? 'text-faint line-through decoration-faint/60' : p.status === 'in_progress' ? 'text-text' : 'text-mute'">
-                      @switch (p.status) {
-                        @case ('completed') { <app-icon name="check" [size]="11" class="shrink-0 text-yes" /> }
-                        @case ('in_progress') { <span class="size-2.5 shrink-0 animate-spin rounded-full border-[1.5px] border-frost border-t-transparent"></span> }
-                        @default { <span class="size-2.5 shrink-0 rounded-full border border-faint"></span> }
-                      }
-                      <span class="truncate">{{ p.title }}</span>
-                    </span>
-                  }
-                  @if (w.plan.length > 6) { <span class="block text-[11.5px] text-faint">+ {{ w.plan.length - 6 }} passos</span> }
-                </span>
-              } @else {
-                <span class="mt-2 block text-left text-[11.5px] text-faint">Sem plano declarado.</span>
-              }
-              <!-- estagiários (subagentes) -->
-              @if (w.subagents.length) {
-                <span class="mt-2.5 flex flex-wrap gap-1.5">
-                  @for (s of w.subagents; track s.id) {
-                    <span class="flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]" [title]="s.description + (s.step ? ' · ' + s.step : '')"
-                          [class]="s.finishedAt ? 'border-edge text-faint' : 'border-[#B48CFF]/50 bg-[#B48CFF]/10 text-[#C6A6FF]'">
-                      @if (s.finishedAt) { <app-icon name="check" [size]="10" class="text-yes" /> }
-                      @else { <span class="size-2 animate-spin rounded-full border-[1.5px] border-[#B48CFF] border-t-transparent"></span> }
-                      <span class="truncate">{{ s.description }}</span>
-                      <span class="tabular-nums opacity-70">{{ s.finishedAt ? since(s.startedAt, s.finishedAt) : live.since(s.startedAt) }}</span>
-                    </span>
-                  }
-                </span>
-              }
-            </button>
-          }
-        </div>
-      </section>
-    } @empty {
-      <div class="room grid place-items-center px-6 py-14 text-center 2xl:col-span-2">
-        <div>
-          <p class="font-display text-xl">Escritório em silêncio.</p>
-          <p class="mt-1 text-mute">Ninguém trabalhando agora. Peça ao gestor de um projeto para planejar, mande uma tarefa ou abra uma sessão.</p>
-        </div>
-      </div>
-    }
+  <!-- o andar -->
+  <div class="mt-6 overflow-hidden rounded-3xl border border-edge bg-[#0b0e14] px-2 pt-2 shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
+    <app-office-scene [people]="people()" [selected]="selected()" [milestones]="nowColors()" (pick)="pick($event)" (open)="openKey($event)" />
   </div>
 
-  <div class="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-    <!-- corredor: salas vazias com o marco de agora -->
-    <section class="room px-5 py-4" aria-labelledby="corredor">
-      <h2 id="corredor" class="font-display text-[15px] font-semibold">Corredor <span class="font-sans text-[12.5px] font-normal text-faint">salas sem ninguém agora</span></h2>
-      <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-        @for (p of quiet(); track p.slug) {
-          <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'rumo' }" class="door" [style.--room]="p.color">
-            <app-project-avatar [project]="p" [size]="22" />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-[13.5px] font-semibold">{{ p.name }}</span>
-              @if ((roadmap.nowBySlug().get(p.slug) ?? [])[0]; as m) {
-                <span class="block truncate text-[12px] text-mute"><app-icon name="flag" [size]="10" class="text-frost" /> {{ m.title }}@if (m.tasks) { · {{ m.tasksDone }}/{{ m.tasks }} }</span>
-              } @else {
-                <span class="block text-[12px] text-faint">Sem marco em Agora</span>
-              }
-            </span>
-          </a>
+  <div class="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+    <!-- mesas: o detalhe de quem está trabalhando -->
+    <section aria-labelledby="mesas">
+      <h2 id="mesas" class="mb-3 font-display text-[15px] font-semibold">Mesas</h2>
+      <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        @for (w of workers(); track w.key) {
+          <article [id]="'desk-' + w.key" class="rounded-2xl border bg-panel p-4 transition-colors"
+                   [class]="selected() === w.key ? 'border-frost/70 bg-frost/[0.05]' : 'border-edge'" (click)="selected.set(w.key)">
+            <div class="flex items-center gap-3">
+              @if (w.avatar) { <app-project-avatar [project]="w.avatar" [size]="34" /> }
+              @else { <span class="grid size-[34px] place-items-center rounded-xl bg-raise"><img [src]="w.img" alt="" class="size-5" /></span> }
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold">{{ w.name }}</p>
+                <p class="truncate text-[12px] text-faint">{{ roomLabel(w.room) }} · {{ w.role }}@if (projectName(w.slug); as pn) { · {{ pn }} }</p>
+              </div>
+              <span class="shrink-0 tabular-nums text-[12px] text-frost">{{ live.since(w.since) }}</span>
+              <button type="button" class="shrink-0 rounded-lg border border-edge px-2 py-1 text-[12px] text-mute hover:text-text" (click)="w.open(); $event.stopPropagation()">Entrar</button>
+            </div>
+            <p class="mt-2 truncate text-[12.5px] text-mute" [title]="w.title">{{ w.title }}</p>
+            <p class="mt-1.5 flex items-center gap-2 rounded-lg bg-night px-2.5 py-1.5 text-[12.5px]">
+              <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="min-w-0 truncate">{{ w.doing ?? 'Pensando…' }}</span>
+            </p>
+            @if (w.plan.length) {
+              <div class="mt-2.5">
+                <p class="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
+                  Plano <span class="h-1 flex-1 overflow-hidden rounded-full bg-raise"><span class="block h-full rounded-full bg-yes transition-all" [style.width.%]="planDone(w) / w.plan.length * 100"></span></span>
+                  <span class="tabular-nums normal-case">{{ planDone(w) }}/{{ w.plan.length }}</span>
+                </p>
+                @for (p of w.plan.slice(0, 6); track p.id) {
+                  <p class="flex items-center gap-1.5 py-[1px] text-[12px]" [class]="p.status === 'completed' ? 'text-faint line-through decoration-faint/60' : p.status === 'in_progress' ? 'text-text' : 'text-mute'">
+                    @switch (p.status) {
+                      @case ('completed') { <app-icon name="check" [size]="11" class="shrink-0 text-yes" /> }
+                      @case ('in_progress') { <span class="size-2.5 shrink-0 animate-spin rounded-full border-[1.5px] border-frost border-t-transparent"></span> }
+                      @default { <span class="size-2.5 shrink-0 rounded-full border border-faint"></span> }
+                    }
+                    <span class="truncate">{{ p.title }}</span>
+                  </p>
+                }
+                @if (w.plan.length > 6) { <p class="text-[11.5px] text-faint">+ {{ w.plan.length - 6 }} passos</p> }
+              </div>
+            } @else {
+              <p class="mt-2 text-[11.5px] text-faint">Sem plano declarado.</p>
+            }
+            @if (w.subagents.length) {
+              <div class="mt-2.5 flex flex-wrap gap-1.5">
+                @for (s of w.subagents; track s.id) {
+                  <span class="flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]" [title]="s.description + (s.step ? ' · ' + s.step : '')"
+                        [class]="s.finishedAt ? 'border-edge text-faint' : 'border-[#B48CFF]/50 bg-[#B48CFF]/10 text-[#C6A6FF]'">
+                    @if (s.finishedAt) { <app-icon name="check" [size]="10" class="text-yes" /> }
+                    @else { <span class="size-2 animate-spin rounded-full border-[1.5px] border-[#B48CFF] border-t-transparent"></span> }
+                    <span class="truncate">{{ s.description }}</span>
+                    <span class="tabular-nums opacity-70">{{ s.finishedAt ? since(s.startedAt, s.finishedAt) : live.since(s.startedAt) }}</span>
+                  </span>
+                }
+              </div>
+            }
+          </article>
+        } @empty {
+          <p class="rounded-2xl border border-edge bg-panel px-5 py-6 text-[13.5px] text-mute xl:col-span-2">
+            Todo mundo na copa. Peça ao gestor de um projeto para planejar, mande uma tarefa ou abra uma sessão, e veja alguém ir até a mesa.
+          </p>
         }
       </div>
     </section>
 
     <div class="space-y-5">
-      <!-- copa: agentes parados -->
-      <section class="room px-5 py-4" aria-labelledby="copa">
-        <h2 id="copa" class="flex items-center gap-2 font-display text-[15px] font-semibold"><app-icon name="coffee" [size]="16" class="text-later" />Copa</h2>
-        <div class="mt-3 flex flex-wrap gap-2">
-          @for (a of idle(); track a.id) {
-            <a routerLink="/agentes" [queryParams]="{ agente: a.id }" class="flex items-center gap-2 rounded-full border border-edge bg-night/60 py-1 pr-3 pl-1 text-[12.5px] text-mute opacity-80 hover:opacity-100" [title]="a.description ?? a.name">
-              <app-project-avatar [project]="a" [size]="22" />{{ a.name }}<span class="text-faint">z</span></a>
-          } @empty {
-            <p class="text-[13px] text-mute">Todo mundo trabalhando.</p>
+      <!-- mural do corredor: projetos sem ninguém agora, com o marco de Agora -->
+      <section class="room px-5 py-4" aria-labelledby="mural">
+        <h2 id="mural" class="font-display text-[15px] font-semibold">Mural do corredor <span class="font-sans text-[12.5px] font-normal text-faint">projetos sem ninguém agora</span></h2>
+        <div class="mt-3 grid grid-cols-1 gap-2">
+          @for (p of quiet(); track p.slug) {
+            <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'rumo' }" class="door" [style.--room]="p.color">
+              <app-project-avatar [project]="p" [size]="22" />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[13.5px] font-semibold">{{ p.name }}</span>
+                @if ((roadmap.nowBySlug().get(p.slug) ?? [])[0]; as m) {
+                  <span class="block truncate text-[12px] text-mute"><app-icon name="flag" [size]="10" class="text-frost" /> {{ m.title }}@if (m.tasks) { · {{ m.tasksDone }}/{{ m.tasks }} }</span>
+                } @else {
+                  <span class="block text-[12px] text-faint">Sem marco em Agora</span>
+                }
+              </span>
+            </a>
           }
         </div>
       </section>

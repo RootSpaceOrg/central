@@ -179,6 +179,17 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   (projetos parados e seu marco), Copa (agentes parados) e "Saíram há pouco" (execuções das últimas 3 h). Tudo do que já chega
   ao vivo, sem polling novo.
 
+## Feito (v0.15)
+
+- **Escritório em isométrico** (estilo hotel de pixel, arte própria em SVG, sem engine): salas por tipo de trabalho
+  (Gestão, Engenharia, Monitoração, Estúdio criativo, Negócios), copa e corredor. Cada sessão/execução senta numa mesa
+  (monitor aceso) com balão do que está fazendo e o progresso do plano; subagentes ficam em pé ao lado (estagiários).
+  Agentes parados ficam na copa e **andam pelo corredor** até a sala quando começam. Cabelo = cor do agente, camisa = cor
+  do projeto. Post-its no quadro da gestão = marcos em Agora. Abaixo: mesas com o detalhe, mural do corredor e saídas.
+- **Sala do agente**: escolhida no editor ou deduzida pelo papel (sentinela → monitoração, marketing → criativo, suporte →
+  negócios); a Central e o gestor ficam na gestão; sessões de projeto na engenharia.
+- fix: conversas abertas fora da tela (MCP, triagem) agora aparecem na lista enquanto rodam.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |
