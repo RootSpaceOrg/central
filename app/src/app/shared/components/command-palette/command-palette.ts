@@ -7,6 +7,7 @@ import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { IdeasService } from '../../services/ideas/ideas.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { TasksService } from '../../services/tasks/tasks.service';
+import { LayoutService } from '../../services/layout/layout.service';
 import { Icon, IconName } from '../../ui/icon';
 import { AvatarSource, ProjectAvatar } from '../../ui/project-avatar';
 
@@ -56,6 +57,7 @@ const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 })
 export class CommandPalette {
   private readonly router = inject(Router);
+  private readonly layout = inject(LayoutService);
   private readonly dialogs = inject(DialogsService);
   private readonly projects = inject(ProjectsService);
   private readonly agents = inject(AgentsService);
@@ -83,6 +85,8 @@ export class CommandPalette {
       { section: 'Ações', label: 'Nova rotina', icon: 'routine', run: go('/rotinas?nova=1') },
       { section: 'Ações', label: 'Importar pendências', icon: 'download', hint: 'memórias, roadmaps, PRs', run: () => { this.ideas.importPending(); this.router.navigateByUrl('/ideias'); } },
       { section: 'Ações', label: 'Sincronizar repositórios', icon: 'sync', run: () => this.projects.sync() },
+      { section: 'Ações', label: 'Abrir a Grade (sessões lado a lado)', icon: 'grid', run: go('/grade') },
+      { section: 'Ações', label: 'Modo foco na Grade', icon: 'focus', hint: 'F11', run: () => { this.router.navigateByUrl('/grade'); this.layout.setFocus(true); } },
       { section: 'Ações', label: 'Preferências', icon: 'settings', run: () => this.dialogs.settings.set(true) },
       { section: 'Ações', label: 'Atualizar a Central', icon: 'download', run: () => this.dialogs.update.set(true) },
       ...[

@@ -120,8 +120,8 @@
                   </span>
                 </a>
                 <div class="mt-3 flex flex-wrap items-center gap-2">
-                  <button type="button" class="btn btn-sm" (click)="session(p.slug, 'chat')"><app-icon name="central" [size]="14" />Claude</button>
-                  <button type="button" class="btn btn-sm btn-ghost" (click)="session(p.slug, 'shell')"><app-icon name="terminal" [size]="14" />Terminal</button>
+                  <button type="button" class="btn btn-sm" (click)="session(p.slug, 'chat')"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Claude</button>
+                  <button type="button" class="btn btn-sm btn-ghost" (click)="session(p.slug, 'shell')"><img src="file-icons/powershell.svg" alt="" class="size-3.5" />Terminal</button>
                   <span class="ml-auto flex gap-2 text-[12px]">
                     @if (p.activeRuns) { <span class="text-yes">{{ p.activeRuns }} agente{{ p.activeRuns > 1 ? 's' : '' }}</span> }
                     @if (p.openProposals) { <span class="text-later">{{ p.openProposals }} decis{{ p.openProposals > 1 ? 'ões' : 'ão' }}</span> }

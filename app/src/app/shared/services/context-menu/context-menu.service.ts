@@ -5,6 +5,8 @@ import { IconName } from '../../ui/icon';
 export interface MenuItem {
   label: string;
   icon?: IconName;
+  /** imagem no lugar do ícone (ex.: logo original do Claude ou do PowerShell) */
+  img?: string;
   run: () => void;
   danger?: boolean;
   disabled?: boolean;

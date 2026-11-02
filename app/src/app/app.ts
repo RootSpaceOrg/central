@@ -30,6 +30,7 @@ import { ContextMenuService, MenuEntry } from './shared/services/context-menu/co
 import { AgentsService } from './shared/services/agents/agents.service';
 import { Router } from '@angular/router';
 import { STATUS_LABEL } from './shared/services/projects/projects.model';
+import { LayoutService } from './shared/services/layout/layout.service';
 
 const GROUPS: { status: ProjectStatus; label: string }[] = [
   { status: 'active', label: 'Ativos' },
@@ -39,6 +40,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 
 @Component({
   selector: 'app-root',
+  host: { '(document:keydown.f11)': 'toggleFocus($event)' },
   imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette],
   templateUrl: './app.html',
 })
@@ -54,6 +56,7 @@ export class App {
   private readonly menu = inject(ContextMenuService);
   private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
+  protected readonly layout = inject(LayoutService);
 
   protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
     { path: '/', label: 'Início', icon: 'home', exact: true },
@@ -64,6 +67,7 @@ export class App {
     { path: '/agentes', label: 'Agentes', icon: 'agent' },
     { path: '/execucoes', label: 'Execuções', icon: 'activity' },
     { path: '/rotinas', label: 'Rotinas', icon: 'routine' },
+    { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
   ];
 
   /** número no ícone da navegação */
@@ -91,6 +95,13 @@ export class App {
     return this.runs.active().some(r => r.projectSlug === p.slug);
   }
 
+  /** F11: modo foco, a partir da Grade (em outra tela, leva para ela) */
+  protected toggleFocus(e: Event): void {
+    e.preventDefault();
+    if (!this.layout.focus() && !this.router.url.startsWith('/grade')) this.router.navigateByUrl('/grade');
+    this.layout.toggleFocus();
+  }
+
   /** mesma tecla do atalho: a paleta escuta Ctrl+K no documento */
   protected openPalette(): void {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
@@ -107,8 +118,8 @@ export class App {
       { label: 'Abrir', icon: 'terminal', run: () => go() },
       { label: 'Resumo', icon: 'summary', run: () => go('resumo') },
       { label: 'Backlog', icon: 'kanban', run: () => go('backlog') },
-      { label: 'Conversa com o Claude', icon: 'central', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'chat' } }) },
-      { label: 'Novo terminal', icon: 'terminal', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'shell' } }) },
+      { label: 'Conversa com o Claude', img: 'file-icons/claude.svg', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'chat' } }) },
+      { label: 'Novo terminal', img: 'file-icons/powershell.svg', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'shell' } }) },
       null,
       { label: 'Nova tarefa', icon: 'plus', run: () => this.dialogs.newTask({ projectSlug: p.slug }) },
       { label: 'Mandar para um agente', icon: 'play', run: () => this.dialogs.newRun({ projectSlug: p.slug }) },

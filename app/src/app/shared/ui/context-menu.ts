@@ -20,7 +20,7 @@ import { Icon } from './icon';
             <button type="button" role="menuitem" [disabled]="e.disabled" (click)="choose(e)" (mouseenter)="active.set(indexOf(e))"
                     class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] disabled:opacity-40"
                     [class]="e.danger ? 'text-no' : 'text-text'" [class.bg-edge]="active() === indexOf(e)">
-              <span class="grid w-4 place-items-center">@if (e.icon) { <app-icon [name]="e.icon" [size]="15" [class.text-mute]="!e.danger" /> }</span>
+              <span class="grid w-4 place-items-center">@if (e.img) { <img [src]="e.img" alt="" class="size-4" /> } @else if (e.icon) { <app-icon [name]="e.icon" [size]="15" [class.text-mute]="!e.danger" /> }</span>
               <span class="flex-1">{{ e.label }}</span>
               @if (e.hint) { <span class="text-[11.5px] text-faint">{{ e.hint }}</span> }
             </button>

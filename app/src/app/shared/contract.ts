@@ -497,6 +497,7 @@ export interface Prefs {
 /** invoke(canal, ...args) → Promise<retorno> */
 export interface Api {
   'app:info': () => AppInfoDto;
+  'window:fullscreen': (on: boolean) => void;
   'projects:list': () => ProjectDto[];
   'projects:create': (input: NewProjectInput) => ProjectDto;
   'projects:update': (slug: string, patch: ProjectPatch) => void;
@@ -517,7 +518,8 @@ export interface Api {
   'fs:read': (path: string) => FileDto;
   'fs:write': (path: string, content: string) => void;
   'pty:create': (input: NewTerminalInput) => number;
-  'sessions:list': (projectSlug: string) => SessionDto[];
+  /** null = de todos os projetos */
+  'sessions:list': (projectSlug: string | null) => SessionDto[];
   'sessions:create': (projectSlug: string, kind: SessionKind, chatId?: number | null) => SessionDto;
   'sessions:update': (id: number, patch: { title?: string; chat_id?: number }) => void;
   'sessions:close': (id: number) => void;

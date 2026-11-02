@@ -2,8 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 
-import { TerminalKind } from '../../../../shared/contract';
-import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
+import { TerminalKind } from '../../contract';
+import { errorMessage } from '../ipc/ipc.service';
 import { TerminalsApiService } from './terminals-api.service';
 
 export interface TerminalSession {
@@ -34,7 +34,8 @@ export class TerminalsService {
   private readonly starting = new Set<number>();
 
   readonly terms = signal<ReadonlyMap<number, TerminalSession>>(new Map());
-  readonly error = signal<string | null>(null);
+  /** por sessão: por que o terminal não abriu */
+  readonly errors = signal<ReadonlyMap<number, string>>(new Map());
 
   constructor() {
     this.api.onData(({ id, data }) => {
@@ -70,10 +71,10 @@ export class TerminalsService {
       this.set(sessionId, { pty, alive: true, term, fit, el });
       term.write(this.early.get(pty) ?? '');
       this.early.delete(pty);
-      this.error.set(null);
+      this.setError(sessionId, null);
     } catch (e) {
       term.dispose();
-      this.error.set(`Não abriu o terminal: ${errorMessage(e)}`);
+      this.setError(sessionId, `Não abriu o terminal: ${errorMessage(e)}`);
     } finally {
       this.starting.delete(sessionId);
     }
@@ -89,11 +90,34 @@ export class TerminalsService {
     this.terms.set(m);
   }
 
+  /**
+   * Um xterm só pode estar num lugar da tela. Cada painel que mostra a sessão (aba do projeto, painel da Grade)
+   * pede a vez; o último que pediu mostra, e quando ele some o anterior volta a mostrar.
+   */
+  private readonly claims = signal<ReadonlyMap<number, readonly symbol[]>>(new Map());
+
+  claim(sessionId: number, who: symbol): void {
+    const list = (this.claims().get(sessionId) ?? []).filter(x => x !== who);
+    this.claims.set(new Map(this.claims()).set(sessionId, [...list, who]));
+  }
+
+  release(sessionId: number, who: symbol): void {
+    this.claims.set(new Map(this.claims()).set(sessionId, (this.claims().get(sessionId) ?? []).filter(x => x !== who)));
+  }
+
+  owner(sessionId: number): symbol | undefined { return this.claims().get(sessionId)?.at(-1); }
+
   /** Ajusta o xterm ao tamanho da área e avisa o processo. */
   fit(t: TerminalSession): void {
     if (!t.el.isConnected || !t.el.clientWidth) return;
     t.fit.fit();
     if (t.alive) this.api.resize(t.pty, t.term.cols, t.term.rows);
+  }
+
+  private setError(sessionId: number, text: string | null): void {
+    const m = new Map(this.errors());
+    if (text) m.set(sessionId, text); else m.delete(sessionId);
+    this.errors.set(m);
   }
 
   private set(sessionId: number, t: TerminalSession): void { this.terms.set(new Map(this.terms()).set(sessionId, t)); }

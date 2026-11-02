@@ -18,5 +18,6 @@ export const routes: Routes = [
     title: 'Projeto',
     loadComponent: () => import('./modules/project/pages/project-page/project-page').then(m => m.ProjectPage),
   },
+  { path: 'grade', title: 'Grade', loadComponent: () => import('./modules/grid/pages/grid-page/grid-page').then(m => m.GridPage) },
   { path: '**', redirectTo: '' },
 ];

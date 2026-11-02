@@ -1,6 +1,6 @@
-<div class="grid h-screen grid-rows-[40px_1fr_26px]">
+<div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[1fr]' : 'grid-rows-[40px_1fr_26px]'">
   <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
-  <header class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
+  <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
     <span class="grid size-6 place-items-center rounded-lg bg-frost text-[13px] font-extrabold text-night font-display">C</span>
     <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
     <span class="flex-1"></span>
@@ -11,9 +11,10 @@
     <span class="flex-1"></span>
   </header>
 
-  <div class="grid min-h-0 grid-cols-[56px_252px_1fr]">
+  <!-- modo foco: só o conteúdo (a Grade) na tela cheia -->
+  <div class="grid min-h-0" [class]="layout.focus() ? 'grid-cols-[1fr]' : 'grid-cols-[56px_252px_1fr]'">
     <!-- barra de atividades -->
-    <nav class="flex flex-col items-center gap-1.5 border-r border-edge bg-night py-3" aria-label="Seções">
+    <nav [hidden]="layout.focus()" class="flex flex-col items-center gap-1.5 border-r border-edge bg-night py-3" aria-label="Seções">
       <!-- agente Central: sempre à mão, destacado -->
       <button type="button" (click)="chat.toggle()" [attr.aria-pressed]="chat.open()" aria-label="Agente Central (Ctrl+J)"
               class="nav-item group mb-2 !bg-frost/12 !text-frost hover:!bg-frost/20" [class.!bg-frost]="chat.open()" [class.!text-night]="chat.open()">
@@ -49,7 +50,7 @@
     </nav>
 
     <!-- projetos -->
-    <aside class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
+    <aside [hidden]="layout.focus()" class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
       <div class="flex items-center justify-between px-4 pt-4 pb-2">
         <h2 class="font-display text-[15px] font-semibold">Projetos</h2>
         <button type="button" class="btn btn-sm" (click)="dialogs.newProject()">
@@ -86,7 +87,7 @@
   </div>
 
   <!-- barra de status -->
-  <footer class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
+  <footer [hidden]="layout.focus()" class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
     <span class="flex items-center gap-1.5">
       @if (projects.syncing()) { <span class="pulse size-1.5 rounded-full bg-frost"></span> Sincronizando repositórios… }
       @else if (projects.lastSync(); as at) { {{ tick() >= 0 ? 'Sincronizado ' + (at | ago) : '' }} }

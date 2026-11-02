@@ -64,6 +64,7 @@ const emitRun = {
 // ---------- IPC ----------
 
 function registerIpc(): void {
+  handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
   handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion() }));
 
   handle('projects:list', () => listProjects());

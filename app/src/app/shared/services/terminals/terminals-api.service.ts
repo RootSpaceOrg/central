@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 
-import { NewTerminalInput } from '../../../../shared/contract';
-import { IpcService } from '../../../../shared/services/ipc/ipc.service';
+import { NewTerminalInput } from '../../contract';
+import { IpcService } from '../ipc/ipc.service';
 
 @Injectable({ providedIn: 'root' })
 export class TerminalsApiService {

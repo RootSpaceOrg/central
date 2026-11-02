@@ -13,7 +13,7 @@ import { Icon } from '../../../../shared/ui/icon';
 import { KanbanBoard } from '../../../../shared/components/kanban-board/kanban-board';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { SessionKind } from '../../../../shared/contract';
-import { SessionsService } from '../../services/sessions/sessions.service';
+import { SessionsService } from '../../../../shared/services/sessions/sessions.service';
 import { ProjectSessions } from './components/sessions/sessions';
 import { Summary } from './components/summary/summary';
 

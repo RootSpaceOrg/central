@@ -98,6 +98,16 @@ a sinais (CI, Sentry, issues), **automações** (rotinas de agentes) aparecem no
 - **Início novo**: sem a pergunta de energia. Esperando você (revisar → decidir → falhas), piloto automático (o que fez em cada
   projeto), projetos Evoluindo e Em suporte com atalho para abrir sessão, automações (rotinas e saúde).
 
+## Feito (v0.9)
+
+- **Grade** (ícone na barra lateral): sessões de qualquer projeto lado a lado. Cada painel divide à direita ou para baixo,
+  as divisórias redimensionam (duplo clique iguala) e o cabeçalho arrasta o painel: solte na borda de outro para encaixar
+  ao lado, no centro para trocar. Um terminal é o mesmo processo na aba do projeto e na Grade.
+- **Presets de janela**: cada grade tem nome e salva sozinha (modelos: um painel, duas colunas, principal + 2, 2 × 2,
+  três colunas; duplicar, renomear, excluir). "Levar para a Grade" no botão direito de uma aba do projeto.
+- **Modo foco** (F11 ou botão Foco): tela cheia só com a grade.
+- Ícones originais das ferramentas (Claude, PowerShell, CMD, Git Bash) nas abas, menus, painéis e no Início.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

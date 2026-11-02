@@ -4,7 +4,7 @@ import { all, get, run } from './db';
 
 const TITLES: Record<SessionKind, string> = { chat: 'Claude', claude: 'Claude Code', shell: 'PowerShell', cmd: 'CMD', bash: 'Git Bash' };
 
-export const listSessions = (slug: string) => all<SessionDto>('select * from sessions where project_slug = ? order by id', slug);
+export const listSessions = (slug: string | null) => all<SessionDto>('select * from sessions where (? is null or project_slug = ?) order by id', slug, slug);
 
 export function createSession(slug: string, kind: SessionKind, chatId: number | null): SessionDto {
   if (!TITLES[kind]) throw new Error('Tipo de sessão inválido.');
