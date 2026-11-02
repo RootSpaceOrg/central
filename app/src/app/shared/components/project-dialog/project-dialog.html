@@ -31,6 +31,7 @@
                      (input)="folder.set($any($event.target).value); folderEdited.set(true)">
               <button type="button" class="btn" (click)="pickFolder()"><app-icon name="folder" [size]="16" />Escolher</button>
             </div>
+            <p class="mt-1.5 text-[12.5px] text-faint">Sugerida pelo nome, mas pode ser outra (ou uma pasta que já existe). Renomear o projeto depois não mexe na pasta.</p>
             <p class="mt-1.5 text-[13px] text-mute">Se a pasta já existir, os repositórios dela entram no projeto.</p>
           </div>
 

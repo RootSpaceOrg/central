@@ -15,6 +15,7 @@
         <label class="block">
           <span class="mb-1.5 block font-semibold">Nome</span>
           <input class="field" [value]="name()" (input)="name.set($any($event.target).value)" required>
+          <span class="mt-1 block text-[12.5px] text-faint">Só o nome exibido: a pasta, os repositórios e as referências (tarefas, rumo, sessões, agentes) não mudam.</span>
         </label>
 
         <app-icon-picker [(kind)]="iconKind" [(value)]="iconValue" [(color)]="color" />
