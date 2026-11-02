@@ -2,7 +2,7 @@
 @let agent = avatar();
 <div #list class="min-h-0 flex-1 overflow-y-auto" [class]="compact() ? 'px-4 py-4' : 'px-6 py-6'" aria-live="polite"
      [style.font-size.px]="prefs.prefs().fontSize" (scroll)="onScroll()">
-  <div class="mx-auto space-y-[1.1em]" [style.max-width.px]="compact() ? null : prefs.maxWidth()">
+  <div #content class="mx-auto space-y-[1.1em]" [style.max-width.px]="compact() ? null : prefs.maxWidth()">
     @if (hidden()) {
       <button type="button" class="mx-auto block rounded-full border border-edge px-3 py-1 text-[12px] text-mute hover:border-faint hover:text-text" (click)="older()">
         Mostrar {{ hidden() }} mensagens anteriores</button>

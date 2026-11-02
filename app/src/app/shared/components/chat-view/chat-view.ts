@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 
 import { ChatService, ChatSession } from '../../services/chat/chat.service';
 import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
@@ -30,7 +30,7 @@ const drafts = new WeakMap<ChatSession, Map<string, string>>();
   templateUrl: './chat-view.html',
   host: { class: 'flex min-h-0 flex-col', '(keydown)': 'zoomKey($event)' },
 })
-export class ChatView {
+export class ChatView implements OnDestroy {
   private readonly service = inject(ChatService);
   private readonly projects = inject(ProjectsService);
   /** conversa de uma aba de sessão; sem ela, usa a conversa compartilhada (painel e tela Agentes) */
@@ -42,6 +42,12 @@ export class ChatView {
     return (slug ? this.projects.bySlug().get(slug) : null) ?? this.s().agent();
   });
   private readonly list = viewChild<ElementRef<HTMLElement>>('list');
+  private readonly content = viewChild<ElementRef<HTMLElement>>('content');
+  /**
+   * Grudado no fim: o conteúdo cresce depois de abrir (histórico chegando, markdown, itens fora da tela trocando a altura
+   * estimada pela real). Enquanto você não rolar para cima, toda mudança de altura leva de volta ao final, sem animação.
+   */
+  private readonly grow = new ResizeObserver(() => { if (this.atBottom) this.toBottom(); });
   private readonly input = viewChild<ElementRef<HTMLTextAreaElement>>('input');
 
   /** painel lateral: menos espaço */
@@ -62,7 +68,7 @@ export class ChatView {
   private readonly limit = signal(PAGE);
   protected readonly visible = computed(() => this.s().items().slice(-this.limit()));
   protected readonly hidden = computed(() => Math.max(0, this.s().items().length - this.limit()));
-  /** o usuário está no fim da conversa (só então mensagens novas puxam a rolagem) */
+  /** o usuário está no fim da conversa (só então o conteúdo novo puxa a rolagem) */
   private atBottom = true;
   private draftKey = '';
   protected readonly expanded = signal<Set<number>>(new Set());
@@ -101,14 +107,15 @@ export class ChatView {
         // também no campo: se a troca vier no meio da digitação, o valor ligado ainda não foi atualizado na tela
         const el = this.input()?.nativeElement;
         if (el) el.value = draft;
-        requestAnimationFrame(() => { this.toBottom('auto'); this.input()?.nativeElement.focus(); });
+        requestAnimationFrame(() => { this.toBottom(); this.input()?.nativeElement.focus(); });
       });
     });
-    // mensagem nova: acompanha só se o usuário já estava no fim
+    effect(() => { const el = this.content()?.nativeElement; if (el) this.grow.observe(el); });
+    // mensagem nova ou status mudou: acompanha só se o usuário já estava no fim
     effect(() => {
       this.s().messages();
       this.s().currentBusy();
-      untracked(() => { if (this.atBottom) requestAnimationFrame(() => this.toBottom('smooth')); });
+      untracked(() => { if (this.atBottom) requestAnimationFrame(() => this.toBottom()); });
     });
     effect(() => {
       // o rascunho abre o painel lateral: só ele consome (a tela Agentes tem outro ChatView)
@@ -163,9 +170,10 @@ export class ChatView {
     this.atBottom = true;
   }
 
-  private toBottom(behavior: ScrollBehavior): void {
+  /** Direto ao fim (sem animação: a rolagem suave gerava eventos no meio do caminho que soltavam o "grudado no fim"). */
+  private toBottom(): void {
     const el = this.list()?.nativeElement;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+    if (el) el.scrollTop = el.scrollHeight;
   }
 
   protected onScroll(): void {
@@ -206,6 +214,8 @@ export class ChatView {
     this.copied.set(id);
     setTimeout(() => this.copied.set(null), 1500);
   }
+
+  ngOnDestroy(): void { this.grow.disconnect(); }
 
   protected time(d: Date): string { return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
 }
