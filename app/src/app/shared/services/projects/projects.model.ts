@@ -22,6 +22,9 @@ export interface Project {
   lastCommitRepo: string | null;
   openProposals: number;
   activeRuns: number;
+  /** subprojeto (frente) de um projeto-grupo */
+  parentSlug: string | null;
+  position: number;
 }
 
 export interface Repo {
@@ -39,6 +42,7 @@ export interface Repo {
 }
 
 export interface NewProject {
+  parentSlug?: string | null;
   name: string;
   folder: string;
   status: ProjectStatus;
@@ -54,6 +58,7 @@ export interface ProjectEdit {
   iconKind?: ProjectIconKind;
   iconValue?: string | null;
   folder?: string;
+  parentSlug?: string | null;
 }
 
 export const STATUS_LABEL: Record<ProjectStatus, string> = {

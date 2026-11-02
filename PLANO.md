@@ -147,6 +147,16 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   só quando se ligam; grade de cartões nos níveis só de pastas.
 - MCP: `get_direction`, `update_direction`, `plan_backlog`; ideias com status e `create_task` com `idea_id`.
 
+## Feito (v0.12)
+
+- **Subprojetos (frentes)**: um projeto vira grupo (ex.: MatrizTech › Livros e Plataforma; frontend/backend). Cada frente tem pasta,
+  repositórios, rumo, backlog e sessões próprios e recebe também o rumo do grupo; repositório numa subpasta fica com a frente.
+  "Criar subprojeto" no botão direito, "+ frente" no cabeçalho, "Faz parte de" ao editar.
+- **Barra lateral reordenável** (arrastar), grupos recolhíveis com as frentes aninhadas.
+- **Conversas leves**: só as últimas 60 mensagens são desenhadas (mais ao rolar para cima, sem pular), itens fora da tela não são
+  pintados, mensagens ficam em cache por conversa (trocar de aba não recarrega), rascunho por conversa.
+- **Preferências → Chat das sessões**: tamanho do texto (11–18 px, Ctrl +/−/0) e largura (estreita → toda a área).
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

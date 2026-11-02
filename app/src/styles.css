@@ -101,7 +101,7 @@
 .md a { color: var(--color-frost); text-decoration: underline; text-underline-offset: 2px; }
 .md code { font-family: var(--font-mono); font-size: .86em; background: var(--color-night); border: 1px solid var(--color-edge); border-radius: 6px; padding: .08em .35em; color: var(--color-frost); }
 .md pre { background: var(--color-night); border: 1px solid var(--color-edge); border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
-.md pre code { background: none; border: 0; padding: 0; color: var(--color-text); font-size: 12.5px; line-height: 1.55; }
+.md pre code { background: none; border: 0; padding: 0; color: var(--color-text); font-size: .9em; line-height: 1.55; }
 .md blockquote { border-left: 3px solid var(--color-edge); padding-left: 12px; color: var(--color-mute); }
 .md hr { border: 0; border-top: 1px solid var(--color-edge); }
 
@@ -142,3 +142,6 @@
     linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
   background-size: auto, auto, 28px 28px, 28px 28px;
 }
+
+/* conversas: item fora da tela não é desenhado (o tamanho guardado evita a barra de rolagem pular) */
+.chat-item { content-visibility: auto; contain-intrinsic-size: auto 90px; }

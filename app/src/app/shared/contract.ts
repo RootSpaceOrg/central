@@ -37,6 +37,10 @@ export interface ProjectDto {
   last_commit_repo: string | null;
   open_proposals: number;
   active_runs: number;
+  /** subprojeto (frente) de um projeto-grupo; null = projeto de primeiro nível */
+  parent_slug: string | null;
+  /** ordem na barra lateral (entre irmãos) */
+  position: number;
 }
 
 export interface NewProjectInput {
@@ -45,6 +49,8 @@ export interface NewProjectInput {
   status: ProjectStatus;
   color: string;
   description: string | null;
+  /** cria como subprojeto (frente) deste projeto */
+  parent_slug?: string | null;
 }
 
 export interface ProjectPatch {
@@ -56,6 +62,8 @@ export interface ProjectPatch {
   icon_value?: string | null;
   /** caminho absoluto; os repositórios são redescobertos */
   folder?: string;
+  /** colocar dentro de um projeto-grupo (null = tirar do grupo) */
+  parent_slug?: string | null;
 }
 
 export interface RepoDto {
@@ -590,6 +598,8 @@ export interface Api {
   'projects:list': () => ProjectDto[];
   'projects:create': (input: NewProjectInput) => ProjectDto;
   'projects:update': (slug: string, patch: ProjectPatch) => void;
+  /** nova ordem de um grupo de irmãos na barra lateral */
+  'projects:reorder': (slugs: string[]) => void;
   'projects:sync': (slug: string | null) => void;
   /** remove da Central (pasta e repositórios ficam no disco) */
   'projects:delete': (slug: string) => void;

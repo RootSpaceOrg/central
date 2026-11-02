@@ -10,6 +10,7 @@ export class ProjectsApiService {
   list() { return this.ipc.invoke('projects:list'); }
   create(input: NewProjectInput) { return this.ipc.invoke('projects:create', input); }
   update(slug: string, patch: ProjectPatch) { return this.ipc.invoke('projects:update', slug, patch); }
+  reorder(slugs: string[]) { return this.ipc.invoke('projects:reorder', slugs); }
   sync(slug: string | null) { return this.ipc.invoke('projects:sync', slug); }
   remove(slug: string) { return this.ipc.invoke('projects:delete', slug); }
   pickImage() { return this.ipc.invoke('dialog:image'); }

@@ -19,7 +19,7 @@ export function listProjects(): ProjectDto[] {
       (select count(*) from proposals x where x.project_slug = p.slug and x.status = 'proposed') open_proposals,
       (select count(*) from runs x where x.project_slug = p.slug and x.status in ('queued','preparing','running')) active_runs
     from projects p
-    order by case p.status when 'active' then 0 when 'maintenance' then 1 when 'frozen' then 2 else 3 end, p.name`);
+    order by case p.status when 'active' then 0 when 'maintenance' then 1 when 'frozen' then 2 else 3 end, p.position, p.name`);
 
   const since14 = new Date(Date.now() - 13 * DAY).toISOString().slice(0, 10);
   const daily = all<{ slug: string; day: string; n: number }>(`
@@ -71,10 +71,29 @@ export function createProject(input: NewProjectInput): ProjectDto {
   let slug = slugify(name) || 'projeto';
   for (let i = 2; get('select 1 from projects where slug = ?', slug); i++) slug = `${slugify(name)}-${i}`;
 
+  const parent = input.parent_slug ? checkParent(slug, input.parent_slug) : null;
   mkdirSync(folder, { recursive: true });
-  run('insert into projects (slug, name, folder, status, color, description) values (?,?,?,?,?,?)',
-    slug, name, folder, input.status, input.color, input.description?.trim() || null);
+  const position = (get<{ p: number | null }>('select max(position) p from projects')?.p ?? 0) + 1;
+  run('insert into projects (slug, name, folder, status, color, description, parent_slug, position) values (?,?,?,?,?,?,?,?)',
+    slug, name, folder, input.status, input.color, input.description?.trim() || null, parent, position);
   return listProjects().find(p => p.slug === slug)!;
+}
+
+/** Um nível só: o grupo não pode ser subprojeto, e um projeto com frentes não vira frente de outro. */
+function checkParent(slug: string, parent: string): string {
+  if (parent === slug) throw new Error('Um projeto não pode ser subprojeto dele mesmo.');
+  const p = get<{ parent_slug: string | null }>('select parent_slug from projects where slug = ?', parent);
+  if (!p) throw new Error('Projeto-grupo não encontrado.');
+  if (p.parent_slug) throw new Error('Esse projeto já é um subprojeto: escolha o projeto de cima.');
+  if (get('select 1 from projects where parent_slug = ?', slug)) throw new Error('Este projeto tem subprojetos: ele é um grupo e não pode ficar dentro de outro.');
+  return parent;
+}
+
+/** Nova ordem de irmãos na barra lateral. */
+export function reorderProjects(slugs: string[]): void {
+  run('begin');
+  try { slugs.forEach((s, i) => run('update projects set position = ? where slug = ?', i, s)); run('commit'); }
+  catch (e) { run('rollback'); throw e; }
 }
 
 const ICON_KINDS = ['letter', 'emoji', 'lucide', 'image'];
@@ -94,9 +113,10 @@ export function updateProject(slug: string, patch: ProjectPatch): void {
     patch.folder = resolve(patch.folder.trim());
     if (get('select 1 from projects where folder = ? and slug <> ?', patch.folder, slug)) throw new Error('Essa pasta já é de outro projeto.');
   }
+  if (patch.parent_slug) checkParent(slug, patch.parent_slug);
   const fields = Object.entries(patch)
     // campo ausente chega como undefined pelo IPC: não mexe nele (senão vira null e quebra colunas NOT NULL, ex.: folder)
-    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder'].includes(k))
+    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'parent_slug'].includes(k))
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,
     ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | number | null), slug);
@@ -109,6 +129,8 @@ export function deleteProject(slug: string): void {
   }
   run('update ideas set project_slug = null where project_slug = ?', slug);
   run('update proposals set project_slug = null where project_slug = ?', slug);
+  // subprojetos ficam soltos (viram projetos de primeiro nível)
+  run('update projects set parent_slug = null where parent_slug = ?', slug);
   run('delete from projects where slug = ?', slug);
 }
 
@@ -148,8 +170,12 @@ async function syncNow(slug: string | null): Promise<void> {
     ...(slug ? [slug] : []));
 
   const work: { slug: string; path: string }[] = [];
+  // pasta dentro da pasta de outro projeto (subprojeto numa subpasta): o repositório é do projeto mais específico
+  const folders = all<{ slug: string; folder: string }>('select slug, folder from projects');
+  const under = (path: string, folder: string) => path.toLowerCase().startsWith(`${folder.toLowerCase().replace(/[\\/]+$/, '')}\\`);
   for (const p of projects) {
-    const paths = findRepos(p.folder);
+    const inner = folders.filter(o => o.slug !== p.slug && o.folder.length > p.folder.length && under(o.folder, p.folder));
+    const paths = findRepos(p.folder).filter(path => !inner.some(o => path === o.folder || under(path, o.folder)));
     run(`delete from repos where project_slug = ? and path not in (${paths.map(() => '?').join(',') || "''"})`, p.slug, ...paths);
     work.push(...paths.map(path => ({ slug: p.slug, path })));
   }

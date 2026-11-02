@@ -4,7 +4,7 @@ import { STATUS_LABEL } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { EntitySelect, SelectOption } from '../../ui/entity-select';
 
-/** Escolher projeto vendo o ícone de cada um. noneLabel liga a opção "sem projeto". */
+/** Escolher projeto vendo o ícone de cada um. noneLabel liga a opção "sem projeto". Frentes aparecem como "Grupo › Frente". */
 @Component({
   selector: 'app-project-select',
   imports: [EntitySelect],
@@ -19,9 +19,13 @@ export class ProjectSelect {
   readonly compact = input(false);
   readonly placeholder = input('Escolher projeto…');
   readonly includeDead = input(false);
+  /** tirar um projeto da lista (ex.: ele mesmo, ao escolher o grupo dele) */
+  readonly exclude = input<string | null>(null);
+  /** só projetos de primeiro nível (grupos possíveis) */
+  readonly onlyTop = input(false);
 
   protected readonly options = computed<SelectOption[]>(() =>
-    (this.includeDead() ? this.projects.projects() : this.projects.living()).map(p => ({
-      value: p.slug, label: p.name, avatar: p, hint: p.status === 'active' ? null : STATUS_LABEL[p.status],
-    })));
+    (this.includeDead() ? this.projects.projects() : this.projects.living())
+      .filter(p => p.slug !== this.exclude() && (!this.onlyTop() || !p.parentSlug))
+      .map(p => ({ value: p.slug, label: this.projects.fullName(p), avatar: p, hint: p.status === 'active' ? null : STATUS_LABEL[p.status] })));
 }

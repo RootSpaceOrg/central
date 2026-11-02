@@ -7,6 +7,7 @@ import { PrefsApiService } from '../../services/prefs/prefs-api.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { UpdateService } from '../../services/update/update.service';
 import { Icon } from '../../ui/icon';
+import { CHAT_WIDTHS, ChatPrefsService, FONT_MAX, FONT_MIN } from '../../services/chat-prefs/chat-prefs.service';
 
 const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
   { key: 'tray', title: 'Continuar rodando na bandeja', hint: 'Fechar a janela esconde a Central perto do relógio. Rotinas, turnos e agentes seguem trabalhando.' },
@@ -42,6 +43,31 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
         }
         @if (error()) { <li role="alert" class="text-[13px] text-no">{{ error() }}</li> }
       </ul>
+      <section class="mx-8 mb-6 rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-chat">
+        <div class="flex items-baseline justify-between">
+          <h3 id="st-chat" class="font-semibold">Chat das sessões</h3>
+          <button type="button" class="text-[12px] text-faint hover:text-text" (click)="chat.reset()">Padrão</button>
+        </div>
+        <p class="text-[13px] text-mute">Vale para todas as conversas (sessões, Grade e painel da Central). Dentro de uma conversa: Ctrl + / Ctrl − / Ctrl 0.</p>
+        <label class="mt-4 flex items-center gap-3 text-[13px]">
+          <span class="w-28 shrink-0">Tamanho do texto</span>
+          <input type="range" class="flex-1 accent-[var(--color-frost)]" [min]="fontMin" [max]="fontMax" step="1" [value]="chat.prefs().fontSize"
+                 (input)="chat.set({ fontSize: +$any($event.target).value })" aria-label="Tamanho do texto do chat" />
+          <span class="w-12 text-right tabular-nums text-mute">{{ chat.prefs().fontSize }} px</span>
+        </label>
+        <div class="mt-3 flex items-center gap-3 text-[13px]">
+          <span class="w-28 shrink-0">Largura</span>
+          <div class="flex flex-1 rounded-lg border border-edge p-0.5" role="radiogroup" aria-label="Largura da conversa">
+            @for (w of widths; track w.id) {
+              <button type="button" role="radio" [attr.aria-checked]="chat.prefs().width === w.id" (click)="chat.set({ width: w.id })"
+                      class="flex-1 rounded-md py-1 text-[12.5px]" [class]="chat.prefs().width === w.id ? 'bg-raise font-semibold text-text' : 'text-mute hover:text-text'">{{ w.label }}</button>
+            }
+          </div>
+        </div>
+        <div class="mt-4 rounded-xl bg-night px-4 py-3" [style.font-size.px]="chat.prefs().fontSize" aria-hidden="true">
+          <p class="leading-relaxed">Assim fica uma resposta: <b>texto</b>, listas e <code class="rounded bg-raise px-1 font-mono text-[0.86em] text-frost">código</code> acompanham o tamanho.</p>
+        </div>
+      </section>
       <footer class="flex items-center gap-2 border-t border-edge px-8 py-4">
         <span class="font-mono text-[11.5px] text-faint">Projetos em {{ projects.devRoot() }}</span>
         <span class="flex-1"></span>
@@ -57,6 +83,10 @@ export class SettingsDialog {
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
   protected readonly options = OPTIONS;
+  protected readonly chat = inject(ChatPrefsService);
+  protected readonly widths = CHAT_WIDTHS;
+  protected readonly fontMin = FONT_MIN;
+  protected readonly fontMax = FONT_MAX;
   protected readonly prefs = signal<Prefs | null>(null);
   protected readonly error = signal<string | null>(null);
 

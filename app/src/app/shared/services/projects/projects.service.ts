@@ -25,6 +25,8 @@ const toProject = (d: ProjectDto): Project => ({
   lastCommitRepo: d.last_commit_repo,
   openProposals: d.open_proposals,
   activeRuns: d.active_runs,
+  parentSlug: d.parent_slug ?? null,
+  position: d.position ?? 0,
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -91,10 +93,26 @@ export class ProjectsService {
 
   async create(p: NewProject): Promise<Project> {
     const dto = await this.api.create({
-      name: p.name, folder: p.folder, status: p.status, color: p.color, description: p.description || null,
+      name: p.name, folder: p.folder, status: p.status, color: p.color, description: p.description || null, parent_slug: p.parentSlug ?? null,
     });
     this.load();
     return toProject(dto);
+  }
+
+  /** subprojetos (frentes) de um projeto-grupo, na ordem da barra lateral */
+  children(slug: string): Project[] { return this.projects().filter(p => p.parentSlug === slug).sort((a, b) => a.position - b.position); }
+
+  /** "MatrizTech › Livros" para subprojetos */
+  fullName(p: Project): string {
+    const parent = p.parentSlug ? this.bySlug().get(p.parentSlug) : null;
+    return parent ? `${parent.name} › ${p.name}` : p.name;
+  }
+
+  /** Nova ordem de irmãos (barra lateral): aplica na hora e salva. */
+  reorder(slugs: string[]): void {
+    const pos = new Map(slugs.map((s, i) => [s, i]));
+    this.projects.update(list => list.map(p => (pos.has(p.slug) ? { ...p, position: pos.get(p.slug)! } : p)));
+    this.api.reorder(slugs).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   setStatus(slug: string, status: ProjectStatus): void {
@@ -112,7 +130,7 @@ export class ProjectsService {
     try {
       await this.api.update(slug, {
         name: e.name, status: e.status, color: e.color, description: e.description,
-        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder,
+        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder, parent_slug: e.parentSlug,
       });
     } catch (err) {
       throw new Error(errorMessage(err));

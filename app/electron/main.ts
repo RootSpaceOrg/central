@@ -22,7 +22,7 @@ import { directionHistory, getDirection, planBacklog, setDirection } from './dir
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
-import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
+import { createProject, deleteProject, listProjects, listRepos, recent, reorderProjects, syncProjects, updateProject } from './projects';
 import {
   cloneRepo, createTerminal, githubRepos, killAllTerminals, killTerminal, listDir, readFile, resizeTerminal, writeFile, writeTerminal,
 } from './workspace';
@@ -100,6 +100,7 @@ function registerIpc(): void {
     return `data:image/png;base64,${small.toString('base64')}`;
   });
   handle('projects:sync', slug => { syncProjects(slug, changed); });
+  handle('projects:reorder', slugs => { reorderProjects(slugs); changed(); });
   handle('repos:list', slug => listRepos(slug));
   handle('commits:recent', (slug, days, limit) => recent(slug, days, limit));
 

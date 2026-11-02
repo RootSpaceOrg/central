@@ -4,6 +4,10 @@
       <button type="button" class="mt-1 rounded-2xl transition hover:scale-105 hover:ring-2 hover:ring-edge" (click)="dialogs.editProject.set(p.slug)"
               title="Editar projeto" aria-label="Editar projeto"><app-project-avatar [project]="p" [size]="46" /></button>
       <div class="min-w-[280px] flex-1">
+        @if (p.parentSlug && projects.bySlug().get(p.parentSlug); as g) {
+          <a [routerLink]="['/projetos', g.slug]" class="flex w-fit items-center gap-1.5 text-[12.5px] font-semibold text-mute hover:text-text">
+            <app-project-avatar [project]="g" [size]="16" />{{ g.name }} <span class="text-faint">›</span></a>
+        }
         <h1 class="truncate font-display text-[28px] font-bold leading-tight tracking-tight">{{ p.name }}</h1>
         <div class="mt-2 flex flex-wrap items-center gap-3">
         <div class="flex w-fit gap-0.5 rounded-full border border-edge bg-panel p-0.5" role="radiogroup" aria-label="Status do projeto">
@@ -16,6 +20,18 @@
         </div>
         </div>
       </div>
+      @if (!p.parentSlug) {
+        <!-- frentes do grupo (subprojetos) -->
+        <div class="flex basis-full flex-wrap items-center gap-1.5 text-[12.5px]">
+          @for (c of projects.children(p.slug); track c.slug) {
+            <a [routerLink]="['/projetos', c.slug]" class="flex items-center gap-1.5 rounded-full border border-edge py-0.5 pr-2.5 pl-0.5 hover:border-faint hover:bg-raise">
+              <app-project-avatar [project]="c" [size]="18" />{{ c.name }}</a>
+          }
+          <button type="button" class="rounded-full border border-dashed border-edge px-2.5 py-0.5 text-faint hover:border-faint hover:text-text"
+                  (click)="dialogs.newProject(p.slug)" title="Subprojeto com rumo, backlog e repositórios próprios (ex.: frontend/backend, livros/plataforma)">
+            + {{ projects.children(p.slug).length ? 'frente' : 'Dividir em frentes' }}</button>
+        </div>
+      }
       <div class="flex shrink-0 flex-wrap justify-end gap-2">
         <button type="button" class="btn btn-sm" (click)="projects.sync(p.slug)" [disabled]="projects.syncing()">
           <app-icon name="sync" [size]="14" [class.animate-spin]="projects.syncing()" />Sincronizar</button>

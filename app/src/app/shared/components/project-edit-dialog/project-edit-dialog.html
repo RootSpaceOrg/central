@@ -36,6 +36,16 @@
                     [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
         </label>
 
+        @if (!projects.children(p.slug).length) {
+          <div>
+            <span class="mb-1.5 block font-semibold">Faz parte de</span>
+            <app-project-select [value]="parentSlug()" (valueChange)="parentSlug.set($event)" [exclude]="p.slug" [onlyTop]="true" noneLabel="Nenhum (projeto de primeiro nível)" />
+            <p class="mt-1.5 text-[12.5px] text-mute">Subprojeto (frente) de um grupo: tem rumo, backlog e repositórios próprios e segue também o rumo do grupo.</p>
+          </div>
+        } @else {
+          <p class="text-[13px] text-mute">Grupo com {{ projects.children(p.slug).length }} frente(s): {{ childNames() }}.</p>
+        }
+
         <div>
           <span class="mb-1.5 block font-semibold">Pasta</span>
           <div class="flex gap-2">

@@ -4,10 +4,11 @@
     <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-5">
       <div>
         <h2 id="pd-title" class="font-display text-2xl font-semibold">
-          @if (cloneTarget(); as t) { Clonar em {{ t.name }} } @else { Adicionar projeto }
+          @if (cloneTarget(); as t) { Clonar em {{ t.name }} } @else if (parent(); as g) { Nova frente em {{ g.name }} } @else { Adicionar projeto }
         </h2>
         <p class="mt-1 text-mute">
           @if (cloneTarget(); as t) { Os repositórios vão para {{ t.folder }}. }
+          @else if (parent(); as g) { Um subprojeto com pasta, repositórios, rumo e backlog próprios, dentro do grupo {{ g.name }} (ex.: frontend e backend, livros e plataforma). }
           @else { Uma pasta em Development com todos os repositórios do projeto dentro. }
         </p>
       </div>

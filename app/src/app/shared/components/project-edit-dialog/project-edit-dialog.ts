@@ -7,10 +7,11 @@ import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
 import { ProjectAvatar } from '../../ui/project-avatar';
 import { IconPicker } from '../pickers/icon-picker';
+import { ProjectSelect } from '../pickers/project-select';
 
 @Component({
   selector: 'app-project-edit-dialog',
-  imports: [Icon, ProjectAvatar, IconPicker],
+  imports: [Icon, ProjectAvatar, IconPicker, ProjectSelect],
   templateUrl: './project-edit-dialog.html',
 })
 export class ProjectEditDialog {
@@ -34,6 +35,8 @@ export class ProjectEditDialog {
   protected readonly iconKind = signal<ProjectIconKind>('letter');
   protected readonly iconValue = signal<string | null>(null);
   protected readonly folder = signal('');
+  protected readonly parentSlug = signal('');
+  protected readonly childNames = computed(() => this.projects.children(this.project()?.slug ?? '').map(c => c.name).join(', '));
   protected readonly confirmDelete = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -50,7 +53,7 @@ export class ProjectEditDialog {
       if (!el) return;
       if (p && !el.open) {
         this.name.set(p.name); this.description.set(p.description ?? ''); this.status.set(p.status); this.color.set(p.color);
-        this.iconKind.set(p.iconKind); this.iconValue.set(p.iconValue); this.folder.set(p.folder);
+        this.iconKind.set(p.iconKind); this.iconValue.set(p.iconValue); this.folder.set(p.folder); this.parentSlug.set(p.parentSlug ?? '');
         this.confirmDelete.set(false); this.error.set(null); this.busy.set(false);
         el.showModal();
       }
@@ -75,6 +78,7 @@ export class ProjectEditDialog {
       await this.projects.edit(p.slug, {
         name: this.name(), description: this.description().trim() || null, status: this.status(), color: this.color(),
         iconKind: this.iconKind(), iconValue: this.iconValue(), folder: this.folder() !== p.folder ? this.folder() : undefined,
+        parentSlug: (this.parentSlug() || null) !== p.parentSlug ? this.parentSlug() || null : undefined,
       });
       this.close();
     } catch (err) {

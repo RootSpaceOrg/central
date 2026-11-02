@@ -61,9 +61,26 @@
       <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         @for (g of groups(); track g.status) {
           <h3 class="px-2 pt-4 pb-1 text-[12px] font-semibold text-faint">{{ g.label }}</h3>
-          @for (p of g.items; track p.slug) {
-            <ng-container *ngTemplateOutlet="item; context: { $implicit: p }" />
-          }
+          <!-- arraste para reordenar; subprojetos ficam dentro do grupo e reordenam entre si -->
+          <div cdkDropList [cdkDropListData]="g.items" (cdkDropListDropped)="drop($event)" cdkDropListLockAxis="y">
+            @for (p of g.items; track p.slug) {
+              @let kids = projects.children(p.slug);
+              <div cdkDrag [cdkDragData]="p" class="rounded-lg">
+                <ng-container *ngTemplateOutlet="item; context: { $implicit: p, kids: kids.length }" />
+                @if (kids.length && !collapsed().has(p.slug)) {
+                  <div cdkDropList [cdkDropListData]="kids" (cdkDropListDropped)="drop($event)" cdkDropListLockAxis="y" class="ml-[19px] border-l border-edge pl-1.5">
+                    @for (c of kids; track c.slug) {
+                      <div cdkDrag [cdkDragData]="c" class="rounded-lg">
+                        <ng-container *ngTemplateOutlet="item; context: { $implicit: c, kids: 0 }" />
+                        <div *cdkDragPlaceholder class="h-[30px] rounded-lg border border-dashed border-frost/40 bg-frost/5"></div>
+                      </div>
+                    }
+                  </div>
+                }
+                <div *cdkDragPlaceholder class="h-[30px] rounded-lg border border-dashed border-frost/40 bg-frost/5"></div>
+              </div>
+            }
+          </div>
         }
 
         @if (projects.dead().length) {
@@ -115,12 +132,18 @@
   </footer>
 </div>
 
-<ng-template #item let-p>
+<ng-template #item let-p let-kids="kids">
   <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text" (contextmenu)="projectMenu($event, p)"
-     class="group flex items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
+     class="group relative flex items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
      [class.opacity-60]="p.status === 'dead'">
     <app-project-avatar [project]="p" [size]="20" class="transition-transform duration-150 group-hover:scale-110" />
     <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+    @if (kids) {
+      <button type="button" (click)="toggleGroup($event, p.slug)" [attr.aria-expanded]="!collapsed().has(p.slug)"
+              [attr.aria-label]="(collapsed().has(p.slug) ? 'Mostrar' : 'Esconder') + ' subprojetos de ' + p.name"
+              class="grid size-5 place-items-center rounded text-faint hover:bg-edge hover:text-text">
+        <app-icon name="chevron" [size]="12" class="transition-transform" [class.rotate-90]="!collapsed().has(p.slug)" /></button>
+    }
     @if (runningIn(p)) { <span class="pulse size-1.5 rounded-full bg-yes" title="Agente trabalhando"></span> }
     @if (p.openProposals) {
       <span class="rounded-full bg-later/15 px-1.5 text-[11px] font-semibold text-later" title="Decisões esperando">{{ p.openProposals }}</span>

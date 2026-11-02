@@ -29,7 +29,13 @@ export function setDirection(slug: string, text: string, author: string, note: s
 /** Bloco do rumo para os prompts dos agentes do projeto. */
 export function directionBlock(slug: string): string {
   const d = getDirection(slug);
-  return d ? `## Rumo do projeto (o Gustavo define; siga-o)\n${d.text}` : '';
+  const parent = get<{ parent_slug: string | null }>('select parent_slug from projects where slug = ?', slug)?.parent_slug;
+  const g = parent ? getDirection(parent) : null;
+  const pname = parent ? get<{ name: string }>('select name from projects where slug = ?', parent)?.name : null;
+  return [
+    g ? `## Rumo do grupo ${pname} (este projeto é uma frente dele)\n${g.text}` : '',
+    d ? `## Rumo do projeto (o Gustavo define; siga-o)\n${d.text}` : '',
+  ].filter(Boolean).join('\n\n');
 }
 
 const PLAN_MARK = '[gestor:planejar]';

@@ -1,19 +1,26 @@
 @let chat = s();
 @let agent = avatar();
-<div #list class="min-h-0 flex-1 overflow-y-auto" [class]="compact() ? 'px-5 py-5' : 'px-8 py-7'" aria-live="polite">
-  <div class="mx-auto space-y-4" [class.max-w-3xl]="!compact()">
-    @for (item of chat.items(); track item.kind === 'steps' ? 's' + item.id : item.message.id) {
+<div #list class="min-h-0 flex-1 overflow-y-auto" [class]="compact() ? 'px-4 py-4' : 'px-6 py-6'" aria-live="polite"
+     [style.font-size.px]="prefs.prefs().fontSize" (scroll)="onScroll()">
+  <div class="mx-auto space-y-[1.1em]" [style.max-width.px]="compact() ? null : prefs.maxWidth()">
+    @if (hidden()) {
+      <button type="button" class="mx-auto block rounded-full border border-edge px-3 py-1 text-[12px] text-mute hover:border-faint hover:text-text" (click)="older()">
+        Mostrar {{ hidden() }} mensagens anteriores</button>
+    }
+    @for (item of visible(); track item.kind === 'steps' ? 's' + item.id : item.message.id) {
+      <!-- fora da tela o navegador nem desenha (content-visibility): conversas longas continuam leves -->
+      <div class="chat-item">
       @if (item.kind === 'steps') {
         <div class="pl-10">
           <button type="button" (click)="toggleSteps(item.id)" [attr.aria-expanded]="expanded().has(item.id)"
-                  class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[12.5px] text-mute transition-colors hover:bg-raise hover:text-text">
+                  class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.88em] text-mute transition-colors hover:bg-raise hover:text-text">
             <app-icon name="chevron" [size]="13" class="transition-transform" [class.rotate-90]="expanded().has(item.id)" />
             <app-icon name="check" [size]="13" class="text-yes" />
             {{ item.steps.length === 1 ? item.steps[0].text : item.steps.length + ' passos' }}
           </button>
           @if (expanded().has(item.id) && item.steps.length > 1) {
             <ul class="mt-1 ml-3 space-y-1 border-l border-edge pl-4">
-              @for (s of item.steps; track s.id) { <li class="text-[12.5px] text-mute">{{ s.text }}</li> }
+              @for (s of item.steps; track s.id) { <li class="text-[0.88em] text-mute">{{ s.text }}</li> }
             </ul>
           }
         </div>
@@ -30,7 +37,7 @@
               @if (agent) { <app-project-avatar [project]="agent" [size]="28" class="mt-0.5" /> }
               <div class="min-w-0 flex-1">
                 <div class="md selectable" [innerHTML]="m.text | markdown"></div>
-                <div class="mt-1 flex items-center gap-3 text-[11.5px] text-faint opacity-0 transition-opacity group-hover:opacity-100">
+                <div class="mt-1 flex items-center gap-3 text-[0.8em] text-faint opacity-0 transition-opacity group-hover:opacity-100">
                   <span>{{ time(m.at) }}</span>
                   <button type="button" class="hover:text-text" (click)="copy(m.id, m.text)">{{ copied() === m.id ? 'Copiado' : 'Copiar' }}</button>
                 </div>
@@ -38,10 +45,11 @@
             </div>
           }
           @case ('error') {
-            <p class="ml-10 rounded-xl bg-no/10 px-3 py-2 text-[13px] text-no">{{ m.text }}</p>
+            <p class="ml-10 rounded-xl bg-no/10 px-3 py-2 text-[0.92em] text-no">{{ m.text }}</p>
           }
         }
       }
+      </div>
     } @empty {
       @if (agent) {
         <div class="pt-4" [class.text-center]="!compact()">
@@ -70,13 +78,13 @@
   </div>
 </div>
 
-<form class="border-t border-edge" [class]="compact() ? 'p-3' : 'px-8 py-4'" (submit)="$event.preventDefault(); send()">
-  <div class="mx-auto" [class.max-w-3xl]="!compact()">
+<form class="border-t border-edge" [class]="compact() ? 'p-3' : 'px-6 py-3'" (submit)="$event.preventDefault(); send()">
+  <div class="mx-auto" [style.max-width.px]="compact() ? null : prefs.maxWidth()" [style.font-size.px]="prefs.prefs().fontSize">
     @if (chat.error()) { <p role="alert" class="mb-2 px-1 text-[13px] text-no">{{ chat.error() }}</p> }
     <div class="flex items-end gap-2 rounded-2xl border border-edge bg-night p-2 transition-colors focus-within:border-frost">
       <textarea #input rows="1" class="max-h-48 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 outline-none placeholder:text-faint"
                 [placeholder]="agent ? 'Mensagem para ' + agent.name + '…' : 'Mensagem…'" aria-label="Mensagem" [value]="text()"
-                (input)="text.set($any($event.target).value)" (keydown)="onKey($event)" style="field-sizing: content"></textarea>
+                (input)="setText($any($event.target).value)" (keydown)="onKey($event)" style="field-sizing: content"></textarea>
       @if (chat.currentBusy()) {
         <button type="button" class="grid size-9 place-items-center rounded-xl bg-raise text-no transition hover:bg-no/15" (click)="chat.stop()" aria-label="Interromper">
           <app-icon name="stop" [size]="17" /></button>

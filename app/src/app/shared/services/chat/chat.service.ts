@@ -48,15 +48,26 @@ export class ChatSession {
     protected readonly api: ChatApiService,
     protected readonly agents: AgentsService,
     readonly busy: WritableSignal<Set<number>>,
+    /** mensagens já carregadas, por conversa (compartilhado): trocar de aba não busca de novo */
+    protected readonly cache: Map<number, ChatMessage[]>,
     /** conversa de sessão de projeto: trabalha na pasta e edita código */
     readonly projectSlug: string | null = null,
   ) {}
 
   select(chatId: number | null): void {
     this.current.set(chatId);
-    this.messages.set([]);
     this.error.set(null);
-    if (chatId) this.api.messages(chatId).then(list => { if (this.current() === chatId) this.messages.set(list.map(toMessage)); });
+    const cached = chatId ? this.cache.get(chatId) : null;
+    this.messages.set(cached ?? []);
+    if (chatId && !cached) this.fetch(chatId);
+  }
+
+  private fetch(chatId: number): void {
+    this.api.messages(chatId).then(list => {
+      const msgs = list.map(toMessage);
+      this.cache.set(chatId, msgs);
+      if (this.current() === chatId) this.messages.set(msgs);
+    });
   }
 
   newChat(agentId = this.agent()?.id ?? null): void {
@@ -64,9 +75,10 @@ export class ChatSession {
     this.select(null);
   }
 
-  /** Mensagem que chegou pelo evento do processo principal. */
-  receive(chatId: number, message: ChatMessageDto): void {
-    if (chatId === this.current() && !this.messages().some(m => m.id === message.id)) this.messages.update(list => [...list, toMessage(message)]);
+  /** Mensagem nova chegou (o serviço já pôs no cache): a conversa aberta mostra. */
+  receive(chatId: number): void {
+    const cached = this.cache.get(chatId);
+    if (chatId === this.current() && cached) this.messages.set(cached);
   }
 
   async send(text: string): Promise<void> {
@@ -78,7 +90,7 @@ export class ChatSession {
       if (this.current() !== id) {
         this.current.set(id);
         this.onCreated(id);
-        this.api.messages(id).then(list => { if (this.current() === id) this.messages.set(list.map(toMessage)); });
+        this.fetch(id);
       }
       this.reload();
     } catch (e) {
@@ -108,11 +120,16 @@ export class ChatService extends ChatSession {
   projectChats(slug: string) { return this.chats().filter(c => c.projectSlug === slug); }
 
   constructor() {
-    super(inject(ChatApiService), inject(AgentsService), signal(new Set<number>()));
+    super(inject(ChatApiService), inject(AgentsService), signal(new Set<number>()), new Map());
     this.reload = () => this.loadChats();
     this.api.onEvent(({ chat_id, message, busy }) => {
       this.busy.update(s => { const n = new Set(s); if (busy) n.add(chat_id); else n.delete(chat_id); return n; });
-      if (message) for (const s of this.live) s.receive(chat_id, message);
+      // uma vez no cache (novo array: quem mostra percebe a mudança), depois cada conversa aberta atualiza
+      const cached = this.cache.get(chat_id);
+      if (message && cached && !cached.some(m => m.id === message.id)) {
+        this.cache.set(chat_id, [...cached, toMessage(message)]);
+        for (const s of this.live) s.receive(chat_id);
+      }
       if (!busy) this.loadChats();
     });
     this.loadChats();
@@ -120,7 +137,7 @@ export class ChatService extends ChatSession {
 
   /** Conversa independente (aba de sessão do projeto). Chame release() quando a aba fechar. */
   spawn(projectSlug: string): ChatSession {
-    const s = new ChatSession(this.api, this.agents, this.busy, projectSlug);
+    const s = new ChatSession(this.api, this.agents, this.busy, this.cache, projectSlug);
     s.reload = () => this.loadChats();
     this.live.add(s);
     return s;
@@ -173,6 +190,7 @@ export class ChatService extends ChatSession {
 
   async remove(chatId: number): Promise<void> {
     await this.api.remove(chatId);
+    this.cache.delete(chatId);
     if (this.current() === chatId) this.select(null);
     this.loadChats();
   }

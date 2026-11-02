@@ -1,6 +1,7 @@
-import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 
 import { ChatService, ChatSession } from '../../services/chat/chat.service';
+import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
 import { MarkdownPipe } from '../../ui/markdown';
@@ -13,12 +14,18 @@ const CENTRAL_SUGGESTIONS = [
   'Quais projetos estão parados há mais de duas semanas?',
 ];
 
+/** quantos itens a conversa desenha de cada vez (o resto entra ao rolar para cima) */
+const PAGE = 60;
+
+/** Rascunho de cada conversa (por sessão e conversa): trocar de aba não leva o texto junto, voltar traz de volta. */
+const drafts = new WeakMap<ChatSession, Map<string, string>>();
+
 /** Conversa com o agente atual do ChatService: mensagens, passos recolhíveis e caixa de mensagem. */
 @Component({
   selector: 'app-chat-view',
   imports: [Icon, MarkdownPipe, ProjectAvatar],
   templateUrl: './chat-view.html',
-  host: { class: 'flex min-h-0 flex-col' },
+  host: { class: 'flex min-h-0 flex-col', '(keydown)': 'zoomKey($event)' },
 })
 export class ChatView {
   private readonly service = inject(ChatService);
@@ -37,7 +44,15 @@ export class ChatView {
   /** painel lateral: menos espaço */
   readonly compact = input(false);
 
+  protected readonly prefs = inject(ChatPrefsService);
   protected readonly text = signal('');
+  /** janela: só os últimos itens são desenhados; rolar até o topo traz mais */
+  private readonly limit = signal(PAGE);
+  protected readonly visible = computed(() => this.s().items().slice(-this.limit()));
+  protected readonly hidden = computed(() => Math.max(0, this.s().items().length - this.limit()));
+  /** o usuário está no fim da conversa (só então mensagens novas puxam a rolagem) */
+  private atBottom = true;
+  private draftKey = '';
   protected readonly expanded = signal<Set<number>>(new Set());
   protected readonly copied = signal<number | null>(null);
 
@@ -60,22 +75,34 @@ export class ChatView {
   });
 
   constructor() {
+    // trocou de conversa: janela volta ao tamanho inicial, vai direto ao fim (sem animar a conversa toda) e traz o rascunho dela
+    effect(() => {
+      const s = this.s();
+      const key = String(s.current() ?? 'new');
+      s.agentId();
+      untracked(() => {
+        this.limit.set(PAGE);
+        this.atBottom = true;
+        this.draftKey = key;
+        const draft = drafts.get(s)?.get(key) ?? '';
+        this.text.set(draft);
+        // também no campo: se a troca vier no meio da digitação, o valor ligado ainda não foi atualizado na tela
+        const el = this.input()?.nativeElement;
+        if (el) el.value = draft;
+        requestAnimationFrame(() => { this.toBottom('auto'); this.input()?.nativeElement.focus(); });
+      });
+    });
+    // mensagem nova: acompanha só se o usuário já estava no fim
     effect(() => {
       this.s().messages();
       this.s().currentBusy();
-      const el = this.list()?.nativeElement;
-      if (el) queueMicrotask(() => el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }));
-    });
-    effect(() => {
-      this.s().current();
-      this.s().agentId();
-      queueMicrotask(() => this.input()?.nativeElement.focus());
+      untracked(() => { if (this.atBottom) requestAnimationFrame(() => this.toBottom('smooth')); });
     });
     effect(() => {
       // o rascunho abre o painel lateral: só ele consome (a tela Agentes tem outro ChatView)
       const draft = this.service.draft();
       if (draft === null || !this.compact()) return;
-      this.text.set(draft);
+      this.setText(draft);
       this.service.draft.set(null);
       queueMicrotask(() => { const el = this.input()?.nativeElement; el?.focus(); el?.setSelectionRange(draft.length, draft.length); });
     });
@@ -83,10 +110,48 @@ export class ChatView {
 
   focus(): void { this.input()?.nativeElement.focus(); }
 
+  protected setText(value: string): void {
+    this.text.set(value);
+    const s = this.s();
+    if (!drafts.has(s)) drafts.set(s, new Map());
+    drafts.get(s)!.set(this.draftKey, value);
+  }
+
   protected send(text = this.text()): void {
     if (!text.trim() || this.s().currentBusy()) return;
     this.s().send(text.trim());
-    this.text.set('');
+    this.setText('');
+    this.atBottom = true;
+  }
+
+  private toBottom(behavior: ScrollBehavior): void {
+    const el = this.list()?.nativeElement;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+  }
+
+  protected onScroll(): void {
+    const el = this.list()?.nativeElement;
+    if (!el) return;
+    this.atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el.scrollTop < 150 && this.hidden()) this.older();
+  }
+
+  /** Mais itens acima, mantendo o que está na tela no mesmo lugar. */
+  protected older(): void {
+    const el = this.list()?.nativeElement;
+    const before = el ? el.scrollHeight - el.scrollTop : 0;
+    this.limit.update(n => n + PAGE);
+    requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - before; });
+  }
+
+  /** Ctrl + / Ctrl - / Ctrl 0: tamanho do texto das conversas (vale para todas; também em Preferências). */
+  protected zoomKey(e: KeyboardEvent): void {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === '=' || e.key === '+') this.prefs.bump(1);
+    else if (e.key === '-') this.prefs.bump(-1);
+    else if (e.key === '0') this.prefs.set({ fontSize: 13 });
+    else return;
+    e.preventDefault();
   }
 
   protected onKey(e: KeyboardEvent): void {

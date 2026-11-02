@@ -1,4 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
@@ -42,7 +43,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 @Component({
   selector: 'app-root',
   host: { '(document:keydown.f11)': 'toggleFocus($event)' },
-  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog],
+  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog],
   templateUrl: './app.html',
 })
 export class App {
@@ -81,8 +82,32 @@ export class App {
     return null;
   }
 
-  protected readonly groups = computed(() =>
-    GROUPS.map(g => ({ ...g, items: this.projects.projects().filter(p => p.status === g.status) })).filter(g => g.items.length));
+  /** primeiro nível por status (subprojetos aparecem dentro do grupo deles), na ordem que você arrastou */
+  protected readonly groups = computed(() => {
+    const has = this.projects.bySlug();
+    return GROUPS.map(g => ({
+      ...g,
+      items: this.projects.projects().filter(p => p.status === g.status && !(p.parentSlug && has.has(p.parentSlug))).sort((a, b) => a.position - b.position),
+    })).filter(g => g.items.length);
+  });
+  /** grupos recolhidos na barra lateral (fica salvo neste computador) */
+  protected readonly collapsed = signal<ReadonlySet<string>>(new Set(JSON.parse(localStorage.getItem('sidebar:collapsed') ?? '[]')));
+
+  protected toggleGroup(e: Event, slug: string): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = new Set(this.collapsed());
+    if (next.has(slug)) next.delete(slug); else next.add(slug);
+    this.collapsed.set(next);
+    localStorage.setItem('sidebar:collapsed', JSON.stringify([...next]));
+  }
+
+  protected drop(e: CdkDragDrop<Project[]>): void {
+    if (e.previousIndex === e.currentIndex) return;
+    const list = [...e.container.data];
+    moveItemInArray(list, e.previousIndex, e.currentIndex);
+    this.projects.reorder(list.map(p => p.slug));
+  }
   protected readonly showDead = signal(false);
   /** reavalia o "há X min" da barra de status */
   protected readonly tick = signal(0);
@@ -123,6 +148,8 @@ export class App {
       { label: 'Conversa com o Claude', img: 'file-icons/claude.svg', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'chat' } }) },
       { label: 'Novo terminal', img: 'file-icons/powershell.svg', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'shell' } }) },
       null,
+      ...(!p.parentSlug ? [{ label: 'Criar subprojeto (frente)…', icon: 'folder' as const, run: () => this.dialogs.newProject(p.slug) }] : []),
+      ...(p.parentSlug ? [{ label: 'Tirar do grupo', icon: 'unarchive' as const, run: () => this.projects.edit(p.slug, { parentSlug: null }) }] : []),
       { label: 'Nova tarefa', icon: 'plus', run: () => this.dialogs.newTask({ projectSlug: p.slug }) },
       { label: 'Mandar para um agente', icon: 'play', run: () => this.dialogs.newRun({ projectSlug: p.slug }) },
       { label: agent ? `Conversar com ${agent.name}` : 'Criar agente para o projeto', icon: 'central',
