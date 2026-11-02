@@ -95,7 +95,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   const model = chosen.model || agent.model;
   if (model) args.push('--model', model);
   if (chosen.effort) args.push('--effort', chosen.effort);
-  const mcp = mcpConfigPath();
+  const mcp = mcpConfigPath({ kind: 'chat', id });
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
   if (chat?.session_id) args.push('--resume', chat.session_id);
 

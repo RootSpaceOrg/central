@@ -4,17 +4,33 @@
  * Formato confirmado: o subagente é um tool_use "Agent"; as mensagens dele trazem parent_tool_use_id = id dessa chamada;
  * ele termina quando chega o tool_result com esse id (sem pai).
  */
-import type { ActivityDto, SubagentDto } from '../src/app/shared/contract';
+import type { ActivityDto, Phase, SubagentDto } from '../src/app/shared/contract';
 
 const SUBAGENT = new Set(['Agent', 'Task']);
 const INTERNAL = new Set(['ToolSearch']);
 /** ferramentas do plano: viram a lista "para onde está indo", não passos */
 const PLAN = new Set(['TaskCreate', 'TaskUpdate', 'TodoWrite', 'TaskList', 'TaskGet']);
 
+/** Fase pela ferramenta usada (quando o agente não declarou): editar = construindo, ler = investigando, testes = testando… */
+export function phaseOf(name: string, input: any): Phase | null {
+  if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(name)) return 'construindo';
+  if (/^(Read|Grep|Glob|LS|WebFetch|WebSearch)$/.test(name) || /^mcp__central__(code_|memory_|get_|list_)/.test(name)) return 'investigando';
+  if (PLAN.has(name) || /^mcp__central__(create_task|update_task|plan_backlog|create_milestone|update_milestone|create_idea)/.test(name)) return 'planejando';
+  if (SUBAGENT.has(name)) return 'delegando';
+  if (name === 'Bash') {
+    const cmd = String(input?.command ?? '');
+    if (/\b(git (commit|push)|gh pr (create|merge))\b/.test(cmd)) return 'entregando';
+    if (/\b(test|vitest|jest|pytest|tsc|lint|eslint|\.check\.mjs|npm run (check|build)|ng build|dotnet test)\b/.test(cmd)) return 'testando';
+    if (/\bgit (diff|log|status|show)\b/.test(cmd)) return 'revisando';
+    return 'construindo';
+  }
+  return null;
+}
+
 const secs = (ms: number) => (ms < 60_000 ? `${Math.round(ms / 1000)}s` : `${Math.floor(ms / 60_000)}min${Math.round((ms % 60_000) / 1000)}s`);
 
 export class ActivityTracker {
-  readonly activity: ActivityDto = { started_at: new Date().toISOString(), step: null, subagents: [], plan: [] };
+  readonly activity: ActivityDto = { started_at: new Date().toISOString(), step: null, subagents: [], plan: [], phase: null, status: null };
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -38,6 +54,7 @@ export class ActivityTracker {
     if (msg.type === 'assistant') {
       for (const b of msg.message?.content ?? []) {
         if (b.type !== 'tool_use' || INTERNAL.has(b.name)) continue;
+        if (!parent) { const ph = phaseOf(b.name, b.input); if (ph && ph !== this.activity.phase) { this.activity.phase = ph; changed = true; } }
         if (PLAN.has(b.name)) { if (!parent && this.plan(b.name, b.input)) changed = true; continue; }
         const sub = parent ? this.activity.subagents.find(s => s.id === parent) : null;
         if (sub) { sub.step = this.describe(b.name, b.input); sub.steps++; changed = true; }
@@ -49,7 +66,7 @@ export class ActivityTracker {
           changed = true;
         } else if (!parent) { this.activity.step = this.describe(b.name, b.input); changed = true; }
       }
-      if (!parent && (msg.message?.content ?? []).some((b: any) => b.type === 'text')) { this.activity.step = 'Escrevendo a resposta'; changed = true; }
+      if (!parent && (msg.message?.content ?? []).some((b: any) => b.type === 'text')) { this.activity.step = 'Escrevendo a resposta'; this.activity.phase = 'escrevendo'; changed = true; }
     } else if (msg.type === 'user' && !parent) {
       for (const b of msg.message?.content ?? []) {
         if (b.type !== 'tool_result') continue;
@@ -92,6 +109,13 @@ export class ActivityTracker {
     return false;
   }
 
+  /** O agente disse o que está fazendo (set_status). */
+  declare(phase: Phase, doing: string, task: { id: number; title: string } | null): void {
+    this.activity.status = { phase, doing: doing.trim().slice(0, 140), task_id: task?.id ?? null, task_title: task?.title ?? null, at: new Date().toISOString() };
+    this.activity.phase = phase;
+    this.emit();
+  }
+
   private emit(): void {
     if (this.timer) return;
     this.timer = setTimeout(() => { this.timer = null; this.onChange(this.activity); }, 300);
@@ -105,6 +129,7 @@ export type { SubagentDto };
 
 type Scope = 'chat' | 'run';
 const live = new Map<string, ActivityDto & { scope: Scope; ref: number }>();
+const trackers = new Map<string, ActivityTracker>();
 let notify: (scope: Scope, ref: number, a: ActivityDto | null) => void = () => {};
 
 /** O main liga o aviso para a tela. */
@@ -115,12 +140,25 @@ export const listActivity = () => [...live.values()];
 
 /** Começa a acompanhar uma conversa ou execução. */
 export function track(scope: Scope, ref: number, describe: (name: string, input: unknown) => string, onSubagentDone: (text: string) => void): ActivityTracker {
-  return new ActivityTracker(describe, a => { live.set(`${scope}:${ref}`, { ...a, scope, ref, subagents: a.subagents.map(s => ({ ...s })), plan: a.plan.map(p => ({ ...p })) }); notify(scope, ref, live.get(`${scope}:${ref}`)!); },
-    onSubagentDone);
+  const t = new ActivityTracker(describe, a => {
+    live.set(`${scope}:${ref}`, { ...a, scope, ref, subagents: a.subagents.map(s => ({ ...s })), plan: a.plan.map(p => ({ ...p })), status: a.status ? { ...a.status } : null });
+    notify(scope, ref, live.get(`${scope}:${ref}`)!);
+  }, onSubagentDone);
+  trackers.set(`${scope}:${ref}`, t);
+  return t;
+}
+
+/** set_status do MCP: false se a sessão não está rodando. */
+export function setStatus(scope: Scope, ref: number, phase: Phase, doing: string, task: { id: number; title: string } | null): boolean {
+  const t = trackers.get(`${scope}:${ref}`);
+  if (!t) return false;
+  t.declare(phase, doing, task);
+  return true;
 }
 
 export function untrack(scope: Scope, ref: number, t: ActivityTracker | null): void {
   t?.stop();
+  trackers.delete(`${scope}:${ref}`);
   live.delete(`${scope}:${ref}`);
   notify(scope, ref, null);
 }

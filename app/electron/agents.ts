@@ -226,7 +226,7 @@ async function execute(id: number, emit: Emit): Promise<void> {
     if (ctx) frame += `\n\n${ctx}`;
   }
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-budget-usd', String(r.budget_usd)];
-  const mcp = mcpConfigPath();
+  const mcp = mcpConfigPath({ kind: 'run', id });
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
   // agente: papel, ferramentas extras (ex.: mcp__sentry) e modelo dele
   const extra = agent ? agentTools(agent) : [];
@@ -290,7 +290,8 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
 - O que depende de uma decisão do Gustavo: crie uma decisão (create_decision) com o próximo passo sugerido.
 - Não exclua nada pela Central.
 - Comece declarando seu plano na lista de tarefas (TaskCreate, 3 a 6 passos) e marque cada um (TaskUpdate) ao avançar:
-  é assim que o Gustavo vê para onde você está indo.`;
+  é assim que o Gustavo vê para onde você está indo.
+- Ao começar cada etapa, chame set_status (fase + o que, curto${task ? `, task_id ${task.id}` : ''}): é o quadro que o Gustavo olha.`;
 
   if (where.kind === 'workspace') {
     return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dir = mkdtempSync(join(root, '.act-check-'));
 await build({ entryPoints: [join(root, 'electron/activity.ts')], outfile: join(dir, 'a.js'), bundle: true, platform: 'node', format: 'cjs', logLevel: 'error' });
-const { ActivityTracker } = createRequire(import.meta.url)(join(dir, 'a.js'));
+const { ActivityTracker, phaseOf } = createRequire(import.meta.url)(join(dir, 'a.js'));
 rmSync(dir, { recursive: true, force: true });
 
 const ok = (c, m) => { if (!c) throw new Error(m); };
@@ -53,3 +53,25 @@ await new Promise(r => setTimeout(r, 350));
 ok(last.plan.length === 2 && last.plan[0].status === 'completed', 'TodoWrite antigo');
 t.stop();
 console.log('ok');
+
+// fase deduzida da ferramenta e status declarado (set_status)
+ok(phaseOf('Edit', {}) === 'construindo', 'Edit = construindo');
+ok(phaseOf('Read', {}) === 'investigando', 'Read = investigando');
+ok(phaseOf('Bash', { command: 'npx vitest run' }) === 'testando', 'vitest = testando');
+ok(phaseOf('Bash', { command: 'git commit -m x' }) === 'entregando', 'commit = entregando');
+ok(phaseOf('Bash', { command: 'git diff' }) === 'revisando', 'diff = revisando');
+ok(phaseOf('TaskCreate', {}) === 'planejando', 'plano = planejando');
+ok(phaseOf('Agent', {}) === 'delegando', 'subagente = delegando');
+ok(phaseOf('mcp__central__code_search', {}) === 'investigando', 'busca no código = investigando');
+ok(phaseOf('Whatever', {}) === null, 'desconhecida não muda a fase');
+{
+  let a = null;
+  const t2 = new ActivityTracker(n => n, x => { a = x; }, () => {});
+  t2.handle(as(null, [{ type: 'tool_use', id: 'e1', name: 'Edit', input: {} }]));
+  ok(t2.activity.phase === 'construindo', 'tracker guarda a fase');
+  t2.declare('testando', '  suíte do roadmap  ', { id: 12, title: 'Exportar roadmap' });
+  ok(t2.activity.status.doing === 'suíte do roadmap' && t2.activity.status.task_id === 12 && t2.activity.status.task_title === 'Exportar roadmap', 'status declarado');
+  ok(t2.activity.phase === 'testando', 'declarar muda a fase');
+  t2.stop(); void a;
+}
+console.log('fases ok');

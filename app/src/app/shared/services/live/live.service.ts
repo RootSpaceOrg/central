@@ -1,22 +1,47 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 
-import { LiveActivityDto } from '../../contract';
+import { LiveActivityDto, Phase } from '../../contract';
+
+export type { Phase };
 import { IpcService } from '../ipc/ipc.service';
 import { TerminalsService } from '../terminals/terminals.service';
 
 export interface Subagent { id: string; type: string; description: string; startedAt: number; finishedAt: number | null; step: string | null; steps: number }
 export interface PlanItem { id: string; title: string; active: string | null; status: 'pending' | 'in_progress' | 'completed' }
-export interface LiveActivity { scope: 'chat' | 'run'; ref: number; startedAt: number; step: string | null; subagents: Subagent[]; plan: PlanItem[] }
+/** o que o agente disse que está fazendo (set_status) */
+export interface AgentStatus { phase: Phase; doing: string; taskId: number | null; taskTitle: string | null; at: number }
+export interface LiveActivity {
+  scope: 'chat' | 'run'; ref: number; startedAt: number; step: string | null; subagents: Subagent[]; plan: PlanItem[];
+  /** etapa: declarada ou deduzida da ferramenta */
+  phase: Phase | null;
+  status: AgentStatus | null;
+}
+
+/** Etapas no quadro: verbo e cor. */
+export const PHASES: Record<Phase, { label: string; color: string }> = {
+  planejando: { label: 'Planejando', color: '#E8C46A' },
+  investigando: { label: 'Investigando', color: '#7FA2FF' },
+  construindo: { label: 'Construindo', color: '#7ED69A' },
+  testando: { label: 'Testando', color: '#5FD3B5' },
+  revisando: { label: 'Revisando', color: '#C6A6FF' },
+  entregando: { label: 'Entregando', color: '#FF9F6E' },
+  escrevendo: { label: 'Escrevendo', color: '#D9D4C7' },
+  esperando: { label: 'Esperando', color: '#9aa3b5' },
+  delegando: { label: 'Delegando', color: '#B48CFF' },
+};
 
 const toModel = (d: LiveActivityDto): LiveActivity => ({
   scope: d.scope, ref: d.ref, startedAt: Date.parse(d.started_at), step: d.step,
   subagents: d.subagents.map(s => ({ id: s.id, type: s.type, description: s.description, startedAt: Date.parse(s.started_at),
     finishedAt: s.finished_at ? Date.parse(s.finished_at) : null, step: s.step, steps: s.steps })),
   plan: (d.plan ?? []).map(p => ({ ...p })),
+  phase: d.phase ?? null,
+  status: d.status ? { phase: d.status.phase, doing: d.status.doing, taskId: d.status.task_id, taskTitle: d.status.task_title, at: Date.parse(d.status.at) } : null,
 });
 
 /** O que está fazendo agora: o passo do plano em andamento (o agente declarou) ou o último passo visto. */
 export function doing(a: LiveActivity): string | null {
+  if (a.status) return a.status.doing;
   const cur = a.plan.find(p => p.status === 'in_progress');
   return cur ? cur.active ?? cur.title : a.step;
 }

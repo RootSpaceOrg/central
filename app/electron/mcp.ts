@@ -7,7 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { app } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -19,7 +19,9 @@ import {
   createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   updateIdea, updateTask,
 } from './backlog';
-import { setMcpConfigPath } from './mcp-config';
+import { get } from './db';
+import { mcpConfigBody, setMcpConfig } from './mcp-config';
+import { setStatus } from './activity';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
@@ -45,7 +47,7 @@ const column = z.enum(['backlog', 'todo', 'doing', 'review', 'done']);
 const permission = z.enum(['edits', 'full']).describe('edits = seguro (repo: edita e roda git/npm; projeto: só lê). full = sem restrição');
 const size = z.enum(['small', 'medium', 'large']).describe('tamanho do trabalho; limita o consumo da cota');
 
-function build(h: Hooks): McpServer {
+function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): McpServer {
   const s = new McpServer({ name: 'central', version: app.getVersion() }, { instructions: INSTRUCTIONS });
   const tool = <T extends z.ZodRawShape>(name: string, description: string, shape: T, fn: (a: z.infer<z.ZodObject<T>>) => unknown, after?: () => void) =>
     s.registerTool(name, { description, inputSchema: shape }, (async (a: z.infer<z.ZodObject<T>>) => {
@@ -239,6 +241,18 @@ function build(h: Hooks): McpServer {
   tool('memory_supersede', 'Marca um fato como inválido (com motivo) e opcionalmente registra o substituto.', {
     id: z.number().int(), reason: z.string(), replacement: z.string().max(400).optional(),
   }, a => supersedeFact(a.id, a.reason, a.replacement ?? null, 'agente') ?? 'ok', h.projects);
+  // ---------- status ao vivo (só quando a sessão foi aberta pela Central e sabemos quem chama) ----------
+  if (caller) {
+    tool('set_status', 'Mostra no painel do Gustavo (Escritório) o que você está fazendo agora. Chame ao começar cada etapa do trabalho: curto e concreto.', {
+      phase: z.enum(['planejando', 'investigando', 'construindo', 'testando', 'revisando', 'entregando', 'escrevendo', 'esperando'])
+        .describe('a etapa: planejando, investigando (lendo/entendendo), construindo (editando código), testando, revisando, entregando (commit/PR), escrevendo (texto), esperando'),
+      doing: z.string().max(140).describe('o que, em poucas palavras (ex.: "exportação do roadmap em PDF")'),
+      task_id: z.number().int().optional().describe('tarefa do backlog em que está trabalhando, se houver'),
+    }, a => {
+      const task = a.task_id ? get<{ id: number; title: string }>('select id, title from tasks where id = ?', a.task_id) ?? null : null;
+      return setStatus(caller.kind, caller.id, a.phase, a.doing, task) ? 'ok' : 'Esta sessão não está sendo acompanhada.';
+    });
+  }
   return s;
 }
 
@@ -247,12 +261,15 @@ export async function startMcp(h: Hooks): Promise<string> {
   const token = randomBytes(24).toString('hex');
   const server = createServer(async (req, res) => {
     if (req.headers.authorization !== `Bearer ${token}` || !req.url?.startsWith('/mcp')) { res.writeHead(401).end(); return; }
+    // /mcp/run/12 ou /mcp/chat/5: quem está chamando
+    const m = /^\/mcp\/(chat|run)\/(\d+)/.exec(req.url);
+    const caller = m ? { kind: m[1] as 'chat' | 'run', id: Number(m[2]) } : null;
     if (req.method !== 'POST') { res.writeHead(405).end(); return; }
     let raw = '';
     for await (const chunk of req) raw += chunk;
     try {
       // sem estado: um servidor e um transporte por requisição
-      const mcp = build(h);
+      const mcp = build(h, caller);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on('close', () => { transport.close(); mcp.close(); });
       await mcp.connect(transport);
@@ -264,7 +281,9 @@ export async function startMcp(h: Hooks): Promise<string> {
   await new Promise<void>(ok => server.listen(0, '127.0.0.1', ok));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
   const file = join(app.getPath('userData'), 'central-mcp.json');
-  writeFileSync(file, JSON.stringify({ mcpServers: { central: { type: 'http', url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2));
-  setMcpConfigPath(file);
+  writeFileSync(file, mcpConfigBody(url, token));
+  const dir = join(app.getPath('userData'), 'mcp');
+  rmSync(dir, { recursive: true, force: true });
+  setMcpConfig({ file, dir, url, token });
   return url;
 }

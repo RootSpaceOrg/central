@@ -3,7 +3,8 @@ import { Router, RouterLink } from '@angular/router';
 
 import { Agent, AgentsService } from '../../../../shared/services/agents/agents.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
-import { LiveService, PlanItem, Subagent, doing, elapsed } from '../../../../shared/services/live/live.service';
+import { AgentStatus, LiveActivity, LiveService, PHASES, Phase, PlanItem, Subagent, doing, elapsed } from '../../../../shared/services/live/live.service';
+import { TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { RoadmapService } from '../../../../shared/services/roadmap/roadmap.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
@@ -32,6 +33,11 @@ interface Worker {
   agentId: number | null;
   /** cor do cabelo (agente) */
   hair: string;
+  /** etapa (declarada ou deduzida) e o que o agente disse (set_status) */
+  phase: Phase | null;
+  status: AgentStatus | null;
+  /** tarefa do backlog em que está ("#12 Exportar roadmap") */
+  task: string | null;
   open: () => void;
 }
 
@@ -64,6 +70,9 @@ export class OfficePage {
   private readonly sessions = inject(SessionsService);
   private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
+  private readonly tasks = inject(TasksService);
+
+  protected readonly phases = PHASES;
 
   protected readonly since = elapsed;
   protected readonly roomLabel = (id: RoomId) => ROOM.get(id)?.label ?? '';
@@ -80,7 +89,7 @@ export class OfficePage {
         own: `c${a.ref}`, slug: c?.projectSlug ?? agent?.projectSlug ?? null,
         name: inProject ? 'Claude' : agent?.name ?? 'Central', role: inProject ? 'Sessão' : 'Conversa',
         title: c?.title ?? 'Conversa', avatar: inProject ? null : agent, img: inProject || !agent ? 'file-icons/claude.svg' : null,
-        since: a.startedAt, doing: doing(a), plan: a.plan, subagents: a.subagents,
+        since: a.startedAt, doing: doing(a), plan: a.plan, subagents: a.subagents, ...this.state(a, null),
         room: inProject ? 'eng' : agent ? agentRoom(agent) : 'gestao', agentId: inProject ? null : agent?.id ?? null,
         hair: inProject ? CLAUDE : agent?.color ?? '#E8C46A',
         open: () => (session ? this.openSession(session.projectSlug, session.id) : this.chat.openInPanel(a.ref)),
@@ -94,7 +103,7 @@ export class OfficePage {
         own: `r${a.ref}`, slug: r?.projectSlug ?? agent?.projectSlug ?? null, name: gestor ? 'Gestor do projeto' : agent?.name ?? 'Agente',
         role: gestor ? 'Planejando o backlog' : `Execução #${a.ref}${r?.taskId ? ` · tarefa #${r.taskId}` : ''}`,
         title: gestor ? 'Organizando o backlog pelo rumo' : r?.title ?? `Execução #${a.ref}`, avatar: agent, img: agent ? null : 'file-icons/claude.svg',
-        since: a.startedAt, doing: doing(a), plan: a.plan, subagents: a.subagents,
+        since: a.startedAt, doing: doing(a), plan: a.plan, subagents: a.subagents, ...this.state(a, r?.taskId ?? null),
         room: gestor ? 'gestao' : agent ? agentRoom(agent) : 'eng', agentId: agent?.id ?? null, hair: agent?.color ?? CLAUDE,
         open: () => this.router.navigate(['/execucoes'], { queryParams: { run: a.ref } }),
       });
@@ -104,7 +113,7 @@ export class OfficePage {
       if (!s) continue;
       list.push({
         own: `t${id}`, slug: s.projectSlug, name: 'Claude Code', role: 'Terminal', title: s.title, avatar: null, img: 'file-icons/claude.svg',
-        since, doing: 'Trabalhando no terminal', plan: [], subagents: [], room: 'eng', agentId: null, hair: CLAUDE,
+        since, doing: 'Trabalhando no terminal', plan: [], subagents: [], phase: null, status: null, task: null, room: 'eng', agentId: null, hair: CLAUDE,
         open: () => this.openSession(s.projectSlug, s.id),
       });
     }
@@ -128,7 +137,8 @@ export class OfficePage {
     const out: Person[] = this.workers().map(w => {
       const p = projectOf(w.slug);
       return {
-        key: w.key, room: w.room, name: w.name, hair: w.hair, shirt: p?.color ?? '#6b7385', working: true, doing: w.doing,
+        key: w.key, room: w.room, name: w.name, hair: w.hair, shirt: p?.color ?? '#6b7385', working: true,
+        doing: w.phase ? `${PHASES[w.phase].label} · ${w.doing ?? 'pensando…'}` : w.doing,
         tag: p?.name ?? null, plan: w.plan.length ? [this.planDone(w), w.plan.length] : null, subs: w.subagents.filter(x => !x.finishedAt).length,
       };
     });
@@ -158,6 +168,17 @@ export class OfficePage {
   });
 
   protected readonly subsRunning = computed(() => this.workers().reduce((n, w) => n + w.subagents.filter(s => !s.finishedAt).length, 0));
+
+  /** etapa, status declarado e a tarefa (a que o agente disse, ou a da execução) */
+  private state(a: LiveActivity, runTask: number | null): Pick<Worker, 'phase' | 'status' | 'task'> {
+    const id = a.status?.taskId ?? runTask;
+    const title = a.status?.taskTitle ?? (id ? this.tasks.tasks().find(t => t.id === id)?.title : null);
+    return { phase: a.phase, status: a.status, task: id ? `#${id}${title ? ` ${title}` : ''}` : null };
+  }
+
+  protected phaseOf(w: Worker) { return w.phase ? PHASES[w.phase] : { label: 'Começando', color: '#9aa3b5' }; }
+
+  protected running(w: Worker): number { return w.subagents.filter(s => !s.finishedAt).length; }
 
   protected planDone(w: Worker): number { return w.plan.filter(p => p.status === 'completed').length; }
 

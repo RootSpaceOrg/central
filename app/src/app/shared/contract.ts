@@ -573,7 +573,15 @@ export interface ActivityDto {
   subagents: SubagentDto[];
   /** para onde está indo: o plano declarado, com o que está em andamento */
   plan: PlanItemDto[];
+  /** etapa atual: a declarada (set_status) ou deduzida da ferramenta usada */
+  phase: Phase | null;
+  /** o que o agente disse que está fazendo (set_status) */
+  status: AgentStatusDto | null;
 }
+
+export type Phase = 'planejando' | 'investigando' | 'construindo' | 'testando' | 'revisando' | 'entregando' | 'escrevendo' | 'esperando' | 'delegando';
+
+export interface AgentStatusDto { phase: Phase; doing: string; task_id: number | null; task_title: string | null; at: string }
 
 /** chat = conversa (ref = id da conversa); run = execução de agente (ref = id da execução) */
 export interface LiveActivityDto extends ActivityDto { scope: 'chat' | 'run'; ref: number }

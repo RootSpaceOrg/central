@@ -205,6 +205,16 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
 - v0.16.1: fluidez do 3D. Câmera mexendo ou gente andando desenha em todo quadro (240 fps num monitor de 240 Hz);
   só digitando, 60; só a copa, 30. Mobília parada juntada por material (620 → ~200 chamadas de desenho, ~0,5 ms por quadro).
 
+## Feito (v0.17)
+
+- **Quadro de status** no topo do Escritório: uma caixa por quem está trabalhando com a etapa ("Construindo…",
+  "Investigando…", "Testando…"), o que está fazendo, a tarefa ("#15 Exportar roadmap em PDF"), agente, projeto, tempo, plano e
+  estagiários. Clique destaca no 3D; duplo clique entra. O balão no 3D também começa pelo verbo.
+- **Agentes declaram o status** pelo MCP (`set_status`: fase, o que, task_id). Cada conversa/execução recebe um MCP com quem ela
+  é na URL (/mcp/run/12), então o status cai na caixa certa. Prompts das sessões, agentes e execuções pedem isso a cada etapa.
+- Sem declaração, a etapa é **deduzida das ferramentas**: editar = construindo, ler/buscar = investigando, testes/tsc/build =
+  testando, git diff = revisando, commit/PR = entregando, plano = planejando, subagente = delegando.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

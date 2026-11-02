@@ -12,6 +12,37 @@
     </div>
   </header>
 
+  <!-- quadro de status: uma caixa por quem está trabalhando (o que disse que está fazendo, ou o que a ferramenta mostra) -->
+  @if (workers().length) {
+    <section class="mt-6 grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3" aria-label="Quadro de status">
+      @for (w of workers(); track w.key) {
+        @let ph = phaseOf(w);
+        <button type="button" class="group flex flex-col rounded-2xl border bg-panel px-4 py-3 text-left transition-colors hover:border-faint"
+                [class]="selected() === w.key ? 'border-frost/70' : 'border-edge'" [style.box-shadow]="'inset 3px 0 0 ' + ph.color"
+                (click)="pick(w.key)" (dblclick)="w.open()" [attr.aria-label]="w.name + ': ' + ph.label + ' ' + (w.doing ?? '')">
+          <span class="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide" [style.color]="ph.color">
+            <span class="size-2 rounded-full pulse" [style.background]="ph.color"></span>{{ ph.label }}…
+            @if (w.status) { <app-icon name="spark" [size]="11" class="text-frost" title="O agente disse" /> }
+            <span class="flex-1"></span>
+            <span class="font-semibold normal-case tracking-normal text-faint tabular-nums">{{ live.since(w.since) }}</span>
+          </span>
+          <span class="mt-1.5 line-clamp-2 text-[14.5px] font-semibold leading-snug">{{ w.doing ?? w.title }}</span>
+          @if (w.task) { <span class="mt-1 truncate text-[12.5px] text-mute"><app-icon name="kanban" [size]="11" /> tarefa {{ w.task }}</span> }
+          <span class="mt-auto flex items-center gap-2 pt-2.5 text-[12px] text-faint">
+            <span class="size-2.5 shrink-0 rounded-[3px]" [style.background]="w.hair"></span>
+            <span class="min-w-0 truncate">{{ w.name }}@if (projectName(w.slug); as pn) { · {{ pn }} }</span>
+            <span class="flex-1"></span>
+            @if (w.plan.length) {
+              <span class="h-1 w-12 shrink-0 overflow-hidden rounded-full bg-raise"><span class="block h-full rounded-full bg-yes" [style.width.%]="planDone(w) / w.plan.length * 100"></span></span>
+              <span class="tabular-nums">{{ planDone(w) }}/{{ w.plan.length }}</span>
+            }
+            @if (running(w); as n) { <span class="text-[#C6A6FF]" [title]="n + ' estagiários trabalhando'">+{{ n }}</span> }
+          </span>
+        </button>
+      }
+    </section>
+  }
+
   <!-- o andar -->
   <div class="office-sky mt-6 overflow-hidden rounded-3xl border border-edge shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
     <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
