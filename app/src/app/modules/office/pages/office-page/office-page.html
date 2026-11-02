@@ -13,8 +13,9 @@
   </header>
 
   <!-- o andar -->
-  <div class="mt-6 overflow-hidden rounded-3xl border border-edge bg-[#0b0e14] px-2 pt-2 shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
-    <app-office-scene [people]="people()" [selected]="selected()" [milestones]="nowColors()" (pick)="pick($event)" (open)="openKey($event)" />
+  <div class="office-sky mt-6 overflow-hidden rounded-3xl border border-edge shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
+    <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
+                      (pick)="pick($event)" (open)="openKey($event)" />
   </div>
 
   <div class="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
@@ -88,7 +89,7 @@
         <h2 id="mural" class="font-display text-[15px] font-semibold">Mural do corredor <span class="font-sans text-[12.5px] font-normal text-faint">projetos sem ninguém agora</span></h2>
         <div class="mt-3 grid grid-cols-1 gap-2">
           @for (p of quiet(); track p.slug) {
-            <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'rumo' }" class="door" [style.--room]="p.color">
+            <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'roadmap' }" class="door" [style.--room]="p.color">
               <app-project-avatar [project]="p" [size]="22" />
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-[13.5px] font-semibold">{{ p.name }}</span>

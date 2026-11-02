@@ -3,6 +3,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 
 import { Project } from '../../../../../../shared/services/projects/projects.model';
 import { HORIZONS, Horizon, Milestone, RoadmapService } from '../../../../../../shared/services/roadmap/roadmap.service';
+import { IdeasService } from '../../../../../../shared/services/ideas/ideas.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
 
@@ -46,6 +47,30 @@ import { Icon } from '../../../../../../shared/ui/icon';
                     </span>
                   </div>
                   @if (m.description) { <p class="mt-0.5 line-clamp-2 text-[12px] text-mute">{{ m.description }}</p> }
+                  @if (m.author !== 'gustavo' || m.note) {
+                    <p class="mt-1 flex items-start gap-1 text-[11.5px] text-faint" [title]="m.note ?? ''">
+                      @if (m.author !== 'gustavo') { <app-icon name="spark" [size]="11" class="mt-[2px] shrink-0 text-frost" /> }
+                      <span class="line-clamp-2">{{ m.note ?? 'sugerido por um agente' }}</span>
+                    </p>
+                  }
+                  @if (ideasOf(m.id); as list) {
+                    @if (list.length) {
+                      <details class="mt-1.5" (mousedown)="$event.stopPropagation()">
+                        <summary class="cursor-pointer text-[11.5px] text-mute hover:text-text">{{ list.length }} {{ list.length === 1 ? 'ideia' : 'ideias' }}</summary>
+                        <ul class="mt-1 space-y-0.5">
+                          @for (i of list; track i.id) {
+                            <li class="group/i flex items-center gap-1.5 text-[12px]">
+                              <span class="size-1.5 shrink-0 rounded-full" [class]="i.status === 'new' ? 'bg-later' : i.status === 'done' ? 'bg-yes' : i.status === 'doing' ? 'bg-frost' : 'bg-mute'"
+                                    [title]="i.status === 'new' ? 'para triar' : i.status"></span>
+                              <span class="min-w-0 flex-1 truncate" [title]="i.title">{{ i.title }}</span>
+                              @if (i.tasks) { <span class="tabular-nums text-faint">{{ i.tasksDone }}/{{ i.tasks }}</span> }
+                              <button type="button" class="opacity-0 group-hover/i:opacity-100 text-faint hover:text-no" (click)="ideas.setMilestone(i.id, null)" title="Desligar do marco" aria-label="Desligar ideia do marco"><app-icon name="close" [size]="11" /></button>
+                            </li>
+                          }
+                        </ul>
+                      </details>
+                    }
+                  }
                   <div class="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
                     @if (m.tasks) {
                       <span class="h-1.5 flex-1 overflow-hidden rounded-full bg-raise"><span class="block h-full rounded-full bg-yes transition-all" [style.width.%]="m.tasksDone / m.tasks * 100"></span></span>
@@ -84,6 +109,7 @@ import { Icon } from '../../../../../../shared/ui/icon';
 })
 export class RoadmapPanel {
   protected readonly roadmap = inject(RoadmapService);
+  protected readonly ideas = inject(IdeasService);
 
   readonly project = input.required<Project>();
 
@@ -96,6 +122,9 @@ export class RoadmapPanel {
     return { now: this.roadmap.of(slug, 'now'), next: this.roadmap.of(slug, 'next'), later: this.roadmap.of(slug, 'later'), done: [] };
   });
   protected readonly doneList = computed(() => this.roadmap.of(this.project().slug, 'done').sort((a, b) => (b.doneAt?.getTime() ?? 0) - (a.doneAt?.getTime() ?? 0)));
+
+  /** ideias que servem ao marco (exceto descartadas) */
+  protected ideasOf(id: number) { return this.ideas.ideas().filter(i => i.milestoneId === id && i.status !== 'archived'); }
 
   protected drop(e: CdkDragDrop<Milestone[]>, horizon: Horizon): void {
     const target = [...e.container.data];

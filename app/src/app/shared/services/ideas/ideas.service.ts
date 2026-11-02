@@ -19,6 +19,8 @@ export interface Idea {
   /** 'gustavo' ou o agente que sugeriu */
   author: string;
   approvedAt: Date | null;
+  /** marco do roadmap que a ideia serve */
+  milestoneId: number | null;
   tasks: number;
   tasksDone: number;
 }
@@ -40,7 +42,7 @@ const toModel = (d: IdeaDto): Idea => ({
   id: d.id, projectSlug: d.project_slug, title: d.title, body: d.body, status: d.status,
   source: d.source, sourceRef: d.source_ref, taskId: d.task_id, createdAt: new Date(d.created_at),
   // ideias antigas criadas por agentes (pela Central) não guardavam o autor
-  author: d.author && !(d.author === 'gustavo' && d.source === 'central') ? d.author : d.source === 'central' ? 'agente' : 'gustavo', approvedAt: d.approved_at ? new Date(d.approved_at) : null, tasks: d.tasks ?? 0, tasksDone: d.tasks_done ?? 0,
+  author: d.author && !(d.author === 'gustavo' && d.source === 'central') ? d.author : d.source === 'central' ? 'agente' : 'gustavo', approvedAt: d.approved_at ? new Date(d.approved_at) : null, milestoneId: d.milestone_id ?? null, tasks: d.tasks ?? 0, tasksDone: d.tasks_done ?? 0,
 });
 
 @Injectable({ providedIn: 'root' })
@@ -87,6 +89,12 @@ export class IdeasService {
     } catch (e) {
       throw new Error(errorMessage(e));
     }
+  }
+
+  /** liga a ideia a um marco do roadmap (null desliga) */
+  setMilestone(id: number, milestoneId: number | null): void {
+    this.patch(id, { milestoneId });
+    this.api.update(id, { milestone_id: milestoneId }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   setStatus(id: number, status: IdeaStatus): void {

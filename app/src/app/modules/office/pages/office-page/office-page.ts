@@ -166,8 +166,9 @@ export class OfficePage {
   protected projectName(slug: string | null): string | null { return slug ? this.projects.bySlug().get(slug)?.name ?? null : null; }
 
   /** clicou numa pessoa no mapa: seleciona e mostra a mesa dela na lista */
-  protected pick(key: string): void {
-    this.selected.set(this.selected() === key ? null : key);
+  protected pick(key: string | null): void {
+    this.selected.set(!key || this.selected() === key ? null : key);
+    if (!key) return;
     queueMicrotask(() => document.getElementById(`desk-${key}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
   }
 

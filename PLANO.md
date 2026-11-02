@@ -190,6 +190,19 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   negócios); a Central e o gestor ficam na gestão; sessões de projeto na engenharia.
 - fix: conversas abertas fora da tela (MCP, triagem) agora aparecem na lista enquanto rodam.
 
+## Feito (v0.16)
+
+- **Roadmap é uma aba do projeto** (Sessões · Rumo · Roadmap · Backlog…): colunas Agora/Próximo/Depois; cada marco mostra
+  quem criou (✦ agente), de onde veio (nota) e as ideias ligadas; "Ideias sem marco" para ligar ideias aprovadas/em triagem.
+- **Alimentar o roadmap**: colar (ou carregar .txt/.md/.vtt/.srt) a transcrição de uma reunião, notas ou um direcionamento;
+  a Central lê, cria/move/conclui marcos com a origem na nota e sugere ideias ligadas aos marcos (vão para a triagem). Não
+  cria tarefas nem mexe no rumo. Testado com uma reunião: 3 marcos nos horizontes certos e 2 ideias ligadas.
+- **Histórico do roadmap**: quem mexeu (você ou agente), o quê e por quê. MCP: `create_milestone`/`update_milestone` exigem
+  `note`; `create_idea`/`update_idea` aceitam `milestone_id`.
+- **Escritório em 3D** (three.js, carregado só nessa tela): bonecos voxel que sentam, digitam, andam pelo corredor e viram;
+  nicks estilo jogo na cabeça e balão do que estão fazendo; estagiários em volta da mesa. Arrastar gira (Q/E giram 90°),
+  roda aproxima; as paredes do lado da câmera somem. ~30 quadros com gente trabalhando, ~12 parado.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

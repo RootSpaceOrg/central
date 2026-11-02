@@ -234,6 +234,18 @@ db.exec(`
     done_at      text
   );
 
+  -- histórico do roadmap: quem mexeu (gustavo ou agente), o quê e por quê
+  create table if not exists milestone_events (
+    id           integer primary key autoincrement,
+    milestone_id integer,
+    project_slug text not null references projects on delete cascade,
+    kind         text not null,
+    title        text not null,
+    detail       text,
+    author       text not null default 'gustavo',
+    at           text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
   -- memória do projeto: fatos duráveis (decisão, convenção, armadilha…) com proveniência, ligados a nós do índice de código
   create table if not exists facts (
     id             integer primary key autoincrement,
@@ -288,6 +300,7 @@ for (const [table, column, type] of [
   ['projects', 'parent_slug', 'text'],
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
   ['agents', 'room', "text not null default ''"],
+  ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];

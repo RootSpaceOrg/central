@@ -17,7 +17,7 @@ import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameC
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
-import { createMilestone, deleteMilestone, listMilestones, reorderMilestones, updateMilestone } from './roadmap';
+import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
@@ -185,6 +185,7 @@ function registerIpc(): void {
   handle('milestones:update', (id, input) => { updateMilestone(id, input); backlogChanged(); });
   handle('milestones:delete', id => { deleteMilestone(id); backlogChanged(); });
   handle('milestones:reorder', (ids, horizon) => { reorderMilestones(ids, horizon); backlogChanged(); });
+  handle('milestones:events', slug => milestoneEvents(slug));
   handle('context:status', () => contextStatus());
   handle('context:reindex', (slug, force) => { indexProject(slug, force); importClaudeMemory(slug); });
   handle('context:graph', slug => graphData(slug));

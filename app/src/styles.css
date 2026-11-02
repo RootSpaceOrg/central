@@ -187,3 +187,24 @@
 }
 .door:hover { background: var(--color-raise); }
 @media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; } }
+
+/* ---------- Escritório 3D: céu do andar, nicks e balões (HTML por cima do WebGL) ---------- */
+.office-sky { background: radial-gradient(1200px 700px at 50% 0%, #1a2233 0%, #0b0e14 70%); }
+.o3-label { display: flex; flex-direction: column; align-items: center; gap: 3px; pointer-events: auto; cursor: pointer; user-select: none; }
+.o3-nick {
+  display: flex; align-items: center; gap: 5px; padding: 2px 7px 2px 5px; border-radius: 6px; white-space: nowrap;
+  background: rgb(9 12 18 / 0.78); color: #eef2f8; font-size: 11.5px; font-weight: 700; letter-spacing: .2px;
+  border: 1px solid rgb(255 255 255 / 0.08); text-shadow: 0 1px 0 #000;
+}
+.o3-nick::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: var(--c, #7FA2FF); box-shadow: 0 0 6px var(--c, #7FA2FF); }
+.o3-label.idle .o3-nick { opacity: .8; font-size: 10px; font-weight: 600; padding: 1px 6px 1px 4px; }
+.o3-label.sel .o3-nick { outline: 2px solid var(--c, #7FA2FF); outline-offset: 1px; }
+.o3-sub { font-size: 10px; padding: 1px 6px 1px 4px; color: #d9c8ff; pointer-events: none; }
+.o3-sub::before { background: #9b7bff; box-shadow: none; }
+.o3-say {
+  position: relative; max-width: 230px; padding: 4px 9px; border-radius: 10px; background: #f6f3ea; color: #11151c;
+  border: 2px solid #11151c; box-shadow: 0 2px 0 #11151c; font-size: 12px; line-height: 1.25; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.o3-say small { display: block; font-size: 10.5px; font-weight: 700; opacity: .6; }
+.o3-say[hidden] { display: none; }

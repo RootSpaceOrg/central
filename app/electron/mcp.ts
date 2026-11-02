@@ -116,10 +116,12 @@ function build(h: Hooks): McpServer {
     status: ideaStatus.optional(), project_slug: z.string().optional(),
   }, a => listIdeas().filter(i => (a.status ? i.status === a.status : ['new', 'approved'].includes(i.status)) && (!a.project_slug || i.project_slug === a.project_slug))
     .map(i => ({ id: i.id, project: i.project_slug, status: i.status, title: i.title, body: i.body?.slice(0, 300), author: i.author, tasks: i.tasks, tasks_done: i.tasks_done })));
-  tool('create_idea', 'Sugere uma ideia (vai para a triagem do Gustavo; só vira backlog depois que ele aprovar).', { title: z.string(), body: z.string().optional(), project_slug: z.string().optional() }, a =>
-    createIdea({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, source: 'central', author: 'agente' }), h.backlog);
+  tool('create_idea', 'Sugere uma ideia (vai para a triagem do Gustavo; só vira backlog depois que ele aprovar). milestone_id liga ao marco do roadmap que ela serve.', {
+    title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), milestone_id: z.number().int().optional(),
+  }, a => createIdea({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, source: 'central', author: 'agente', milestone_id: a.milestone_id ?? null }), h.backlog);
   tool('update_idea', 'Edita uma ideia ou muda o status. Aprovar (approved) ou descartar (archived) só quando o Gustavo pedir.', {
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), project_slug: z.string().optional(), status: ideaStatus.optional(),
+    milestone_id: z.number().int().optional().describe('liga a ideia a um marco do roadmap'),
   }, ({ id, ...patch }) => updateIdea(id, patch), h.backlog);
 
   // ---------- rumo do projeto e gestor ----------
@@ -130,13 +132,14 @@ function build(h: Hooks): McpServer {
   }, a => setDirection(a.project_slug, a.text, 'agente', a.note), h.projects);
   const horizon = z.enum(['now', 'next', 'later', 'done']).describe('now = Agora, next = Próximo, later = Depois, done = Feito');
   tool('list_milestones', 'Roadmap do projeto: marcos em Agora / Próximo / Depois / Feito, com progresso das tarefas ligadas.', { project_slug: z.string() }, a =>
-    listMilestones(a.project_slug).map(m => ({ id: m.id, title: m.title, horizon: m.horizon, target: m.target, tasks: `${m.tasks_done}/${m.tasks}`, description: m.description })));
+    listMilestones(a.project_slug).map(m => ({ id: m.id, title: m.title, horizon: m.horizon, target: m.target, tasks: `${m.tasks_done}/${m.tasks}`, description: m.description, ideas: m.ideas, author: m.author, note: m.note })));
+  const why = z.string().describe('de onde veio / por quê, curto (ex.: "reunião 02/11: cliente pediu exportação"). Aparece no histórico do roadmap.');
   tool('create_milestone', 'Cria um marco no roadmap do projeto (resultado que importa, não uma tarefa).', {
-    project_slug: z.string(), title: z.string(), description: z.string().optional(), horizon: horizon.optional(), target: z.string().optional().describe('alvo livre: "dez", "Q1"'),
-  }, a => createMilestone(a.project_slug, a), h.backlog);
-  tool('update_milestone', 'Edita um marco ou muda o horizonte (ex.: concluído → done).', {
-    id: z.number().int(), title: z.string().optional(), description: z.string().optional(), horizon: horizon.optional(), target: z.string().optional(),
-  }, ({ id, ...i }) => updateMilestone(id, i), h.backlog);
+    project_slug: z.string(), title: z.string(), description: z.string().optional(), horizon: horizon.optional(), target: z.string().optional().describe('alvo livre: "dez", "Q1"'), note: why,
+  }, a => createMilestone(a.project_slug, a, 'agente'), h.backlog);
+  tool('update_milestone', 'Edita um marco ou muda o horizonte (ex.: concluído → done). Diga o motivo em note.', {
+    id: z.number().int(), title: z.string().optional(), description: z.string().optional(), horizon: horizon.optional(), target: z.string().optional(), note: why,
+  }, ({ id, ...i }) => updateMilestone(id, i, 'agente'), h.backlog);
 
   tool('plan_backlog', 'Põe o gestor do projeto para organizar o backlog a partir do rumo e das ideias aprovadas (roda como execução de agente). Use quando o Gustavo pedir para planejar/organizar um projeto.', {
     project_slug: z.string(), request: z.string().optional().describe('pedido específico do Gustavo'),

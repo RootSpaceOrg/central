@@ -195,6 +195,8 @@ export interface IdeaDto {
   /** 'gustavo' ou o agente que sugeriu */
   author: string;
   approved_at: string | null;
+  /** marco do roadmap a que a ideia serve */
+  milestone_id: number | null;
   /** tarefas ligadas e quantas já estão feitas */
   tasks: number;
   tasks_done: number;
@@ -221,6 +223,7 @@ export interface IdeaPatch {
   body?: string | null;
   project_slug?: string | null;
   status?: IdeaStatus;
+  milestone_id?: number | null;
 }
 
 export interface TaskDto {
@@ -525,9 +528,24 @@ export interface MilestoneDto {
   tasks: number;
   tasks_done: number;
   ideas: number;
+  /** quem criou: 'gustavo' ou 'agente' */
+  author: string;
+  /** de onde veio / por quê (ex.: "reunião 02/11: cliente pediu X") */
+  note: string | null;
 }
 
-export interface MilestoneInput { title?: string; description?: string | null; horizon?: Horizon; target?: string | null; position?: number }
+export interface MilestoneInput { title?: string; description?: string | null; horizon?: Horizon; target?: string | null; position?: number; note?: string | null }
+
+export interface MilestoneEventDto {
+  id: number;
+  milestone_id: number | null;
+  /** created, moved, renamed, edited, done, deleted, linked */
+  kind: string;
+  title: string;
+  detail: string | null;
+  author: string;
+  at: string;
+}
 
 // ---------- atividade ao vivo (sessões e execuções trabalhando, subagentes) ----------
 
@@ -697,6 +715,8 @@ export interface Api {
   'milestones:delete': (id: number) => void;
   /** nova ordem dentro de um horizonte */
   'milestones:reorder': (ids: number[], horizon: Horizon) => void;
+  /** histórico do roadmap do projeto (mais recente primeiro) */
+  'milestones:events': (projectSlug: string) => MilestoneEventDto[];
   'context:status': () => ContextStatusDto[];
   'context:reindex': (projectSlug: string, force: boolean) => void;
   'context:graph': (projectSlug: string) => GraphDto;

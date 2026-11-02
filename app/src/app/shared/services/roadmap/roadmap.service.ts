@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import { Horizon, MilestoneDto, MilestoneInput } from '../../contract';
+import { Horizon, MilestoneDto, MilestoneEventDto, MilestoneInput } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
 import { RoadmapApiService } from './roadmap-api.service';
 
@@ -8,7 +8,14 @@ export type { Horizon };
 export interface Milestone {
   id: number; projectSlug: string; title: string; description: string | null; horizon: Horizon; target: string | null;
   position: number; doneAt: Date | null; tasks: number; tasksDone: number; ideas: number;
+  /** 'gustavo' ou 'agente' */
+  author: string;
+  /** de onde veio / por quê */
+  note: string | null;
 }
+
+/** Uma mudança no roadmap: quem, o quê, por quê. */
+export interface MilestoneEvent { id: number; milestoneId: number | null; kind: string; title: string; detail: string | null; author: string; at: Date }
 
 export const HORIZONS: { id: Horizon; label: string; hint: string }[] = [
   { id: 'now', label: 'Agora', hint: 'o que o time está empurrando' },
@@ -19,6 +26,10 @@ export const HORIZONS: { id: Horizon; label: string; hint: string }[] = [
 const toModel = (d: MilestoneDto): Milestone => ({
   id: d.id, projectSlug: d.project_slug, title: d.title, description: d.description, horizon: d.horizon, target: d.target,
   position: d.position, doneAt: d.done_at ? new Date(d.done_at) : null, tasks: d.tasks, tasksDone: d.tasks_done, ideas: d.ideas,
+  author: d.author ?? 'gustavo', note: d.note ?? null,
+});
+const toEvent = (d: MilestoneEventDto): MilestoneEvent => ({
+  id: d.id, milestoneId: d.milestone_id, kind: d.kind, title: d.title, detail: d.detail, author: d.author, at: new Date(d.at),
 });
 
 /** Roadmap de todos os projetos: marcos em Agora / Próximo / Depois / Feito, com progresso pelas tarefas ligadas. */
@@ -60,6 +71,9 @@ export class RoadmapService {
     this.all.update(list => list.filter(m => m.id !== id));
     this.api.remove(id).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
+
+  /** histórico do roadmap do projeto (mais recente primeiro) */
+  async events(slug: string): Promise<MilestoneEvent[]> { return (await this.api.events(slug)).map(toEvent); }
 
   /** Arrastou: nova ordem (e talvez novo horizonte) de uma coluna. */
   reorder(ids: number[], horizon: Horizon): void {

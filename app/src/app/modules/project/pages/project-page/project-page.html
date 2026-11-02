@@ -61,6 +61,7 @@
 
   <div class="relative min-h-0 flex-1">
     @if (tab() === 'rumo') { <app-summary [project]="p" /> }
+    @if (tab() === 'roadmap') { <app-roadmap-tab class="absolute inset-0" [project]="p" /> }
     @if (tab() === 'contexto') { <app-context-view class="absolute inset-0" [slug]="p.slug" (openFile)="openFile($event)" /> }
     @if (tab() === 'backlog') {
       <div class="flex h-full flex-col px-8 pt-5 pb-5">
