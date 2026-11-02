@@ -2,6 +2,9 @@ import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, CdkDropListGroup
 import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { ContextMenuService } from '../../services/context-menu/context-menu.service';
+import { AgentsService } from '../../services/agents/agents.service';
+import { ChatService } from '../../services/chat/chat.service';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
@@ -18,6 +21,9 @@ export class KanbanBoard {
   protected readonly tasks = inject(TasksService);
   protected readonly projects = inject(ProjectsService);
   protected readonly dialogs = inject(DialogsService);
+  private readonly menu = inject(ContextMenuService);
+  private readonly agents = inject(AgentsService);
+  private readonly chat = inject(ChatService);
 
   readonly projectSlug = input<string | null>(null);
 
@@ -44,6 +50,27 @@ export class KanbanBoard {
       projectSlug: t.projectSlug, repoPath: t.repoPath ?? undefined, taskId: t.id,
       prompt: [t.title, t.body].filter(Boolean).join('\n\n'),
     });
+  }
+
+  /** Chat com o agente do projeto (ou a Central), já com o contexto da tarefa. */
+  protected talk(t: Task): void {
+    const agent = this.agents.agents().find(a => a.projectSlug === t.projectSlug && !a.builtin) ?? this.agents.central();
+    if (!agent) return;
+    this.chat.compose(agent.id, `Sobre a tarefa #${t.id} "${t.title}" (${this.projects.bySlug().get(t.projectSlug)?.name ?? t.projectSlug}): `);
+  }
+
+  /** Botão direito num card. */
+  protected cardMenu(e: MouseEvent, t: Task): void {
+    this.menu.open(e, [
+      { label: 'Editar', icon: 'edit', run: () => this.dialogs.editTask(t.id) },
+      { label: 'Mandar para um agente', icon: 'play', run: () => this.toAgent(t, e), disabled: t.column === 'doing' || t.column === 'done' },
+      { label: 'Conversar sobre esta tarefa', icon: 'central', run: () => this.talk(t) },
+      ...(t.prUrl ? [{ label: 'Abrir PR', icon: 'pr' as const, run: () => this.projects.openExternal(t.prUrl!) }] : []),
+      null,
+      ...COLUMNS.filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.id, 0) })),
+      null,
+      { label: 'Excluir', icon: 'delete', danger: true, run: () => { if (confirm(`Excluir "${t.title}"?`)) this.tasks.remove(t.id); } },
+    ]);
   }
 
   protected openPr(t: Task, ev: Event): void {

@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
@@ -14,7 +15,7 @@ const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').match
 
 @Component({
   selector: 'app-inbox-page',
-  imports: [Icon, RouterLink],
+  imports: [Icon, RouterLink, ProjectSelect],
   templateUrl: './inbox-page.html',
   host: { class: 'block h-full overflow-y-auto', '(document:keydown)': 'onKey($event)' },
 })

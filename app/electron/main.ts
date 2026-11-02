@@ -1,17 +1,28 @@
-import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Api, Events, NewProposalInput, ProposalDto, ProposalStatus, Verdict } from '../src/app/shared/contract';
-import { DB_PATH, DEV_ROOT, all, get, now, run } from './db';
+import type { Api, Events } from '../src/app/shared/contract';
+import { DB_PATH, DEV_ROOT, all, get } from './db';
 import { killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
 import {
-  createIdea, createTask, deleteTask, getSetting, importPending, listIdeas, listTasks, promoteIdea, setSetting, updateIdea, updateTask,
+  createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
+  setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
-import { createProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
+import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
+import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
+import { closeSession, createSession, listSessions, updateSession } from './sessions';
+import { importClaudeSession, listClaudeSessions } from './claude-import';
+import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
+import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
+import { pulseStatus, runPulse, watchPulse } from './pulse';
+import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
+import { startMcp } from './mcp';
+import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
+import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import {
   cloneRepo, createTerminal, githubRepos, killAllTerminals, killTerminal, listDir, readFile, resizeTerminal, writeFile, writeTerminal,
 } from './workspace';
@@ -32,53 +43,33 @@ function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]
 }
 
 const changed = () => send('projects:changed', null);
+const routinesChanged = () => send('routines:changed', null);
+const agentsChanged = () => send('agents:changed', null);
 const backlogChanged = () => send('backlog:changed', null);
+const contextChanged = (project: string) => send('context:changed', { project });
+const factProject = (id: number) => get<{ p: string }>('select project_slug p from facts where id = ?', id)?.p ?? '';
+const navigate = (route: string) => send('app:navigate', route);
+// testes (--capture) não mostram notificação na tela de quem está usando o PC
+const toast = (title: string, body: string, route: string | null) => { if (!CAPTURE) notify(title, body, route, () => win, navigate); };
+/** avisa uma vez quando cada execução termina */
+const notified = new Set<number>();
 const emitRun = {
   event: (e: Events['run:event']) => send('run:event', e),
-  update: (r: Events['run:update']) => send('run:update', r),
+  update: (r: Events['run:update']) => {
+    send('run:update', r);
+    if ((r.status === 'succeeded' || r.status === 'failed') && r.finished_at && !notified.has(r.id)) {
+      notified.add(r.id);
+      const who = r.routine_id ? 'Rotina' : 'Agente';
+      toast(r.status === 'succeeded' ? `${who} concluiu` : `${who} falhou`, `${r.prompt.split('\n')[0]}${r.pr_url ? ' (PR aberto)' : ''}`, `/execucoes?run=${r.id}`);
+    }
+  },
   changed: () => { backlogChanged(); changed(); },
 };
-
-// ---------- propostas ----------
-
-const VERDICT: Record<Verdict, ProposalStatus> = { approve: 'approved', defer: 'deferred', reject: 'rejected' };
-
-function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
-  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at
-    from proposals where status in (${statuses.map(() => '?').join(',') || "''"})
-    order by coalesce(tier, 9), created_at desc`, ...statuses);
-}
-
-function createProposal(input: NewProposalInput): ProposalDto {
-  const title = input.title?.trim();
-  if (!title) throw new Error('Escreva o que precisa acontecer.');
-  const { lastInsertRowid } = run(`insert into proposals (project_slug, title, body, source, source_ref) values (?,?,?,'manual',?)`,
-    input.project_slug || null, title, input.body?.trim() || null, `${Date.now()}-${Math.random()}`);
-  return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
-}
-
-function decide(id: number, verdict: Verdict, reason: string | null): void {
-  if (!VERDICT[verdict]) throw new Error('Decisão inválida.');
-  if (!run('update proposals set status = ?, updated_at = ? where id = ?', VERDICT[verdict], now(), id).changes) {
-    throw new Error('Proposta não encontrada.');
-  }
-  run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
-  // aprovar vira tarefa em "A fazer", pronta para um agente
-  const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
-  if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {
-    createTask({
-      project_slug: p.project_slug, repo_path: null, title: p.title,
-      body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`].filter(Boolean).join('\n\n') || null,
-      column: 'todo', priority: p.tier === 2 ? 0 : 1, proposal_id: id,
-    });
-    backlogChanged();
-  }
-  changed();
-}
 
 // ---------- IPC ----------
 
 function registerIpc(): void {
+  handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
   handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion() }));
 
   handle('projects:list', () => listProjects());
@@ -87,14 +78,34 @@ function registerIpc(): void {
     syncProjects(p.slug, changed);
     return p;
   });
-  handle('projects:update', (slug, patch) => { updateProject(slug, patch); changed(); });
+  handle('projects:update', (slug, patch) => {
+    updateProject(slug, patch);
+    if (patch.folder) syncProjects(slug, changed);
+    changed();
+  });
+  handle('projects:delete', slug => { deleteProject(slug); changed(); backlogChanged(); });
+  handle('dialog:image', async () => {
+    const r = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters: [{ name: 'Imagem', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg', 'gif'] }] });
+    if (r.canceled) return null;
+    const file = r.filePaths[0];
+    const ext = file.split('.').pop()!.toLowerCase();
+    const mime = ext === 'svg' ? 'svg+xml' : ext === 'jpg' ? 'jpeg' : ext;
+    const buf = readFileSync(file);
+    if (buf.length <= 400 * 1024) return `data:image/${mime};base64,${buf.toString('base64')}`;
+    // foto grande: reduz para ícone (png/jpg; o nativeImage do Windows não lê webp/gif/svg)
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) throw new Error('Imagem grande demais (máximo 400 KB). Use PNG ou JPG, que a Central reduz sozinha.');
+    const { width, height } = img.getSize();
+    const small = img.resize(width >= height ? { width: 256 } : { height: 256 }).toPNG();
+    return `data:image/png;base64,${small.toString('base64')}`;
+  });
   handle('projects:sync', slug => { syncProjects(slug, changed); });
   handle('repos:list', slug => listRepos(slug));
   handle('commits:recent', (slug, days, limit) => recent(slug, days, limit));
 
   handle('proposals:list', statuses => listProposals(statuses));
   handle('proposals:create', input => { const p = createProposal(input); changed(); return p; });
-  handle('proposals:decide', (id, verdict, reason) => decide(id, verdict, reason));
+  handle('proposals:decide', (id, verdict, reason) => { decide(id, verdict, reason); backlogChanged(); changed(); });
 
   handle('runs:list', slug => listRuns(slug));
   handle('runs:start', input => startRun(input, emitRun));
@@ -105,7 +116,7 @@ function registerIpc(): void {
   handle('fs:read', path => readFile(path));
   handle('fs:write', (path, content) => writeFile(path, content));
 
-  handle('pty:create', input => createTerminal(input, (id, data) => send('pty:data', { id, data }), (id, code) => send('pty:exit', { id, code })));
+  handle('pty:create', input => createTerminal(input, input.kind === 'claude' && input.project_slug ? sessionPromptFile(input.project_slug) : null, (id, data) => send('pty:data', { id, data }), (id, code) => send('pty:exit', { id, code })));
   handle('pty:write', (id, data) => { writeTerminal(id, data); });
   handle('pty:resize', (id, cols, rows) => resizeTerminal(id, cols, rows));
   handle('pty:kill', id => killTerminal(id));
@@ -135,9 +146,51 @@ function registerIpc(): void {
   handle('turns:start', input => startTurn(input, emitRun));
   handle('turns:stop', id => stopTurn(id, emitRun));
 
-  handle('update:check', () => checkUpdate());
+  handle('prefs:get', () => getPrefs());
+  handle('prefs:set', patch => setPrefs(patch, () => win, navigate));
+  handle('update:check', force => checkUpdate(force));
   handle('update:install', () => installUpdate());
-  handle('update:build', () => buildUpdate(line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
+  handle('update:build', publish => buildUpdate(publish, line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
+
+  handle('routines:list', () => listRoutines());
+  handle('pulse:status', () => pulseStatus());
+  handle('pulse:run', slug => runPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, true, slug ?? null));
+  handle('routines:create', input => { const r = createRoutine(input); routinesChanged(); return r; });
+  handle('routines:update', (id, patch) => { updateRoutine(id, patch); routinesChanged(); });
+  handle('routines:delete', id => { deleteRoutine(id); routinesChanged(); });
+  handle('routines:fire', async id => { const r = await fireRoutine(id, emitRun, true); routinesChanged(); return r; });
+
+  const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean) => send('chat:event', { chat_id, message, busy });
+  handle('agents:list', () => listAgents());
+  handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });
+  handle('agents:update', (id, patch) => { updateAgent(id, patch); agentsChanged(); });
+  handle('agents:delete', id => { deleteAgent(id); agentsChanged(); routinesChanged(); });
+
+  handle('chat:list', agentId => listChats(agentId));
+  handle('chat:messages', id => listMessages(id));
+  handle('chat:send', (id, agentId, text, slug) => sendChat(id, agentId, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); agentsChanged(); }, slug ?? null));
+  handle('sessions:list', slug => listSessions(slug));
+  handle('sessions:create', (slug, kind, chatId) => createSession(slug, kind, chatId ?? null));
+  handle('sessions:update', (id, patch) => updateSession(id, patch));
+  handle('sessions:close', id => closeSession(id));
+  handle('claude:sessions', () => listClaudeSessions());
+  handle('context:status', () => contextStatus());
+  handle('context:reindex', (slug, force) => { indexProject(slug, force); importClaudeMemory(slug); });
+  handle('context:graph', slug => graphData(slug));
+  handle('context:node', key => nodeDetail(key));
+  handle('context:search', (slug, q) => searchHits(slug, q));
+  handle('context:block', (slug, focus, budget) => contextBlock(slug, focus ? [focus] : [], budget));
+  handle('facts:list', slug => listFacts(slug));
+  handle('facts:create', input => { const f = createFact(input); contextChanged(input.project_slug); return f; });
+  handle('facts:update', (id, patch) => { updateFact(id, patch); contextChanged(factProject(id)); });
+  handle('facts:supersede', (id, reason, replacement) => { supersedeFact(id, reason, replacement); contextChanged(factProject(id)); });
+  handle('facts:delete', id => { const p = factProject(id); deleteFact(id); contextChanged(p); });
+  handle('facts:import', slug => { const n = importClaudeMemory(slug); contextChanged(slug); return n; });
+  handle('claude:import', (id, slug) => importClaudeSession(id, slug));
+  handle('chat:fromRun', runId => chatFromRun(runId));
+  handle('chat:rename', (id, title) => { renameChat(id, title); });
+  handle('chat:stop', id => stopChat(id));
+  handle('chat:delete', id => deleteChat(id));
 
   handle('settings:get', key => getSetting(key));
   handle('settings:set', (key, value) => { setSetting(key, value); });
@@ -151,6 +204,7 @@ function registerIpc(): void {
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1480, height: 940, minWidth: 1024, minHeight: 640,
+    icon: join(__dirname, '..', 'build', 'icon.png'),
     backgroundColor: '#141922',
     title: 'Central',
     titleBarStyle: 'hidden',
@@ -160,7 +214,9 @@ function createWindow(): void {
     ...(CAPTURE ? { x: -4000, y: 0, focusable: false, skipTaskbar: true } : {}),
     webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: !CAPTURE },
   });
-  win.once('ready-to-show', () => (CAPTURE ? win!.showInactive() : win!.show()));
+  // aberto pelo Windows ao iniciar (--hidden): fica só na bandeja
+  win.once('ready-to-show', () => (CAPTURE ? win!.showInactive() : process.argv.includes('--hidden') && getPrefs().tray ? null : win!.show()));
+  keepAliveOnClose(win);
   // Links externos abrem no navegador, nunca dentro do app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
@@ -187,11 +243,43 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  seedAgents();
+  seedAgentsV2();
   registerIpc();
   createWindow();
+  if (!CAPTURE) setupTray(() => win, navigate);
   watchTurns(emitRun);
-  syncProjects(null, changed);
+  watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
+  if (!CAPTURE) watchPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, s => {
+    const started = s.last?.items.filter(i => i.action === 'started') ?? [];
+    if (started.length) toast('Piloto automático', `${started.map(i => i.name).join(', ')}: agente trabalhando até o PR.`, '/');
+  });
+  // índice de código: um processo à parte indexa os projetos e acompanha as mudanças
+  startContext(slug => contextChanged(slug));
+  setTimeout(() => {
+    indexAll();
+    for (const p of all<{ slug: string }>(`select slug from projects where status <> 'dead'`)) importClaudeMemory(p.slug);
+  }, CAPTURE ? 500 : 8000);
+  startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged, agents: agentsChanged })
+    .catch(e => console.error('MCP da Central não subiu', e));
+  // sincroniza repositórios e, depois, leva para Feito as tarefas cujo PR foi mergeado
+  // e abre decisões para CI quebrado nos repositórios ativos
+  const watchGithub = () => Promise.all([syncPullRequests(), syncCiFailures()])
+    .then(([prs, ci]) => {
+      if (prs) backlogChanged();
+      if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/decisoes'); }
+    });
+  // depois da varredura dos repositórios, o índice pega os que acabaram de aparecer (incremental: barato)
+  syncProjects(null, changed).then(() => { indexAll(); return watchGithub(); });
+  setInterval(watchGithub, 15 * 60_000);
 });
+
+app.on('before-quit', () => markQuitting());
+
+// uma Central só: abrir de novo traz a janela que já está rodando (na bandeja, por exemplo)
+// (só no app de verdade: dev e testes com --data rodam ao lado da instalada)
+if (!CAPTURE && !DEV && !arg('data') && !app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 
 app.on('window-all-closed', () => {
   killAllTerminals();

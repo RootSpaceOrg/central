@@ -43,6 +43,7 @@ export function listProjects(): ProjectDto[] {
     const l = last.find(x => x.slug === p.slug);
     return {
       ...p,
+      autopilot: !!p.autopilot,
       folder_exists: existsSync(p.folder),
       commits_7d: t?.d7 ?? 0,
       commits_30d: t?.d30 ?? 0,
@@ -63,7 +64,7 @@ export function createProject(input: NewProjectInput): ProjectDto {
   const name = input.name?.trim();
   if (!name) throw new Error('Dê um nome ao projeto.');
   if (!input.folder?.trim()) throw new Error('Escolha a pasta do projeto.');
-  if (!isAbsolute(input.folder.trim())) throw new Error('Use o caminho completo da pasta, por exemplo C:\Users\voce\Development\Projeto.');
+  if (!isAbsolute(input.folder.trim())) throw new Error('Use o caminho completo da pasta, por exemplo C:\\Users\\voce\\Development\\Projeto.');
   if (!STATUSES.includes(input.status)) throw new Error('Status inválido.');
   const folder = resolve(input.folder.trim());
   if (get('select 1 from projects where folder = ?', folder)) throw new Error('Essa pasta já é de outro projeto.');
@@ -77,12 +78,44 @@ export function createProject(input: NewProjectInput): ProjectDto {
   return listProjects().find(p => p.slug === slug)!;
 }
 
+const ICON_KINDS = ['letter', 'emoji', 'lucide', 'image'];
+const MAX_IMAGE = 400 * 1024;
+
 export function updateProject(slug: string, patch: ProjectPatch): void {
+  if (!get('select 1 from projects where slug = ?', slug)) throw new Error('Projeto não encontrado.');
   if (patch.status && !STATUSES.includes(patch.status)) throw new Error('Status inválido.');
-  const fields = Object.entries(patch).filter(([k]) => ['name', 'status', 'color', 'description'].includes(k));
+  if (patch.name !== undefined && !patch.name.trim()) throw new Error('O nome não pode ficar vazio.');
+  if (patch.icon_kind && !ICON_KINDS.includes(patch.icon_kind)) throw new Error('Tipo de ícone inválido.');
+  if (patch.autopilot_mode && !['tasks', 'plan', 'trust'].includes(patch.autopilot_mode)) throw new Error('Modo do piloto inválido.');
+  if (patch.autopilot && !patch.autopilot_brief?.trim() && !get<{ b: string }>('select autopilot_brief b from projects where slug = ?', slug)?.b.trim()) {
+    throw new Error('Diga para onde o piloto deve levar o projeto antes de ligar.');
+  }
+  if (patch.icon_kind === 'image' && !/^data:image\/(png|jpeg|webp|svg\+xml|gif);base64,/.test(patch.icon_value ?? '')) {
+    throw new Error('Imagem inválida.');
+  }
+  if ((patch.icon_value?.length ?? 0) > MAX_IMAGE * 1.4) throw new Error('Imagem grande demais (máximo 400 KB).');
+  if (patch.folder !== undefined) {
+    if (!isAbsolute(patch.folder.trim())) throw new Error('Use o caminho completo da pasta.');
+    patch.folder = resolve(patch.folder.trim());
+    if (get('select 1 from projects where folder = ? and slug <> ?', patch.folder, slug)) throw new Error('Essa pasta já é de outro projeto.');
+  }
+  const fields = Object.entries(patch)
+    // campo ausente chega como undefined pelo IPC: não mexe nele (senão vira null e quebra colunas NOT NULL, ex.: folder)
+    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'autopilot', 'autopilot_brief', 'autopilot_mode'].includes(k))
+    .map(([k, v]) => [k, k === 'autopilot' ? (v ? 1 : 0) : v] as const);
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,
-    ...fields.map(([, v]) => (v ?? null) as string | null), slug);
+    ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | number | null), slug);
+}
+
+/** Tira o projeto da Central. Pasta, repositórios e worktrees continuam no disco. */
+export function deleteProject(slug: string): void {
+  if (get<{ n: number }>(`select count(*) n from runs where project_slug = ? and status in ('queued','preparing','running')`, slug)!.n) {
+    throw new Error('Há agentes trabalhando neste projeto. Interrompa antes de excluir.');
+  }
+  run('update ideas set project_slug = null where project_slug = ?', slug);
+  run('update proposals set project_slug = null where project_slug = ?', slug);
+  run('delete from projects where slug = ?', slug);
 }
 
 export function listRepos(slug: string): RepoDto[] {

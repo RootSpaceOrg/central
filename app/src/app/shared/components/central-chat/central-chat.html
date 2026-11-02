@@ -1,0 +1,30 @@
+<aside class="fixed top-10 right-0 bottom-[26px] z-30 flex w-[480px] flex-col border-l border-edge bg-panel shadow-[-24px_0_60px_-30px_rgb(0_0_0/0.8)] transition-transform duration-200 ease-out motion-reduce:transition-none"
+       [class.translate-x-full]="!chat.open()" [attr.aria-hidden]="!chat.open()" [attr.inert]="chat.open() ? null : ''" aria-label="Conversa com agente">
+  <header class="flex items-center gap-2 border-b border-edge px-4 py-3">
+    <app-agent-select class="min-w-0 flex-1" [compact]="true" [value]="agentValue()" (valueChange)="setAgent($event)" />
+    <button type="button" class="btn btn-ghost !p-2" (click)="history.set(!history())" title="Conversas anteriores" aria-label="Conversas anteriores"
+            [class.!bg-raise]="history()"><app-icon name="summary" [size]="17" /></button>
+    <button type="button" class="btn btn-ghost !p-2" (click)="newChat()" title="Nova conversa" aria-label="Nova conversa"><app-icon name="plus" [size]="17" /></button>
+    <button type="button" class="btn btn-ghost !p-2" (click)="expand()" title="Abrir em tela cheia" aria-label="Abrir em tela cheia"><app-icon name="external" [size]="16" /></button>
+    <button type="button" class="btn btn-ghost !p-2" (click)="chat.open.set(false)" title="Fechar (Esc)" aria-label="Fechar"><app-icon name="close" [size]="17" /></button>
+  </header>
+
+  @if (history()) {
+    <ul class="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Conversas anteriores">
+      @for (c of chat.agentChats(); track c.id) {
+        <li class="group flex items-center gap-2 rounded-xl px-3 py-2.5 hover:bg-raise" [class.bg-raise]="c.id === chat.current()">
+          <button type="button" class="min-w-0 flex-1 text-left" (click)="pick(c.id)">
+            <span class="block truncate">{{ c.title }}</span>
+            <span class="text-[12px] text-faint">{{ c.updatedAt | ago }}</span>
+          </button>
+          <button type="button" class="text-faint opacity-0 hover:text-no group-hover:opacity-100" (click)="chat.remove(c.id)" aria-label="Apagar conversa">
+            <app-icon name="delete" [size]="15" /></button>
+        </li>
+      } @empty {
+        <li class="p-6 text-center text-mute">Nenhuma conversa com {{ chat.agent()?.name }} ainda.</li>
+      }
+    </ul>
+  } @else {
+    <app-chat-view class="min-h-0 flex-1" [compact]="true" />
+  }
+</aside>

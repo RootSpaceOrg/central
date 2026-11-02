@@ -4,6 +4,7 @@ export type ProjectDialogState = { mode: 'create' } | { mode: 'clone'; slug: str
 
 export interface RunDialogState {
   projectSlug?: string | null;
+  agentId?: number | null;
   repoPath?: string;
   prompt?: string;
   proposalId?: number | null;
@@ -26,6 +27,13 @@ export class DialogsService {
   readonly task = signal<TaskDialogState | null>(null);
   readonly turn = signal<TurnDialogState | null>(null);
   readonly update = signal(false);
+  readonly settings = signal(false);
+  /** slug do projeto sendo editado */
+  readonly editProject = signal<string | null>(null);
+  /** piloto automático de um projeto: direção, modo, ligar/desligar */
+  readonly autopilot = signal<string | null>(null);
+  /** importar sessão do Claude Code para o projeto; onDone recebe a sessão criada (a Grade põe num painel) */
+  readonly importSession = signal<{ slug: string; onDone?: (sessionId: number) => void } | null>(null);
 
   newProject() { this.project.set({ mode: 'create' }); }
   cloneInto(slug: string) { this.project.set({ mode: 'clone', slug }); }

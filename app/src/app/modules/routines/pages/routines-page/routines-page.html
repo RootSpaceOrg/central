@@ -1,0 +1,71 @@
+<div class="mx-auto max-w-[1180px] px-10 pt-9 pb-16">
+  <div class="flex items-end gap-6">
+    <div class="mr-auto">
+      <h1 class="font-display text-[34px] font-bold leading-tight tracking-tight">Rotinas</h1>
+      <p class="mt-1 max-w-2xl text-mute">Agentes que trabalham sozinhos na agenda que você define e contam na Central o que encontraram.
+        Rodam nesta máquina, então enxergam seus repositórios e o backlog. Precisam do PC ligado e da Central aberta.</p>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="dialog.set({ routine: null })"><app-icon name="plus" [size]="18" />Nova rotina</button>
+  </div>
+
+  @if (routines.error()) { <p role="alert" class="mt-4 text-no">{{ routines.error() }}</p> }
+
+  @if (routines.routines().length) {
+    <ul class="mt-8 space-y-3">
+      @for (r of routines.routines(); track r.id) {
+        <li class="group flex items-center gap-5 rounded-2xl border border-edge bg-panel px-5 py-4 transition hover:border-faint" [class.opacity-60]="!r.enabled">
+          <button type="button" role="switch" [attr.aria-checked]="r.enabled" (click)="routines.toggle(r)" [attr.aria-label]="(r.enabled ? 'Desligar ' : 'Ligar ') + r.name"
+                  class="relative h-6 w-11 shrink-0 rounded-full transition-colors" [class]="r.enabled ? 'bg-yes' : 'bg-edge'">
+            <span class="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition-transform" [class.translate-x-5]="r.enabled"></span>
+          </button>
+
+          <div class="min-w-0 flex-1">
+            <p class="flex items-center gap-2">
+              <span class="truncate font-display text-[17px] font-semibold">{{ r.name }}</span>
+              @if (agent(r.agentId); as a) {
+                <span class="flex items-center gap-1.5 text-[13px]" [style.color]="a.color"><app-project-avatar [project]="a" [size]="16" />{{ a.name }}</span>
+              }
+              @if (project(r.projectSlug); as p) {
+                <span class="flex items-center gap-1.5 text-[13px]" [style.color]="p.color"><app-project-avatar [project]="p" [size]="16" />{{ p.name }}</span>
+              }
+            </p>
+            <p class="mt-0.5 truncate text-[13px] text-mute">{{ r.prompt }}</p>
+            <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-faint">
+              <span class="flex items-center gap-1"><app-icon name="timer" [size]="13" />{{ describe(r) }}</span>
+              <span>{{ r.repoPath ? 'Repositório ' + repoName(r.repoPath) : r.projectSlug ? 'Projeto inteiro' : 'Pasta do agente' }}, {{ r.permission === 'edits' ? 'segura' : 'total' }}</span>
+              @if (r.enabled) { <span class="text-text/70">próxima {{ when(r.nextRunAt) }}</span> }
+              @if (r.lastSkipped) { <span class="text-later">pulou: {{ r.lastSkipped }}</span> }
+              @else if (r.lastRunId) {
+                <a routerLink="/execucoes" [queryParams]="{ run: r.lastRunId }" class="hover:underline"
+                   [class]="r.lastStatus === 'failed' ? 'text-no' : r.lastStatus === 'succeeded' ? 'text-yes' : 'text-frost'">
+                  última {{ r.lastRunAt | ago }}, {{ r.lastStatus === 'succeeded' ? 'concluída' : r.lastStatus === 'failed' ? 'falhou' : 'em andamento' }}</a>
+              }
+            </p>
+          </div>
+
+          <div class="flex shrink-0 gap-1">
+            <button type="button" class="btn btn-sm" (click)="fire(r)" [disabled]="firing() === r.id"><app-icon name="play" [size]="14" />Rodar agora</button>
+            <button type="button" class="btn btn-ghost !p-2" (click)="dialog.set({ routine: r })" aria-label="Editar" title="Editar"><app-icon name="edit" [size]="16" /></button>
+            <button type="button" class="btn btn-ghost !p-2 hover:!text-no" (click)="remove(r)" aria-label="Excluir" title="Excluir"><app-icon name="delete" [size]="16" /></button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+
+  <section class="mt-10" aria-labelledby="modelos">
+    <h2 id="modelos" class="font-display text-xl font-semibold">{{ routines.routines().length ? 'Mais ideias de rotina' : 'Comece por um modelo' }}</h2>
+    <div class="mt-3 grid grid-cols-2 gap-3">
+      @for (t of templates; track t.title) {
+        <button type="button" (click)="dialog.set({ routine: null, draft: t.draft })"
+                class="flex items-start gap-4 rounded-2xl border border-edge bg-panel p-4 text-left transition hover:border-faint hover:bg-raise">
+          <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-frost/12 text-frost"><app-icon name="routine" [size]="20" /></span>
+          <span><span class="block font-semibold">{{ t.title }}</span><span class="text-[13px] text-mute">{{ t.hint }}, projeto inteiro, só lê e organiza</span></span>
+        </button>
+      }
+    </div>
+    <p class="mt-5 text-[13px] text-faint">Quer que rode com o PC desligado? As Routines do Claude Code na nuvem (claude.ai/code) fazem isso, mas só enxergam o GitHub, não a Central.</p>
+  </section>
+</div>
+
+<app-routine-dialog [state]="dialog()" (closed)="dialog.set(null)" />

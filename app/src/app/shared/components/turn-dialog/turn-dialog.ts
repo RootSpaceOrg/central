@@ -1,10 +1,11 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
+import { ProjectSelect } from '../pickers/project-select';
 
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { Repo } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
-import { RunPermission } from '../../services/runs/runs.model';
+import { RunPermission, RunSize, SIZES } from '../../services/runs/runs.model';
 import { TasksService } from '../../services/tasks/tasks.service';
 import { TurnsService } from '../../services/turns/turns.service';
 import { UsageService, untilReset } from '../../services/usage/usage.service';
@@ -13,7 +14,7 @@ import { Icon } from '../../ui/icon';
 /** "Deixar evoluindo": escolhe tarefas, até que horas e quanto pode gastar. */
 @Component({
   selector: 'app-turn-dialog',
-  imports: [Icon],
+  imports: [Icon, ProjectSelect],
   templateUrl: './turn-dialog.html',
 })
 export class TurnDialog {
@@ -31,7 +32,8 @@ export class TurnDialog {
   /** tarefa → repositório escolhido; ausente = não vai no turno */
   protected readonly picked = signal<Record<number, string>>({});
   protected readonly until = signal('07:00');
-  protected readonly budget = signal(10);
+  protected readonly sizes = SIZES;
+  protected readonly size = signal<RunSize>('medium');
   protected readonly permission = signal<RunPermission>('edits');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -60,7 +62,7 @@ export class TurnDialog {
       if (!el) return;
       if (s && !el.open) {
         this.error.set(null); this.busy.set(false); this.picked.set({});
-        this.selectProject(s.projectSlug ?? this.projects.living()[0]?.slug ?? '');
+        this.selectProject(s.projectSlug ?? this.projects.defaultSlug());
         el.showModal();
       }
       if (!s && el.open) el.close();
@@ -97,9 +99,9 @@ export class TurnDialog {
     if (items.some(i => !i.repoPath)) { this.error.set('Escolha o repositório de cada tarefa.'); return; }
     this.busy.set(true);
     try {
-      await this.turns.start(this.projectSlug(), items, this.untilDate(), this.budget(), this.permission());
+      await this.turns.start(this.projectSlug(), items, this.untilDate(), SIZES.find(s => s.id === this.size())!.budget * items.length, this.permission());
       this.close();
-      this.router.navigate(['/agentes']);
+      this.router.navigate(['/execucoes']);
     } catch (err) {
       this.error.set((err as Error).message);
       this.busy.set(false);

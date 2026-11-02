@@ -1,12 +1,16 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
+import { AgentsService } from '../../../../shared/services/agents/agents.service';
+import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { IdeasService } from '../../../../shared/services/ideas/ideas.service';
-import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
+import { Project } from '../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { Proposal, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
+import { PULSE_LABEL, PulseItem, PulseService } from '../../../../shared/services/pulse/pulse.service';
+import { RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 import { RUN_STATUS_LABEL } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
@@ -14,14 +18,16 @@ import { Task, TasksService } from '../../../../shared/services/tasks/tasks.serv
 import { TurnsService } from '../../../../shared/services/turns/turns.service';
 import { UsageService, untilReset } from '../../../../shared/services/usage/usage.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
-import { Heartbeat } from '../../../../shared/ui/heartbeat';
 import { Icon } from '../../../../shared/ui/icon';
+import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
-type Mode = 'pilot' | 'light';
-
+/**
+ * Início: o que espera você (revisar, decidir, falhas), o que o piloto automático fez, e os projetos para abrir uma sessão.
+ * Sem perguntar o humor: com gás, você abre um projeto; sem gás, a fila já está pronta para aprovar.
+ */
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, Icon, AgoPipe, Heartbeat],
+  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar],
   templateUrl: './home-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })
@@ -34,18 +40,20 @@ export class HomePage {
   protected readonly turns = inject(TurnsService);
   protected readonly usage = inject(UsageService);
   protected readonly dialogs = inject(DialogsService);
+  protected readonly agents = inject(AgentsService);
+  protected readonly pulse = inject(PulseService);
+  protected readonly routines = inject(RoutinesService);
+  private readonly chat = inject(ChatService);
   private readonly settings = inject(SettingsApiService);
   private readonly router = inject(Router);
 
-  private readonly today = new Date().toISOString().slice(0, 10);
-  protected readonly mode = signal<Mode | null>(null);
   protected readonly since = signal<Date>(new Date(Date.now() - 86_400_000));
   protected readonly note = signal('');
   protected readonly noteSaved = signal(false);
-  protected readonly importing = signal(false);
-  protected readonly importResult = signal<string | null>(null);
   protected readonly runLabel = RUN_STATUS_LABEL;
+  protected readonly pulseLabel = PULSE_LABEL;
   protected readonly reset = untilReset;
+  protected readonly schedule = describeSchedule;
 
   protected readonly greeting = (() => {
     const h = new Date().getHours();
@@ -53,30 +61,30 @@ export class HomePage {
   })();
   protected readonly date = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 
-  /** o que os agentes terminaram desde a última vez que você abriu o Início */
-  protected readonly finished = computed(() =>
-    this.runs.runs().filter(r => r.finishedAt && r.finishedAt > this.since() && r.status !== 'killed'));
-  protected readonly away = computed(() => {
-    const f = this.finished();
-    return {
-      ok: f.filter(r => r.status === 'succeeded').length,
-      failed: f.filter(r => r.status === 'failed').length,
-      prs: f.filter(r => r.prUrl).length,
-      cost: f.reduce((n, r) => n + (r.costUsd ?? 0), 0),
-    };
-  });
-
+  // ---------- esperando você ----------
+  /** terminar antes de começar: PRs prontos primeiro */
+  protected readonly reviews = computed(() => this.tasks.tasks().filter(t => t.column === 'review').slice(0, 6));
   protected readonly decide3 = computed(() => this.proposals.inbox().slice(0, 3));
-  protected readonly ready = computed(() => this.tasks.tasks().filter(t => t.column === 'todo').sort((a, b) => a.priority - b.priority).slice(0, 3));
-  protected readonly inMotion = computed(() => this.tasks.tasks().filter(t => t.column === 'doing' || t.column === 'review').slice(0, 5));
-  protected readonly revisit = computed(() => {
-    const fresh = this.ideas.fresh();
-    return fresh.length ? fresh[new Date().getDate() % fresh.length] : null;
-  });
-  protected readonly recent = computed(() => [...this.projects.living()]
-    .sort((a, b) => (b.lastCommitAt?.getTime() ?? 0) - (a.lastCommitAt?.getTime() ?? 0)).slice(0, 4));
+  protected readonly failed = computed(() =>
+    this.runs.runs().filter(r => r.status === 'failed' && r.finishedAt && r.finishedAt > this.since()).slice(0, 3));
+  protected readonly waiting = computed(() => this.reviews().length + this.proposals.inbox().length + this.failed().length);
+  protected readonly finished = computed(() =>
+    this.runs.runs().filter(r => r.status === 'succeeded' && r.finishedAt && r.finishedAt > this.since()));
 
-  /** recomendação pela cota do Claude */
+  // ---------- piloto automático ----------
+  protected readonly piloted = computed(() => this.projects.living().filter(p => p.autopilot));
+  /** projetos para evoluir que ainda não estão no piloto */
+  protected readonly candidates = computed(() => this.projects.living().filter(p => p.status === 'active' && !p.autopilot));
+  protected readonly pulseOf = computed(() => new Map((this.pulse.status()?.items ?? []).map(i => [i.slug, i])));
+
+  // ---------- projetos ----------
+  private readonly byActivity = (list: Project[]) => [...list].sort((a, b) => (b.lastCommitAt?.getTime() ?? 0) - (a.lastCommitAt?.getTime() ?? 0));
+  protected readonly evolving = computed(() => this.byActivity(this.projects.living().filter(p => p.status === 'active')));
+  protected readonly supporting = computed(() => this.byActivity(this.projects.living().filter(p => p.status === 'maintenance')));
+
+  // ---------- automações ----------
+  protected readonly automations = computed(() => this.routines.routines().filter(r => r.enabled));
+
   protected readonly advice = computed(() => {
     const s = this.usage.session();
     if (!s) return null;
@@ -87,27 +95,40 @@ export class HomePage {
   });
 
   constructor() {
-    this.settings.get(`mode:${this.today}`).then(m => this.mode.set((m as Mode) ?? null));
     this.settings.get('home:lastSeen').then(v => {
       if (v) this.since.set(new Date(v));
       this.settings.set('home:lastSeen', new Date().toISOString());
     });
   }
 
-  protected setMode(m: Mode): void {
-    this.mode.set(m);
-    this.settings.set(`mode:${this.today}`, m);
-  }
+  protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
 
   protected decide(p: Proposal, v: Verdict): void { this.proposals.decide(p, v); }
 
-  protected toAgent(t: Task): void {
-    this.dialogs.newRun({ projectSlug: t.projectSlug, repoPath: t.repoPath ?? undefined, taskId: t.id, prompt: [t.title, t.body].filter(Boolean).join('\n\n') });
+  /** sessão nova no projeto: conversa com o Claude ou terminal */
+  protected session(slug: string, kind: 'chat' | 'shell'): void {
+    this.router.navigate(['/projetos', slug], { queryParams: { nova: kind } });
   }
 
-  protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
+  protected talk(agentId: number): void {
+    this.chat.selectAgent(agentId);
+    this.chat.open.set(true);
+  }
 
-  protected openCode(slug: string): void { this.router.navigate(['/projetos', slug], { queryParams: { aba: 'codigo' } }); }
+  /** conversa sobre o PR em revisão, no projeto */
+  protected review(t: Task): void {
+    if (t.prUrl) this.projects.openExternal(t.prUrl);
+    else this.dialogs.editTask(t.id);
+  }
+
+  protected tone(i: PulseItem | undefined): string {
+    switch (i?.action) {
+      case 'started': return 'text-yes';
+      case 'waiting': return 'text-frost';
+      case 'blocked': case 'quota': return 'text-later';
+      default: return 'text-mute';
+    }
+  }
 
   protected async saveNote(e: Event): Promise<void> {
     e.preventDefault();
@@ -116,17 +137,5 @@ export class HomePage {
     this.note.set('');
     this.noteSaved.set(true);
     setTimeout(() => this.noteSaved.set(false), 2500);
-  }
-
-  protected async importPending(): Promise<void> {
-    this.importing.set(true);
-    try {
-      const r = await this.ideas.importPending();
-      this.importResult.set(`${r.ideas} ideias e ${r.tasks} PRs em revisão importados.`);
-    } catch (e) {
-      this.importResult.set(errorMessage(e));
-    } finally {
-      this.importing.set(false);
-    }
   }
 }

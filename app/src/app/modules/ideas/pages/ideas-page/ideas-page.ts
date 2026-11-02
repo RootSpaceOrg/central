@@ -1,5 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
+import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
 import { IDEA_SOURCE_LABEL, Idea, IdeaStatus, IdeasService } from '../../../../shared/services/ideas/ideas.service';
 import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
@@ -15,7 +17,7 @@ const FILTERS: { id: IdeaStatus; label: string }[] = [
 
 @Component({
   selector: 'app-ideas-page',
-  imports: [RouterLink, Icon, AgoPipe],
+  imports: [RouterLink, Icon, AgoPipe, ProjectSelect, ProjectAvatar],
   templateUrl: './ideas-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })

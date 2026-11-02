@@ -7,9 +7,11 @@ import { basename, join, relative } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
-  IdeaDto, IdeaPatch, ImportResultDto, NewIdeaInput, NewTaskInput, TaskColumn, TaskDto, TaskPatch,
+  IdeaDto, IdeaPatch, ImportResultDto, NewIdeaInput, NewProposalInput, NewTaskInput, ProposalDto, ProposalStatus, TaskColumn, TaskDto,
+  TaskPatch, Verdict,
 } from '../src/app/shared/contract';
 import { all, get, now, run } from './db';
+import { pool } from './git';
 
 const execFileP = promisify(execFile);
 const COLUMNS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'done'];
@@ -20,16 +22,59 @@ export const getSetting = (key: string) => get<{ value: string }>('select value 
 export const setSetting = (key: string, value: string) =>
   run('insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value', key, value);
 
+// ---------- decisões ----------
+
+const VERDICT: Record<Verdict, ProposalStatus> = { approve: 'approved', defer: 'deferred', reject: 'rejected' };
+
+export function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
+  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at
+    from proposals where status in (${statuses.map(() => '?').join(',') || "''"})
+    order by coalesce(tier, 9), created_at desc`, ...statuses);
+}
+
+export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string }): ProposalDto {
+  const title = input.title?.trim();
+  if (!title) throw new Error('Escreva o que precisa acontecer.');
+  const tier = input.tier === 0 || input.tier === 1 || input.tier === 2 ? input.tier : null;
+  const { lastInsertRowid } = run(`insert into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,?,?)`,
+    input.project_slug || null, title, input.body?.trim() || null, input.next_action?.trim() || null, tier,
+    input.source ?? 'manual', `${Date.now()}-${Math.random()}`);
+  return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
+}
+
+/** Aprovar vira tarefa em "A fazer", pronta para um agente. */
+export function decide(id: number, verdict: Verdict, reason: string | null): void {
+  if (!VERDICT[verdict]) throw new Error('Decisão inválida.');
+  if (!run('update proposals set status = ?, updated_at = ? where id = ?', VERDICT[verdict], now(), id).changes) {
+    throw new Error('Decisão não encontrada.');
+  }
+  run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
+  const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
+  if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {
+    // decisões do piloto e dos agentes dizem o repositório no texto: a tarefa já nasce sabendo onde trabalhar
+    const text = `${p.title}
+${p.body ?? ''}
+${p.next_action ?? ''}`.toLowerCase();
+    const repo = all<{ path: string; name: string }>('select path, name from repos where project_slug = ?', p.project_slug)
+      .find(r => text.includes(r.path.toLowerCase()) || text.includes(`repo ${r.name.toLowerCase()}`));
+    createTask({
+      project_slug: p.project_slug, repo_path: repo?.path ?? null, title: p.title,
+      body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`].filter(Boolean).join('\n\n') || null,
+      column: 'todo', priority: p.tier === 2 ? 0 : 1, proposal_id: id,
+    });
+  }
+}
+
 // ---------- ideias ----------
 
 export const listIdeas = () => all<IdeaDto>(`select id, project_slug, title, body, status, source, source_ref, task_id, created_at
   from ideas order by case status when 'new' then 0 when 'promoted' then 1 else 2 end, created_at desc, id desc`);
 
-export function createIdea(input: NewIdeaInput): IdeaDto {
+export function createIdea(input: NewIdeaInput & { source?: string }): IdeaDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Escreva a ideia.');
-  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref) values (?,?,?,'manual',?)`,
-    input.project_slug || null, title, input.body?.trim() || null, `${Date.now()}-${Math.random()}`);
+  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref) values (?,?,?,?,?)`,
+    input.project_slug || null, title, input.body?.trim() || null, input.source ?? 'manual', `${Date.now()}-${Math.random()}`);
   return get<IdeaDto>('select * from ideas where id = ?', Number(lastInsertRowid))!;
 }
 
@@ -114,6 +159,62 @@ export function deleteTask(id: number): void {
 /** Chamado pelos agentes: a tarefa anda no quadro conforme a execução. */
 export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string | null = null): void {
   run(`update tasks set "column" = ?, pr_url = coalesce(?, pr_url), updated_at = ? where id = ?`, column, prUrl, now(), taskId);
+}
+
+/** Tarefas em Revisão cujo PR foi mergeado vão para Feito. Devolve quantas andaram. */
+export async function syncPullRequests(): Promise<number> {
+  const review = all<{ id: number; pr_url: string }>(`select id, pr_url from tasks where "column" = 'review' and pr_url is not null`);
+  let moved = 0;
+  await pool(review, 4, async t => {
+    try {
+      const { stdout } = await execFileP('gh', ['pr', 'view', t.pr_url, '--json', 'state'], { windowsHide: true });
+      if (JSON.parse(stdout).state === 'MERGED') { moveTaskForRun(t.id, 'done'); moved++; }
+    } catch { /* PR apagado, sem acesso ou offline: deixa como está */ }
+  });
+  return moved;
+}
+
+/** owner/repo a partir do remote do GitHub */
+export function githubName(remote: string | null): string | null {
+  const m = remote?.match(/github\.com[:/]([^/]+)\/(.+?)(\.git)?\/?$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+/**
+ * Sentinela de CI: em cada repositório com commits nos últimos 14 dias, se a última execução do GitHub Actions
+ * na branch padrão falhou, abre uma decisão (uma por repositório enquanto ela estiver esperando).
+ * Devolve quantas decisões novas criou.
+ */
+export async function syncCiFailures(): Promise<number> {
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const repos = all<{ path: string; name: string; project_slug: string; remote: string | null; default_branch: string | null }>(`
+    select r.path, r.name, r.project_slug, r.remote, r.default_branch from repos r
+    join projects p on p.slug = r.project_slug
+    where p.status in ('active','maintenance') and r.remote like '%github.com%'
+      and exists (select 1 from commits c where c.repo_path = r.path and c.committed_at >= ?)
+    limit 60`, since);
+  let created = 0;
+  await pool(repos, 4, async r => {
+    const full = githubName(r.remote);
+    if (!full) return;
+    // develop = deploy em dev, main = produção (e a padrão do repo, se for outra)
+    for (const branch of [...new Set(['main', 'develop', r.default_branch].filter(Boolean) as string[])]) {
+      try {
+        const { stdout } = await execFileP('gh', ['run', 'list', '-R', full, '--branch', branch, '--limit', '1',
+          '--json', 'databaseId,conclusion,status,url,displayTitle,workflowName,createdAt'], { windowsHide: true });
+        const last = (JSON.parse(stdout) as { databaseId: number; conclusion: string; status: string; url: string; displayTitle: string; workflowName: string; createdAt: string }[])[0];
+        if (!last || last.status !== 'completed' || last.conclusion !== 'failure') continue;
+        if (get(`select 1 from proposals where source = 'ci' and status = 'proposed' and source_ref like ?`, `${full}@${branch}#%`)) continue;
+        const res = run(`insert or ignore into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,'ci',?)`,
+          r.project_slug, `CI falhando em ${r.name} (${branch})`,
+          `O workflow "${last.workflowName}" falhou em ${new Date(last.createdAt).toLocaleString('pt-BR')}, no commit "${last.displayTitle}".
+${last.url}`,
+          'Um agente abre o log da falha, encontra a causa e propõe a correção num PR draft.', branch === 'main' ? 2 : 1, `${full}@${branch}#${last.databaseId}`);
+        created += Number(res.changes);
+      } catch { /* branch sem Actions, sem acesso ou offline */ }
+    }
+  });
+  return created;
 }
 
 // ---------- importação de pendências (M2) ----------

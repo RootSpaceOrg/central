@@ -79,7 +79,7 @@ db.exec(`
 
   create table if not exists runs (
     id            integer primary key autoincrement,
-    project_slug  text not null references projects on delete cascade,
+    project_slug  text references projects on delete set null,
     proposal_id   integer references proposals on delete set null,
     repo_path     text not null,
     worktree_path text,
@@ -148,6 +148,102 @@ db.exec(`
     finished_at  text
   );
 
+  create table if not exists routines (
+    id             integer primary key autoincrement,
+    name           text not null,
+    project_slug   text references projects on delete set null,
+    repo_path      text,
+    prompt         text not null,
+    permission     text not null default 'edits',
+    size           text not null default 'small',
+    schedule_kind  text not null default 'daily',
+    days           text not null default '1,2,3,4,5',
+    time           text not null default '08:00',
+    interval_hours integer not null default 24,
+    max_session    integer not null default 80,
+    enabled        integer not null default 1,
+    next_run_at    text not null,
+    last_run_at    text,
+    last_skipped   text,
+    created_at     text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  create table if not exists chats (
+    id         integer primary key autoincrement,
+    title      text not null,
+    session_id text,
+    created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  create table if not exists chat_messages (
+    id      integer primary key autoincrement,
+    chat_id integer not null references chats on delete cascade,
+    role    text not null,
+    text    text not null,
+    at      text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  create table if not exists agents (
+    id           integer primary key autoincrement,
+    slug         text not null unique,
+    name         text not null,
+    description  text,
+    color        text not null default '#7FA2FF',
+    icon_kind    text not null default 'letter',
+    icon_value   text,
+    project_slug text references projects on delete set null,
+    instructions text not null default '',
+    tools        text not null default '',
+    permission   text not null default 'edits',
+    model        text not null default '',
+    builtin      integer not null default 0,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  create table if not exists sessions (
+    id           integer primary key autoincrement,
+    project_slug text not null references projects on delete cascade,
+    kind         text not null,
+    title        text not null,
+    chat_id      integer references chats on delete set null,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+
+  -- memória do projeto: fatos duráveis (decisão, convenção, armadilha…) com proveniência, ligados a nós do índice de código
+  create table if not exists facts (
+    id             integer primary key autoincrement,
+    project_slug   text not null references projects on delete cascade,
+    kind           text not null,
+    text           text not null,
+    source_kind    text not null,
+    source_ref     text,
+    author         text not null,
+    pinned         integer not null default 0,
+    status         text not null default 'active',
+    created_at     text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    invalidated_at text,
+    superseded_by  integer
+  );
+  create table if not exists fact_links (
+    fact_id  integer not null references facts on delete cascade,
+    node_key text not null,
+    primary key (fact_id, node_key)
+  ) without rowid;
+
+  -- o que cada execução/conversa tocou (arquivos lidos, editados, consultados no índice)
+  create table if not exists touches (
+    id           integer primary key autoincrement,
+    project_slug text,
+    run_id       integer,
+    chat_id      integer,
+    node_key     text not null,
+    how          text not null,
+    at           text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+  create index if not exists touches_by_run on touches(run_id);
+  create index if not exists touches_by_project on touches(project_slug, at);
+
   create table if not exists settings (
     key   text primary key,
     value text not null
@@ -155,9 +251,44 @@ db.exec(`
 `);
 
 // Colunas adicionadas depois da v0.2.
-for (const [table, column, type] of [['runs', 'task_id', 'integer'], ['runs', 'turn_id', 'integer'], ['tasks', 'repo_path', 'text']]) {
+for (const [table, column, type] of [
+  ['runs', 'task_id', 'integer'], ['runs', 'turn_id', 'integer'], ['tasks', 'repo_path', 'text'],
+  ['projects', 'icon_kind', "text not null default 'letter'"], ['projects', 'icon_value', 'text'],
+  ['runs', 'scope', "text not null default 'repo'"], ['runs', 'routine_id', 'integer'],
+  ['runs', 'usage_start', 'real'], ['runs', 'usage_end', 'real'],
+  ['runs', 'agent_id', 'integer'], ['runs', 'session_id', 'text'], ['routines', 'agent_id', 'integer'],
+  ['chats', 'agent_id', 'integer'], ['chats', 'cwd', 'text'], ['chats', 'project_slug', 'text'],
+  ['projects', 'autopilot', 'integer not null default 0'],
+  ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
+]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
   if (!cols.some(c => c.name === column)) db.exec(`alter table ${table} add column ${column} ${type}`);
+}
+
+// v0.6: execuções e rotinas podem não ter projeto (agente sem projeto). O SQLite não muda NOT NULL de coluna
+// existente: recria a tabela com o mesmo SQL (projeto opcional), copia os dados e troca. Referências de outras
+// tabelas a ela continuam valendo porque o nome final é o mesmo.
+for (const table of ['runs', 'routines']) {
+  const col = (db.prepare(`pragma table_info(${table})`).all() as { name: string; notnull: number }[]).find(c => c.name === 'project_slug');
+  if (!col?.notnull) continue;
+  const ddl = (db.prepare(`select sql from sqlite_master where type = 'table' and name = ?`).get(table) as { sql: string }).sql;
+  const relaxed = ddl
+    .replace(/project_slug(\s+)text not null references projects on delete cascade/i, 'project_slug$1text references projects on delete set null')
+    .replace(/^CREATE TABLE\s+"?\w+"?/i, `CREATE TABLE ${table}_new`);
+  db.exec('pragma foreign_keys = off');
+  db.exec('begin');
+  try {
+    db.exec(relaxed);
+    db.exec(`insert into ${table}_new select * from ${table}`);
+    db.exec(`drop table ${table}`);
+    db.exec(`alter table ${table}_new rename to ${table}`);
+    db.exec('commit');
+  } catch (e) {
+    db.exec('rollback');
+    throw e;
+  } finally {
+    db.exec('pragma foreign_keys = on');
+  }
 }
 
 export const all = <T>(sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params) as T[];

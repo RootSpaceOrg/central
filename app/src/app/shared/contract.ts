@@ -5,10 +5,14 @@
  */
 
 export type ProjectStatus = 'active' | 'maintenance' | 'frozen' | 'dead';
+/** letra: inicial do nome; emoji; lucide: nome de ícone do Lucide; image: data URL */
+export type ProjectIconKind = 'letter' | 'emoji' | 'lucide' | 'image';
 export type ProposalStatus = 'proposed' | 'approved' | 'rejected' | 'deferred' | 'running' | 'done' | 'killed';
 export type Verdict = 'approve' | 'defer' | 'reject';
 export type RunStatus = 'queued' | 'preparing' | 'running' | 'succeeded' | 'failed' | 'killed';
 export type RunPermission = 'edits' | 'full';
+/** repo: worktree isolada que termina em PR; project: pasta do projeto inteira; workspace: pasta própria de um agente sem projeto */
+export type RunScope = 'repo' | 'project' | 'workspace';
 export type RunEventKind = 'system' | 'text' | 'tool' | 'result' | 'error';
 
 export interface ProjectDto {
@@ -18,6 +22,8 @@ export interface ProjectDto {
   status: ProjectStatus;
   color: string;
   description: string | null;
+  icon_kind: ProjectIconKind;
+  icon_value: string | null;
   created_at: string;
   folder_exists: boolean;
   repo_count: number;
@@ -31,7 +37,16 @@ export interface ProjectDto {
   last_commit_repo: string | null;
   open_proposals: number;
   active_runs: number;
+  /** piloto automático: de madrugada um agente pega a tarefa do topo de "A fazer" */
+  autopilot: boolean;
+  /** para onde o Gustavo quer levar o projeto (vai em todo prompt do piloto) */
+  autopilot_brief: string;
+  autopilot_mode: AutopilotMode;
 }
+
+/** tasks = só executa o que está em "A fazer"; plan = sem tarefa, planeja e propõe como decisões;
+ *  trust = sem tarefa, planeja e já coloca em "A fazer" */
+export type AutopilotMode = 'tasks' | 'plan' | 'trust';
 
 export interface NewProjectInput {
   name: string;
@@ -46,6 +61,33 @@ export interface ProjectPatch {
   status?: ProjectStatus;
   color?: string;
   description?: string | null;
+  icon_kind?: ProjectIconKind;
+  icon_value?: string | null;
+  /** caminho absoluto; os repositórios são redescobertos */
+  folder?: string;
+  autopilot?: boolean;
+  autopilot_brief?: string;
+  autopilot_mode?: AutopilotMode;
+}
+
+// ---------- piloto automático ----------
+
+/** started = agente trabalhando; waiting = já há tarefa em andamento/revisão; empty = nada em "A fazer";
+ *  blocked = tarefa sem repositório; quota = cota alta */
+export type PulseAction = 'started' | 'planning' | 'waiting' | 'empty' | 'blocked' | 'quota';
+
+export interface PulseItemDto {
+  slug: string;
+  name: string;
+  action: PulseAction;
+  text: string;
+  run_id?: number;
+}
+
+export interface PulseStatusDto {
+  last: { at: string; manual: boolean; items: PulseItemDto[] } | null;
+  /** janela da madrugada, ex.: 01:00–06:00 */
+  window: string;
 }
 
 export interface RepoDto {
@@ -94,10 +136,17 @@ export interface NewProposalInput {
 
 export interface RunDto {
   id: number;
-  project_slug: string;
+  /** null quando é de um agente sem projeto */
+  project_slug: string | null;
+  agent_id: number | null;
+  /** sessão do Claude Code: dá para continuar conversando com ela */
+  session_id: string | null;
   proposal_id: number | null;
   task_id: number | null;
   turn_id: number | null;
+  routine_id: number | null;
+  scope: RunScope;
+  /** no escopo project é a pasta do projeto */
   repo_path: string;
   repo_name: string;
   worktree_path: string | null;
@@ -107,7 +156,11 @@ export interface RunDto {
   status: RunStatus;
   permission: RunPermission;
   budget_usd: number;
+  /** equivalente em API calculado pelo Claude Code; não é cobrado no plano */
   cost_usd: number | null;
+  /** % da sessão do plano no início e no fim (mede o consumo real) */
+  usage_start: number | null;
+  usage_end: number | null;
   pr_url: string | null;
   result: string | null;
   created_at: string;
@@ -116,8 +169,11 @@ export interface RunDto {
 }
 
 export interface NewRunInput {
-  project_slug: string;
-  repo_path: string;
+  /** pode faltar se houver agent_id de um agente sem projeto */
+  project_slug: string | null;
+  agent_id?: number | null;
+  /** null = projeto inteiro (sem worktree) */
+  repo_path: string | null;
   prompt: string;
   budget_usd: number;
   permission: RunPermission;
@@ -290,10 +346,233 @@ export interface AppInfoDto {
 export interface NewTerminalInput {
   cwd: string;
   /** 'shell' abre PowerShell; 'claude' abre uma sessão interativa do Claude Code */
-  kind: 'shell' | 'claude';
+  kind: TerminalKind;
+  /** Claude Code do projeto: recebe o contexto da Central */
+  project_slug?: string | null;
   cols: number;
   rows: number;
 }
+
+// ---------- rotinas ----------
+
+export type RunSize = 'small' | 'medium' | 'large';
+export type ScheduleKind = 'daily' | 'interval';
+
+export interface RoutineDto {
+  id: number;
+  name: string;
+  agent_id: number | null;
+  project_slug: string | null;
+  /** null = projeto inteiro (organizar/analisar); com repo = trabalha em worktree e termina em PR */
+  repo_path: string | null;
+  prompt: string;
+  permission: RunPermission;
+  size: RunSize;
+  schedule_kind: ScheduleKind;
+  /** dias da semana, 0 = domingo */
+  days: number[];
+  time: string;
+  interval_hours: number;
+  /** não dispara sozinha se a sessão do plano estiver acima disso (%) */
+  max_session: number;
+  enabled: boolean;
+  next_run_at: string;
+  last_run_at: string | null;
+  last_skipped: string | null;
+  last_status: RunStatus | null;
+  last_run_id: number | null;
+  run_count: number;
+  created_at: string;
+}
+
+export interface NewRoutineInput {
+  name: string;
+  agent_id?: number | null;
+  project_slug: string | null;
+  repo_path: string | null;
+  prompt: string;
+  permission: RunPermission;
+  size: RunSize;
+  schedule_kind: ScheduleKind;
+  days: number[];
+  time: string;
+  interval_hours: number;
+  max_session?: number;
+  enabled?: boolean;
+}
+
+export type RoutinePatch = Partial<NewRoutineInput>;
+
+// ---------- sessões do projeto ----------
+
+export type TerminalKind = 'shell' | 'cmd' | 'bash' | 'claude';
+/** 'chat' = conversa com o Claude na pasta do projeto; o resto é terminal */
+export type SessionKind = TerminalKind | 'chat';
+
+export interface SessionDto {
+  id: number;
+  project_slug: string;
+  kind: SessionKind;
+  title: string;
+  chat_id: number | null;
+  created_at: string;
+}
+
+/** Sessão do Claude Code achada em ~/.claude/projects (para importar num projeto). */
+export interface ClaudeSessionDto {
+  session_id: string;
+  /** pasta onde a sessão rodou (o --resume precisa dela) */
+  cwd: string;
+  title: string;
+  updated_at: string;
+  size_kb: number;
+  /** já importada: id da conversa na Central */
+  imported_chat_id: number | null;
+}
+
+// ---------- contexto de código (índice, grafo e memória) ----------
+
+export interface ContextStatusDto {
+  project: string;
+  files: number;
+  nodes: number;
+  edges: number;
+  indexed_at: string | null;
+  ms: number | null;
+  error: string | null;
+  indexing: boolean;
+  done: number;
+  total: number;
+}
+
+export interface GraphNodeDto {
+  key: string;
+  /** file | route */
+  kind: string;
+  label: string;
+  repo: string;
+  path: string;
+  lang: string;
+  rank: number;
+  /** símbolos no arquivo */
+  defs: number;
+  /** fatos da memória ligados */
+  facts: number;
+  /** vezes que agentes tocaram (30 dias) */
+  touches: number;
+}
+
+export interface GraphEdgeDto { source: string; target: string; kinds: string[]; weight: number }
+export interface GraphDto { nodes: GraphNodeDto[]; edges: GraphEdgeDto[] }
+
+export interface NodeLinkDto { key: string; label: string; kinds: string[]; confidence: number }
+
+export interface NodeDetailDto {
+  key: string;
+  kind: string;
+  name: string;
+  qualname: string;
+  signature: string | null;
+  doc: string | null;
+  file: string | null;
+  line: number | null;
+  symbols: { key: string; kind: string; qualname: string; signature: string | null; line: number | null }[];
+  outgoing: NodeLinkDto[];
+  incoming: NodeLinkDto[];
+  preview: string | null;
+  facts: FactDto[];
+  touches: { how: string; at: string; run_id: number | null; chat_id: number | null }[];
+}
+
+export interface CodeHitDto { key: string; kind: string; qualname: string; signature: string | null; line: number | null; file_key: string }
+
+export type FactKind = 'decision' | 'convention' | 'gotcha' | 'fact' | 'howto';
+
+export interface FactDto {
+  id: number;
+  project_slug: string;
+  kind: FactKind;
+  text: string;
+  source_kind: string;
+  source_ref: string | null;
+  author: string;
+  pinned: boolean;
+  status: 'active' | 'retired';
+  created_at: string;
+  invalidated_at: string | null;
+  links: string[];
+}
+
+export interface NewFactInput {
+  project_slug: string;
+  kind: FactKind;
+  text: string;
+  links?: string[];
+  pinned?: boolean;
+}
+
+// ---------- agente Central (chat) ----------
+
+export interface ChatDto {
+  id: number;
+  agent_id: number;
+  /** conversa de uma sessão de projeto: trabalha na pasta do projeto e pode editar código */
+  project_slug: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChatRole = 'user' | 'assistant' | 'tool' | 'error';
+
+export interface ChatMessageDto {
+  id: number;
+  chat_id: number;
+  role: ChatRole;
+  text: string;
+  at: string;
+}
+
+// ---------- agentes (definições) ----------
+
+export interface AgentDto {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  color: string;
+  icon_kind: ProjectIconKind;
+  icon_value: string | null;
+  /** null = não pertence a um projeto (trabalha numa pasta própria) */
+  project_slug: string | null;
+  /** papel e jeito de trabalhar (vira instrução de sistema) */
+  instructions: string;
+  /** ferramentas extras liberadas, separadas por vírgula (ex.: mcp__sentry) */
+  tools: string;
+  permission: RunPermission;
+  /** '' = padrão do Claude Code; ou sonnet, opus, haiku */
+  model: string;
+  builtin: boolean;
+  created_at: string;
+  chats: number;
+  routines: number;
+  runs: number;
+}
+
+export interface NewAgentInput {
+  name: string;
+  description?: string | null;
+  color?: string;
+  icon_kind?: ProjectIconKind;
+  icon_value?: string | null;
+  project_slug?: string | null;
+  instructions?: string;
+  tools?: string[];
+  permission?: RunPermission;
+  model?: string;
+}
+
+export type AgentPatch = Partial<NewAgentInput>;
 
 export interface UpdateInfoDto {
   current: string;
@@ -304,15 +583,32 @@ export interface UpdateInfoDto {
   source_dir: string;
   source_exists: boolean;
   building: boolean;
+  /** de onde vem a versão nova: pasta release local ou release no GitHub */
+  source: 'local' | 'github' | null;
+  /** por que não deu para consultar o GitHub (gh ausente, offline) */
+  github_error: string | null;
+}
+
+export interface Prefs {
+  /** fechar a janela esconde na bandeja (rotinas e agentes seguem rodando) */
+  tray: boolean;
+  /** abrir com o Windows, minimizado na bandeja */
+  autostart: boolean;
+  /** notificações do Windows quando agentes terminam, CI quebra etc. */
+  notify: boolean;
 }
 
 /** invoke(canal, ...args) → Promise<retorno> */
 export interface Api {
   'app:info': () => AppInfoDto;
+  'window:fullscreen': (on: boolean) => void;
   'projects:list': () => ProjectDto[];
   'projects:create': (input: NewProjectInput) => ProjectDto;
   'projects:update': (slug: string, patch: ProjectPatch) => void;
   'projects:sync': (slug: string | null) => void;
+  /** remove da Central (pasta e repositórios ficam no disco) */
+  'projects:delete': (slug: string) => void;
+  'dialog:image': () => string | null;
   'repos:list': (slug: string) => RepoDto[];
   'commits:recent': (slug: string | null, days: number, limit: number) => CommitDto[];
   'proposals:list': (statuses: ProposalStatus[]) => ProposalDto[];
@@ -326,6 +622,26 @@ export interface Api {
   'fs:read': (path: string) => FileDto;
   'fs:write': (path: string, content: string) => void;
   'pty:create': (input: NewTerminalInput) => number;
+  /** null = de todos os projetos */
+  'sessions:list': (projectSlug: string | null) => SessionDto[];
+  'sessions:create': (projectSlug: string, kind: SessionKind, chatId?: number | null) => SessionDto;
+  'sessions:update': (id: number, patch: { title?: string; chat_id?: number }) => void;
+  'sessions:close': (id: number) => void;
+  'claude:sessions': () => ClaudeSessionDto[];
+  'context:status': () => ContextStatusDto[];
+  'context:reindex': (projectSlug: string, force: boolean) => void;
+  'context:graph': (projectSlug: string) => GraphDto;
+  'context:node': (key: string) => NodeDetailDto | null;
+  'context:search': (projectSlug: string, query: string) => CodeHitDto[];
+  /** o que um agente recebe no prompt para este foco (prévia na tela) */
+  'context:block': (projectSlug: string, focus: string, budget: number) => string;
+  'facts:list': (projectSlug: string) => FactDto[];
+  'facts:create': (input: NewFactInput) => FactDto;
+  'facts:update': (id: number, patch: { text?: string; kind?: FactKind; pinned?: boolean; links?: string[] }) => void;
+  'facts:supersede': (id: number, reason: string, replacement: string | null) => void;
+  'facts:delete': (id: number) => void;
+  'facts:import': (projectSlug: string) => number;
+  'claude:import': (sessionId: string, projectSlug: string) => SessionDto;
   'pty:write': (id: number, data: string) => void;
   'pty:resize': (id: number, cols: number, rows: number) => void;
   'pty:kill': (id: number) => void;
@@ -350,9 +666,35 @@ export interface Api {
   'turns:stop': (id: number) => void;
   'settings:get': (key: string) => string | null;
   'settings:set': (key: string, value: string) => void;
-  'update:check': () => UpdateInfoDto;
+  'routines:list': () => RoutineDto[];
+  'pulse:status': () => PulseStatusDto;
+  /** projectSlug: só esse projeto ("Rodar agora" no diálogo do piloto) */
+  'pulse:run': (projectSlug?: string | null) => PulseStatusDto;
+  'routines:create': (input: NewRoutineInput) => RoutineDto;
+  'routines:update': (id: number, patch: RoutinePatch) => void;
+  'routines:delete': (id: number) => void;
+  /** roda agora; devolve o id da execução */
+  'routines:fire': (id: number) => number | null;
+  'agents:list': () => AgentDto[];
+  'agents:create': (input: NewAgentInput) => AgentDto;
+  'agents:update': (id: number, patch: AgentPatch) => void;
+  'agents:delete': (id: number) => void;
+  /** conversas de um agente (null = todas) */
+  'chat:list': (agentId: number | null) => ChatDto[];
+  'chat:messages': (chatId: number) => ChatMessageDto[];
+  /** manda mensagem; chatId null cria conversa nova com o agente. Devolve o id da conversa */
+  'chat:send': (chatId: number | null, agentId: number, text: string, projectSlug?: string | null) => number;
+  /** abre uma conversa que continua a sessão de uma execução já terminada */
+  'chat:fromRun': (runId: number) => number;
+  'chat:rename': (chatId: number, title: string) => void;
+  'chat:stop': (chatId: number) => void;
+  'chat:delete': (chatId: number) => void;
+  'prefs:get': () => Prefs;
+  'prefs:set': (patch: Partial<Prefs>) => Prefs;
+  'update:check': (force: boolean) => UpdateInfoDto;
   'update:install': () => void;
-  'update:build': () => void;
+  /** publish: também cria a release no GitHub */
+  'update:build': (publish: boolean) => void;
 }
 
 /** eventos main → interface */
@@ -365,6 +707,14 @@ export interface Events {
   /** ideias, tarefas ou turnos mudaram no main (agente terminou, importação, turno) */
   'backlog:changed': null;
   'update:log': { line: string };
+  /** mensagem nova do agente Central (texto, ferramenta usada, erro) ou fim da resposta */
+  'chat:event': { chat_id: number; message: ChatMessageDto | null; busy: boolean };
+  'routines:changed': null;
+  'agents:changed': null;
+  /** pedido do main (bandeja, notificação) para abrir uma tela */
+  'app:navigate': string;
+  /** índice ou memória de um projeto mudou */
+  'context:changed': { project: string };
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
 }

@@ -13,12 +13,10 @@
                 aria-label="Descrição" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
 
       <div class="grid grid-cols-2 gap-3">
-        <label class="block">
+        <div>
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Projeto</span>
-          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
-            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
-          </select>
-        </label>
+          <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" />
+        </div>
         <label class="block">
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Repositório</span>
           <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
@@ -48,6 +46,7 @@
     <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
       @if (editing()) {
         <button type="button" class="btn btn-ghost !text-no" (click)="remove()"><app-icon name="delete" [size]="17" />Excluir</button>
+        <button type="button" class="btn" (click)="talk()"><app-icon name="central" [size]="17" />Conversar</button>
         @if (editing()!.column !== 'doing' && editing()!.column !== 'done') {
           <button type="button" class="btn" (click)="toAgent()"><app-icon name="agent" [size]="17" />Mandar para agente</button>
         }

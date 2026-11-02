@@ -6,9 +6,9 @@ import { IpcService } from '../ipc/ipc.service';
 export class UpdateApiService {
   private readonly ipc = inject(IpcService);
 
-  check() { return this.ipc.invoke('update:check'); }
+  check(force: boolean) { return this.ipc.invoke('update:check', force); }
   install() { return this.ipc.invoke('update:install'); }
-  build() { return this.ipc.invoke('update:build'); }
+  build(publish: boolean) { return this.ipc.invoke('update:build', publish); }
   onLog(cb: (p: { line: string }) => void) { return this.ipc.on('update:log', cb); }
   onBuilt(cb: (p: { ok: boolean; message: string }) => void) { return this.ipc.on('update:built', cb); }
 }

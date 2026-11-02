@@ -1,0 +1,179 @@
+import { Injectable, WritableSignal, computed, inject, signal } from '@angular/core';
+
+import { ChatDto, ChatMessageDto, ChatRole } from '../../contract';
+import { AgentsService } from '../agents/agents.service';
+import { errorMessage } from '../ipc/ipc.service';
+import { ChatApiService } from './chat-api.service';
+
+export interface Chat { id: number; agentId: number; projectSlug: string | null; title: string; updatedAt: Date }
+export interface ChatMessage { id: number; role: ChatRole; text: string; at: Date }
+
+/** Mensagens agrupadas para a tela: falas, e os passos (ferramentas) entre elas viram um bloco recolhível. */
+export type ChatItem =
+  | { kind: 'message'; message: ChatMessage }
+  | { kind: 'steps'; id: number; steps: ChatMessage[] };
+
+const toChat = (d: ChatDto): Chat => ({ id: d.id, agentId: d.agent_id, projectSlug: d.project_slug, title: d.title, updatedAt: new Date(d.updated_at) });
+const toMessage = (d: ChatMessageDto): ChatMessage => ({ id: d.id, role: d.role, text: d.text, at: new Date(d.at) });
+
+/** Uma conversa aberta na tela: a do painel/tela Agentes (o próprio ChatService) ou a de uma aba de sessão do projeto. */
+export class ChatSession {
+  /** agente da conversa atual (ou da próxima conversa nova) */
+  readonly agentId = signal<number | null>(null);
+  readonly current = signal<number | null>(null);
+  readonly messages = signal<ChatMessage[]>([]);
+  readonly error = signal<string | null>(null);
+  /** avisado quando uma conversa nova ganha id (a aba da sessão guarda o id) */
+  onCreated: (chatId: number) => void = () => {};
+  reload: () => void = () => {};
+
+  readonly agent = computed(() => {
+    const id = this.agentId();
+    return (id ? this.agents.byId().get(id) : null) ?? this.agents.central();
+  });
+  readonly currentBusy = computed(() => this.current() !== null && this.busy().has(this.current()!));
+  readonly items = computed<ChatItem[]>(() => {
+    const out: ChatItem[] = [];
+    for (const m of this.messages()) {
+      const last = out.at(-1);
+      if (m.role === 'tool') {
+        if (last?.kind === 'steps') last.steps.push(m);
+        else out.push({ kind: 'steps', id: m.id, steps: [m] });
+      } else out.push({ kind: 'message', message: m });
+    }
+    return out;
+  });
+
+  constructor(
+    protected readonly api: ChatApiService,
+    protected readonly agents: AgentsService,
+    readonly busy: WritableSignal<Set<number>>,
+    /** conversa de sessão de projeto: trabalha na pasta e edita código */
+    readonly projectSlug: string | null = null,
+  ) {}
+
+  select(chatId: number | null): void {
+    this.current.set(chatId);
+    this.messages.set([]);
+    this.error.set(null);
+    if (chatId) this.api.messages(chatId).then(list => { if (this.current() === chatId) this.messages.set(list.map(toMessage)); });
+  }
+
+  newChat(agentId = this.agent()?.id ?? null): void {
+    if (agentId) this.agentId.set(agentId);
+    this.select(null);
+  }
+
+  /** Mensagem que chegou pelo evento do processo principal. */
+  receive(chatId: number, message: ChatMessageDto): void {
+    if (chatId === this.current() && !this.messages().some(m => m.id === message.id)) this.messages.update(list => [...list, toMessage(message)]);
+  }
+
+  async send(text: string): Promise<void> {
+    const agent = this.agent();
+    if (!agent) return;
+    this.error.set(null);
+    try {
+      const id = await this.api.send(this.current(), agent.id, text, this.projectSlug);
+      if (this.current() !== id) {
+        this.current.set(id);
+        this.onCreated(id);
+        this.api.messages(id).then(list => { if (this.current() === id) this.messages.set(list.map(toMessage)); });
+      }
+      this.reload();
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    }
+  }
+
+  stop(): void {
+    const id = this.current();
+    if (id) this.api.stop(id);
+  }
+}
+
+/**
+ * Conversas com os agentes. A conversa "atual" é compartilhada entre o painel (Ctrl+J) e a tela Agentes,
+ * para continuar de onde estava em qualquer lugar. As abas de sessão dos projetos criam a sua com spawn().
+ */
+@Injectable({ providedIn: 'root' })
+export class ChatService extends ChatSession {
+  readonly open = signal(false);
+  readonly chats = signal<Chat[]>([]);
+  /** texto para pré-preencher a caixa de mensagem (ex.: contexto de uma tarefa) */
+  readonly draft = signal<string | null>(null);
+  private readonly live = new Set<ChatSession>([this]);
+
+  readonly agentChats = computed(() => this.chats().filter(c => c.agentId === this.agent()?.id && !c.projectSlug));
+  projectChats(slug: string) { return this.chats().filter(c => c.projectSlug === slug); }
+
+  constructor() {
+    super(inject(ChatApiService), inject(AgentsService), signal(new Set<number>()));
+    this.reload = () => this.loadChats();
+    this.api.onEvent(({ chat_id, message, busy }) => {
+      this.busy.update(s => { const n = new Set(s); if (busy) n.add(chat_id); else n.delete(chat_id); return n; });
+      if (message) for (const s of this.live) s.receive(chat_id, message);
+      if (!busy) this.loadChats();
+    });
+    this.loadChats();
+  }
+
+  /** Conversa independente (aba de sessão do projeto). Chame release() quando a aba fechar. */
+  spawn(projectSlug: string): ChatSession {
+    const s = new ChatSession(this.api, this.agents, this.busy, projectSlug);
+    s.reload = () => this.loadChats();
+    this.live.add(s);
+    return s;
+  }
+
+  release(s: ChatSession): void { this.live.delete(s); }
+
+  toggle(): void { this.open.update(o => !o); }
+
+  loadChats(): void {
+    this.api.list(null).then(list => this.chats.set(list.map(toChat)));
+  }
+
+  /** Muda de agente: mostra a conversa mais recente dele (ou uma nova). */
+  selectAgent(agentId: number): void {
+    if (this.agentId() === agentId && this.current() && this.chats().find(c => c.id === this.current())?.agentId === agentId) return;
+    this.agentId.set(agentId);
+    this.select(this.chats().find(c => c.agentId === agentId && !c.projectSlug)?.id ?? null);
+  }
+
+  override select(chatId: number | null): void {
+    const chat = chatId ? this.chats().find(c => c.id === chatId) : null;
+    if (chat) this.agentId.set(chat.agentId);
+    super.select(chatId);
+  }
+
+  /** Abre o painel numa conversa nova com o agente, com o texto já escrito para o Gustavo completar. */
+  compose(agentId: number, text: string): void {
+    this.newChat(agentId);
+    this.draft.set(text);
+    this.open.set(true);
+  }
+
+  /** Continua a sessão de uma execução já terminada. Devolve o id da conversa. */
+  async fromRun(runId: number): Promise<number> {
+    try {
+      const id = await this.api.fromRun(runId);
+      await this.api.list(null).then(list => this.chats.set(list.map(toChat)));
+      this.select(id);
+      return id;
+    } catch (e) {
+      throw new Error(errorMessage(e));
+    }
+  }
+
+  async rename(chatId: number, title: string): Promise<void> {
+    await this.api.rename(chatId, title);
+    this.loadChats();
+  }
+
+  async remove(chatId: number): Promise<void> {
+    await this.api.remove(chatId);
+    if (this.current() === chatId) this.select(null);
+    this.loadChats();
+  }
+}

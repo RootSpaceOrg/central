@@ -4,30 +4,33 @@
     <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-5">
       <div>
         <h2 id="rd-title" class="font-display text-2xl font-semibold">Mandar para um agente</h2>
-        <p class="mt-1 text-mute">O agente trabalha numa cópia isolada do repositório e termina abrindo um PR draft.</p>
+        <p class="mt-1 text-mute">Um Claude trabalhando sozinho. Ele enxerga a Central e registra lá o que encontrar.</p>
       </div>
       <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
     </header>
 
     <div class="space-y-5 px-8 pb-6">
       <div class="grid grid-cols-2 gap-3">
-        <label class="block">
+        <div>
+          <span class="mb-1.5 block font-semibold">Agente <span class="font-normal text-mute">(opcional)</span></span>
+          <app-agent-select [value]="agentId()" (valueChange)="selectAgent($event)" noneLabel="Nenhum (genérico)" [hideCentral]="true" />
+        </div>
+        <div>
           <span class="mb-1.5 block font-semibold">Projeto</span>
-          <select class="field" [value]="projectSlug()" (change)="selectProject($any($event.target).value)">
-            @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
-          </select>
-        </label>
+          <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" [noneLabel]="agentId() ? 'Nenhum (pasta do agente)' : null" />
+        </div>
+      </div>
+      @if (projectSlug()) {
         <label class="block">
-          <span class="mb-1.5 block font-semibold">Repositório</span>
-          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)" [disabled]="!repos().length">
+          <span class="mb-1.5 block font-semibold">Onde</span>
+          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
+            <option value="" [selected]="!repoPath()">Projeto inteiro (sem worktree)</option>
             @for (r of repos(); track r.path) {
-              <option [value]="r.path" [selected]="(r.path) === (repoPath())">{{ r.name }}{{ r.lastCommitAt ? ' · ' + (r.lastCommitAt | ago) : '' }}</option>
-            } @empty {
-              <option value="" [selected]="!(repoPath())">{{ project()?.folderExists ? 'Nenhum repositório na pasta' : 'Pasta ainda não existe' }}</option>
+              <option [value]="r.path" [selected]="r.path === repoPath()">Repositório {{ r.name }}{{ r.lastCommitAt ? ' · ' + (r.lastCommitAt | ago) : '' }}</option>
             }
           </select>
         </label>
-      </div>
+      }
 
       <label class="block">
         <span class="mb-1.5 block font-semibold">O que fazer</span>
@@ -35,34 +38,35 @@
                   [value]="prompt()" (input)="prompt.set($any($event.target).value)" required></textarea>
       </label>
 
-      <div class="grid grid-cols-[1fr_auto] gap-6">
+      <div class="grid grid-cols-2 gap-5">
+        <div>
+          <span class="mb-1.5 block font-semibold">Tamanho</span>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Tamanho do trabalho">
+            @for (s of sizes; track s.id) {
+              <button type="button" role="radio" [attr.aria-checked]="size() === s.id" (click)="size.set(s.id)"
+                      class="flex-1 rounded-full py-1.5 text-[13px] font-semibold transition-colors" [class]="size() === s.id ? 'bg-raise' : 'text-mute hover:text-text'">{{ s.label }}</button>
+            }
+          </div>
+          <span class="mt-1 block text-[12.5px] text-mute">{{ sizeHint() }}; para sozinho se passar do tamanho.</span>
+        </div>
         <div>
           <span class="mb-1.5 block font-semibold">Liberdade</span>
-          <div class="space-y-2" role="radiogroup" aria-label="Liberdade do agente">
-            <label class="flex cursor-pointer gap-3 rounded-2xl border p-3"
-                   [class]="permission() === 'edits' ? 'border-frost bg-frost/10' : 'border-edge'">
-              <input type="radio" name="perm" class="mt-1 accent-frost" [checked]="permission() === 'edits'" (change)="permission.set('edits')">
-              <span><span class="font-semibold">Segura</span>
-                <span class="block text-[13px] text-mute">Edita arquivos e roda git, gh pr, npm e python. Outros comandos ficam bloqueados.</span></span>
-            </label>
-            <label class="flex cursor-pointer gap-3 rounded-2xl border p-3"
-                   [class]="permission() === 'full' ? 'border-later bg-later/10' : 'border-edge'">
-              <input type="radio" name="perm" class="mt-1 accent-later" [checked]="permission() === 'full'" (change)="permission.set('full')">
-              <span><span class="font-semibold">Total</span>
-                <span class="block text-[13px] text-mute">Roda qualquer comando sem perguntar. Use em tarefas que você confia.</span></span>
-            </label>
+          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Liberdade do agente">
+            <button type="button" role="radio" [attr.aria-checked]="permission() === 'edits'" (click)="permission.set('edits')"
+                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold transition-colors" [class]="permission() === 'edits' ? 'bg-raise' : 'text-mute hover:text-text'">Segura</button>
+            <button type="button" role="radio" [attr.aria-checked]="permission() === 'full'" (click)="permission.set('full')"
+                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold transition-colors" [class]="permission() === 'full' ? 'bg-raise text-later' : 'text-mute hover:text-text'">Total</button>
           </div>
+          <span class="mt-1 block text-[12.5px] text-mute">{{ freedomHint() }}</span>
         </div>
-        <label class="block w-36">
-          <span class="mb-1.5 block font-semibold">Teto de gasto</span>
-          <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-mute">US$</span>
-            <input type="number" min="0.5" max="50" step="0.5" class="field pl-11" [value]="budget()"
-                   (input)="budget.set(+$any($event.target).value)">
-          </div>
-          <span class="mt-1.5 block text-[13px] text-mute">Para sozinho ao atingir.</span>
-        </label>
       </div>
+
+      @if (usage.session(); as s) {
+        <p class="rounded-2xl bg-night px-4 py-3 text-[13px] text-mute">
+          Usa a cota do seu plano do Claude, sem custo extra. Agora: <span [class]="s.percent >= 80 ? 'text-no' : 'text-text'">{{ 100 - s.percent }}% da sessão livre</span>,
+          reinicia em {{ reset(s.resetsAt) }}.
+        </p>
+      }
     </div>
 
     <footer class="flex items-center justify-end gap-3 border-t border-edge px-8 py-4">

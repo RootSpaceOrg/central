@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { CloneProgressDto, GithubRepoDto, ProjectDto, RepoDto } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
 import { ProjectsApiService } from './projects-api.service';
-import { NewProject, Project, ProjectStatus, Repo } from './projects.model';
+import { AutopilotMode, NewProject, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
 
 const toProject = (d: ProjectDto): Project => ({
   slug: d.slug,
@@ -12,6 +12,8 @@ const toProject = (d: ProjectDto): Project => ({
   status: d.status,
   color: d.color,
   description: d.description,
+  iconKind: d.icon_kind ?? 'letter',
+  iconValue: d.icon_value,
   folderExists: d.folder_exists,
   repoCount: d.repo_count,
   dirtyRepos: d.dirty_repos,
@@ -23,6 +25,9 @@ const toProject = (d: ProjectDto): Project => ({
   lastCommitRepo: d.last_commit_repo,
   openProposals: d.open_proposals,
   activeRuns: d.active_runs,
+  autopilot: d.autopilot,
+  autopilotBrief: d.autopilot_brief ?? '',
+  autopilotMode: d.autopilot_mode ?? 'tasks',
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -65,6 +70,9 @@ export class ProjectsService {
   readonly living = computed(() => this.projects().filter(p => p.status !== 'dead'));
   readonly dead = computed(() => this.projects().filter(p => p.status === 'dead'));
   readonly bySlug = computed(() => new Map(this.projects().map(p => [p.slug, p])));
+  /** projeto que aparece escolhido por padrão: o mais movimentado da semana */
+  readonly defaultSlug = computed(() => [...this.living()].sort((a, b) =>
+    b.commits7d - a.commits7d || (b.lastCommitAt?.getTime() ?? 0) - (a.lastCommitAt?.getTime() ?? 0))[0]?.slug ?? '');
 
   constructor() {
     this.api.onChanged(() => { this.syncing.set(false); this.lastSync.set(new Date()); this.load(); });
@@ -97,9 +105,54 @@ export class ProjectsService {
     this.api.update(slug, { status }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
+  /** Liga/ajusta o piloto com a direção. Lança o erro para o diálogo mostrar. */
+  async configureAutopilot(slug: string, c: { on: boolean; brief: string; mode: AutopilotMode }): Promise<void> {
+    try {
+      await this.api.update(slug, { autopilot: c.on, autopilot_brief: c.brief.trim(), autopilot_mode: c.mode });
+    } catch (e) {
+      throw new Error(errorMessage(e));
+    }
+    this.patchLocal(slug, { autopilot: c.on, autopilotBrief: c.brief.trim(), autopilotMode: c.mode });
+  }
+
+  setAutopilot(slug: string, autopilot: boolean): void {
+    this.patchLocal(slug, { autopilot });
+    this.api.update(slug, { autopilot }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
+  }
+
   setDescription(slug: string, description: string): void {
     this.patchLocal(slug, { description: description || null });
     this.api.update(slug, { description: description || null }).catch(e => this.error.set(errorMessage(e)));
+  }
+
+  /** Edição completa (nome, ícone, cor, pasta…). Lança o erro para o formulário mostrar. */
+  async edit(slug: string, e: ProjectEdit): Promise<void> {
+    try {
+      await this.api.update(slug, {
+        name: e.name, status: e.status, color: e.color, description: e.description,
+        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder,
+      });
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+    this.load();
+  }
+
+  async remove(slug: string): Promise<void> {
+    try {
+      await this.api.remove(slug);
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+    this.load();
+  }
+
+  async pickImage(): Promise<string | null> {
+    try {
+      return await this.api.pickImage();
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
   }
 
   async repos(slug: string): Promise<Repo[]> {

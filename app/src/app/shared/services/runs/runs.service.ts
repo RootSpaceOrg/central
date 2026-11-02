@@ -8,9 +8,13 @@ import { NewRun, Run, RunEvent, isActive } from './runs.model';
 const toRun = (d: RunDto): Run => ({
   id: d.id,
   projectSlug: d.project_slug,
+  agentId: d.agent_id,
+  sessionId: d.session_id,
   proposalId: d.proposal_id,
   taskId: d.task_id,
   turnId: d.turn_id,
+  routineId: d.routine_id,
+  scope: d.scope ?? 'repo',
   repoPath: d.repo_path,
   repoName: d.repo_name,
   worktreePath: d.worktree_path,
@@ -22,6 +26,7 @@ const toRun = (d: RunDto): Run => ({
   permission: d.permission,
   budgetUsd: d.budget_usd,
   costUsd: d.cost_usd,
+  sessionUsed: d.usage_start != null && d.usage_end != null && d.usage_end >= d.usage_start ? Math.round(d.usage_end - d.usage_start) : null,
   prUrl: d.pr_url,
   result: d.result,
   createdAt: new Date(d.created_at),
@@ -66,7 +71,7 @@ export class RunsService {
   async start(r: NewRun): Promise<Run> {
     try {
       const run = toRun(await this.api.start({
-        project_slug: r.projectSlug, repo_path: r.repoPath, prompt: r.prompt,
+        project_slug: r.projectSlug, agent_id: r.agentId ?? null, repo_path: r.repoPath, prompt: r.prompt,
         budget_usd: r.budgetUsd, permission: r.permission, proposal_id: r.proposalId, task_id: r.taskId,
       }));
       this.runs.update(list => [run, ...list.filter(x => x.id !== run.id)]);

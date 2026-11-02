@@ -1,0 +1,134 @@
+<!-- lista -->
+<section class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-labelledby="ag-title">
+  <div class="flex items-center justify-between gap-3 px-5 pt-6 pb-3">
+    <h1 id="ag-title" class="font-display text-2xl font-bold tracking-tight">Agentes</h1>
+    <button type="button" class="btn btn-primary btn-sm" (click)="dialogs.newRun({ projectSlug: filter() })">
+      <app-icon name="plus" [size]="14" />Nova tarefa
+    </button>
+  </div>
+  @if (filter(); as f) {
+    <div class="mx-5 mb-2 flex items-center gap-2 rounded-full bg-raise px-3 py-1.5 text-[13px]">
+      <span class="size-2 rounded-[3px]" [style.background]="project(f)?.color"></span>
+      <span class="flex-1 truncate">Só {{ project(f)?.name }}</span>
+      <a routerLink="/execucoes" class="text-mute hover:text-text" aria-label="Ver todos"><app-icon name="close" [size]="13" /></a>
+    </div>
+  }
+
+  <ul class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+    @for (r of list(); track r.id) {
+      <li>
+        <button type="button" (click)="select(r)"
+                class="flex w-full gap-3 rounded-xl px-3 py-3 text-left hover:bg-raise/60"
+                [class.bg-raise]="selected()?.id === r.id" [attr.aria-current]="selected()?.id === r.id">
+          <span class="mt-1.5 size-2 shrink-0 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>
+          <span class="min-w-0 flex-1">
+            <span class="line-clamp-2 leading-snug">{{ r.title }}</span>
+            <span class="mt-1 block truncate text-[12.5px] text-mute">
+              {{ statusLabel[r.status] }}, {{ r.scope === 'project' ? 'projeto inteiro' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}
+            </span>
+          </span>
+        </button>
+      </li>
+    } @empty {
+      <li class="px-4 py-10 text-center text-mute">
+        Nenhuma tarefa ainda. Os agentes trabalham em cópias isoladas dos repositórios e terminam com um PR draft.
+      </li>
+    }
+  </ul>
+</section>
+
+<!-- detalhe -->
+@if (selected(); as r) {
+  <section class="flex min-h-0 flex-col" aria-label="Execução">
+    <header class="border-b border-edge px-8 pt-6 pb-5">
+      <div class="flex items-start gap-4">
+        <div class="min-w-0 flex-1">
+          <p class="flex items-center gap-2 text-[13px]">
+            <span class="flex items-center gap-1.5 rounded-full bg-raise px-2.5 py-0.5 font-semibold">
+              <span class="size-1.5 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>{{ statusLabel[r.status] }}
+            </span>
+            @if (agent(r.agentId); as a) {
+              <a routerLink="/agentes" [queryParams]="{ agente: a.id }" class="flex items-center gap-1.5 font-semibold hover:underline" [style.color]="a.color">
+                <app-project-avatar [project]="a" [size]="16" />{{ a.name }}</a>
+            }
+            @if (project(r.projectSlug); as p) {
+              <a [routerLink]="['/projetos', p.slug]" class="flex items-center gap-1.5 font-semibold hover:underline" [style.color]="p.color">
+                <app-project-avatar [project]="p" [size]="16" />{{ p.name }}</a>
+            }
+          </p>
+          <h2 class="mt-2 font-display text-[22px] font-semibold leading-snug [overflow-wrap:anywhere] selectable">{{ r.title }}</h2>
+        </div>
+        <div class="flex shrink-0 gap-2">
+          @if (r.prUrl) { <button type="button" class="btn btn-primary btn-sm" (click)="openPr(r)"><app-icon name="pr" [size]="14" />Ver PR</button> }
+          @if (r.worktreePath) { <button type="button" class="btn btn-sm" (click)="openWorktree(r)"><app-icon name="code" [size]="14" />Abrir no VS Code</button> }
+          @if (isActive(r.status)) { <button type="button" class="btn btn-sm !text-no" (click)="runs.kill(r.id)"><app-icon name="stop" [size]="13" />Interromper</button> }
+          @else if (r.sessionId) { <button type="button" class="btn btn-sm" (click)="continueChat(r)" title="Conversar com o agente sobre o que ele fez, na mesma sessão">
+            <app-icon name="central" [size]="14" />Continuar conversa</button> }
+        </div>
+        @if (chatError()) { <p role="alert" class="text-[13px] text-no">{{ chatError() }}</p> }
+      </div>
+
+      <dl class="mt-4 flex flex-wrap gap-x-7 gap-y-2 text-[13px]">
+        <div><dt class="text-faint">Onde</dt><dd>{{ r.scope === 'project' ? 'Projeto inteiro' : 'Repositório ' + r.repoName }}</dd></div>
+        @if (r.routineId) { <div><dt class="text-faint">Origem</dt><dd><a routerLink="/rotinas" class="text-frost hover:underline">Rotina</a></dd></div> }
+        @if (r.branch) { <div class="min-w-0 max-w-full"><dt class="text-faint">Branch</dt><dd class="font-mono text-[12px] [overflow-wrap:anywhere] selectable">{{ r.branch }} → {{ r.baseBranch }}</dd></div> }
+        <div><dt class="text-faint">Liberdade</dt><dd>{{ r.permission === 'full' ? 'Total' : 'Segura' }}</dd></div>
+        <div [title]="r.costUsd != null ? 'Equivalente em API: US$ ' + r.costUsd.toFixed(2) + '. Não é cobrado: sai da cota do seu plano.' : 'Sai da cota do seu plano do Claude.'">
+          <dt class="text-faint">Consumo</dt>
+          <dd class="tabular-nums">{{ r.sessionUsed != null ? '≈ ' + r.sessionUsed + '% da sessão' : (isActive(r.status) ? 'medindo…' : 'cota do plano') }}</dd></div>
+        @if (elapsed()) { <div><dt class="text-faint">Duração</dt><dd>{{ elapsed() }}</dd></div> }
+      </dl>
+
+      @if (r.prompt !== r.title) {
+        <details class="mt-4">
+          <summary class="cursor-pointer text-[13px] text-mute hover:text-text">Tarefa completa</summary>
+          <p class="mt-2 whitespace-pre-line rounded-2xl bg-panel p-4 text-[13.5px] leading-relaxed selectable">{{ r.prompt }}</p>
+        </details>
+      }
+    </header>
+
+    <ol #log class="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-8 py-6" aria-live="polite" aria-label="Log do agente">
+      @for (e of events(); track $index) {
+        @switch (e.kind) {
+          @case ('system') {
+            <li class="flex gap-3 text-[12.5px] text-faint"><time class="w-16 shrink-0 tabular-nums">{{ time(e.at) }}</time><span class="min-w-0 [overflow-wrap:anywhere] selectable">{{ e.text }}</span></li>
+          }
+          @case ('tool') {
+            <li class="flex gap-3 text-[12.5px] text-mute">
+              <time class="w-16 shrink-0 tabular-nums text-faint">{{ time(e.at) }}</time>
+              <span class="min-w-0 truncate font-mono selectable">{{ e.text }}</span>
+            </li>
+          }
+          @case ('text') {
+            <li class="flex gap-3"><time class="w-16 shrink-0 pt-0.5 text-[12.5px] tabular-nums text-faint">{{ time(e.at) }}</time>
+              <p class="min-w-0 max-w-3xl whitespace-pre-line leading-relaxed [overflow-wrap:anywhere] selectable" [innerHTML]="e.text | mdLite"></p></li>
+          }
+          @case ('result') {
+            <li class="ml-[76px] max-w-3xl rounded-2xl border border-yes/40 bg-yes/10 p-5">
+              <p class="mb-2 font-semibold text-yes">Resultado</p>
+              <p class="whitespace-pre-line leading-relaxed [overflow-wrap:anywhere] selectable" [innerHTML]="e.text | mdLite"></p>
+            </li>
+          }
+          @case ('error') {
+            <li class="ml-[76px] max-w-3xl rounded-2xl border border-no/40 bg-no/10 p-5">
+              <p class="mb-2 font-semibold text-no">Erro</p>
+              <p class="whitespace-pre-line font-mono text-[12.5px] leading-relaxed [overflow-wrap:anywhere] selectable">{{ e.text }}</p>
+            </li>
+          }
+        }
+      } @empty {
+        <li class="text-mute">{{ isActive(r.status) ? 'Esperando o agente começar…' : 'Sem registro desta execução.' }}</li>
+      }
+      @if (r.status === 'running') {
+        <li class="ml-[76px] flex items-center gap-2 text-[13px] text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>trabalhando</li>
+      }
+    </ol>
+  </section>
+} @else {
+  <div class="grid place-items-center p-10 text-center text-mute">
+    <div>
+      <p class="font-display text-xl text-text">Nenhuma tarefa selecionada</p>
+      <p class="mt-2">Crie uma tarefa ou aprove uma decisão para mandar a um agente.</p>
+    </div>
+  </div>
+}

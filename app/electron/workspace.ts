@@ -7,6 +7,7 @@ import * as pty from '@lydell/node-pty';
 
 import type { CloneProgressDto, FileDto, FsEntryDto, GithubRepoDto, NewTerminalInput } from '../src/app/shared/contract';
 import { all } from './db';
+import { mcpConfigPath } from './mcp-config';
 
 const execFileP = promisify(execFile);
 const MAX_FILE = 2 * 1024 * 1024;
@@ -53,14 +54,29 @@ export function writeFile(path: string, content: string): void {
 
 // ---------- terminais ----------
 
+// "bash.exe" solto no PATH costuma ser o do WSL: procura o Git Bash nos lugares do instalador
+const GIT_BASH = [join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe'), join(process.env.LOCALAPPDATA ?? '', 'Programs/Git/bin/bash.exe')]
+  .find(p => existsSync(p)) ?? 'bash.exe';
+const SHELLS: Record<string, [string, string[]]> = {
+  shell: ['powershell.exe', ['-NoLogo']],
+  cmd: ['cmd.exe', []],
+  bash: [GIT_BASH, ['--login', '-i']],
+};
+
 const terminals = new Map<number, pty.IPty>();
 let nextTerminal = 1;
 
-export function createTerminal(input: NewTerminalInput, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
+export function createTerminal(input: NewTerminalInput, promptFile: string | null, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
   const cwd = guard(input.cwd);
-  const args = ['-NoLogo'];
-  if (input.kind === 'claude') args.push('-NoExit', '-Command', 'claude');
-  const term = pty.spawn('powershell.exe', args, {
+  if (!existsSync(cwd)) throw new Error(`A pasta ${cwd} não existe. Ajuste a pasta do projeto em Editar projeto.`);
+  let [file, args] = SHELLS[input.kind === 'claude' ? 'shell' : input.kind] ?? SHELLS.shell;
+  if (input.kind === 'claude') {
+    // a sessão interativa também enxerga e atualiza a Central (backlog, ideias, decisões)
+    const mcp = mcpConfigPath();
+    const extra = [mcp ? `--mcp-config '${mcp}'` : '', promptFile ? `--append-system-prompt-file '${promptFile}'` : ''].filter(Boolean).join(' ');
+    args = [...args, '-NoExit', '-Command', `claude ${extra}`.trim()];
+  }
+  const term = pty.spawn(file, args, {
     name: 'xterm-256color', cwd, cols: input.cols || 100, rows: input.rows || 30,
     env: childEnv({ TERM_PROGRAM: 'Central' }),
   });

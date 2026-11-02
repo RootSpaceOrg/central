@@ -1,170 +1,145 @@
-<div class="mx-auto grid max-w-[1320px] grid-cols-[minmax(0,1fr)_360px] gap-12 px-10 pt-10 pb-16">
+<div class="mx-auto grid max-w-[1320px] grid-cols-1 gap-10 px-8 pt-10 pb-16 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-12 xl:px-10">
   <div class="min-w-0">
-    <!-- saudação + modo do dia -->
     <p class="text-mute first-letter:uppercase">{{ date }}</p>
     <h1 class="mt-1 font-display text-[40px] font-bold leading-[1.05] tracking-tight">{{ greeting }}, Gustavo.</h1>
+    <p class="mt-2 text-[15px] text-mute">
+      @if (waiting()) { <span class="text-text">{{ waiting() }} {{ waiting() === 1 ? 'coisa espera' : 'coisas esperam' }} você.</span> }
+      @else { Nada esperando você. }
+      @if (finished().length) { Desde {{ since() | ago }}, os agentes concluíram {{ finished().length }} {{ finished().length === 1 ? 'tarefa' : 'tarefas' }}. }
+    </p>
 
-    <div class="mt-7">
-      <p class="mb-3 text-[15px] text-mute">Como está a energia hoje?</p>
-      <div class="flex gap-3" role="radiogroup" aria-label="Modo do dia">
-        <button type="button" role="radio" [attr.aria-checked]="mode() === 'pilot'" (click)="setMode('pilot')"
-                class="flex flex-1 items-center gap-4 rounded-3xl border-2 px-5 py-4 text-left"
-                [class]="mode() === 'pilot' ? 'border-yes bg-yes/10' : 'border-edge hover:border-faint'">
-          <span class="grid size-11 place-items-center rounded-2xl bg-yes/15 text-yes"><app-icon name="energy" [size]="26" [fill]="mode() === 'pilot'" /></span>
-          <span><span class="block font-display text-lg font-semibold">Com gás</span>
-            <span class="text-[13.5px] text-mute">Eu conduzo. Me dê atalhos e contexto.</span></span>
-        </button>
-        <button type="button" role="radio" [attr.aria-checked]="mode() === 'light'" (click)="setMode('light')"
-                class="flex flex-1 items-center gap-4 rounded-3xl border-2 px-5 py-4 text-left"
-                [class]="mode() === 'light' ? 'border-frost bg-frost/10' : 'border-edge hover:border-faint'">
-          <span class="grid size-11 place-items-center rounded-2xl bg-frost/15 text-frost"><app-icon name="low" [size]="26" [fill]="mode() === 'light'" /></span>
-          <span><span class="block font-display text-lg font-semibold">Modo leve</span>
-            <span class="text-[13.5px] text-mute">Só me mostre o que decidir. Os agentes fazem o resto.</span></span>
-        </button>
-      </div>
-    </div>
-
-    <!-- enquanto você estava fora -->
-    @if (finished().length) {
-      <section class="mt-10" aria-labelledby="fora">
-        <h2 id="fora" class="font-display text-xl font-semibold">Enquanto você estava fora</h2>
-        <p class="mt-1 text-mute">
-          Desde {{ since() | ago }}: {{ away().ok }} {{ away().ok === 1 ? 'tarefa concluída' : 'tarefas concluídas' }}
-          @if (away().prs) {, <span class="text-frost">{{ away().prs }} {{ away().prs === 1 ? 'PR para revisar' : 'PRs para revisar' }}</span>}
-          @if (away().failed) {, <span class="text-no">{{ away().failed }} com falha</span>}
-          , US$ {{ away().cost.toFixed(2) }} gastos.
-        </p>
-        <div class="mt-3 space-y-2">
-          @for (r of finished().slice(0, 4); track r.id) {
-            <a routerLink="/agentes" [queryParams]="{ run: r.id }" class="flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
-              <span class="size-2 rounded-full" [class]="r.status === 'succeeded' ? 'bg-yes' : 'bg-no'"></span>
-              <span class="min-w-0 flex-1 truncate">{{ r.title }}</span>
-              @if (r.prUrl) { <span class="text-[13px] text-frost">PR aberto</span> }
-              <span class="text-[12.5px] text-faint">{{ r.finishedAt | ago }}</span>
-            </a>
-          }
-        </div>
-      </section>
-    }
-
-    @if (mode() === 'light') {
-      <!-- modo leve: decidir, delegar, revisitar -->
-      <section class="mt-10" aria-labelledby="decidir">
-        <div class="flex items-baseline justify-between">
-          <h2 id="decidir" class="font-display text-xl font-semibold">Para decidir agora</h2>
-          @if (proposals.inbox().length > 3) { <a routerLink="/decisoes" class="text-[13px] text-frost hover:underline">Ver as {{ proposals.inbox().length }}</a> }
-        </div>
-        <div class="mt-3 space-y-2">
-          @for (p of decide3(); track p.id) {
-            <div class="flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-3.5">
-              <div class="min-w-0 flex-1">
-                @if (project(p.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
-                <p class="leading-snug">{{ p.title }}</p>
-                @if (p.nextAction) { <p class="mt-0.5 line-clamp-1 text-[13px] text-mute">Se aprovar: {{ p.nextAction }}</p> }
-              </div>
-              <button type="button" class="btn btn-sm btn-ghost !text-later" (click)="decide(p, 'defer')">Depois</button>
-              <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="decide(p, 'approve')">Aprovar</button>
+    <!-- esperando você: revisar, decidir, falhas -->
+    <section class="mt-9" aria-labelledby="esperando">
+      <h2 id="esperando" class="font-display text-xl font-semibold">Esperando você</h2>
+      <div class="mt-3 space-y-2">
+        @for (t of reviews(); track t.id) {
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-edge bg-panel px-5 py-3.5">
+            <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-frost/15 text-frost"><app-icon name="pr" [size]="16" /></span>
+            <div class="min-w-[220px] flex-1">
+              @if (project(t.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
+              <p class="truncate leading-snug">{{ t.title }}</p>
+              <p class="text-[12.5px] text-mute">Em revisão: termine antes de começar outra.</p>
             </div>
-          } @empty {
-            <p class="rounded-2xl border border-dashed border-edge px-5 py-6 text-center text-mute">Nenhuma decisão pendente.</p>
-          }
-        </div>
-      </section>
-
-      <section class="mt-9" aria-labelledby="delegar">
-        <h2 id="delegar" class="font-display text-xl font-semibold">Prontas para um agente</h2>
-        <div class="mt-3 space-y-2">
-          @for (t of ready(); track t.id) {
-            <div class="flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-3.5">
-              <div class="min-w-0 flex-1">
-                @if (project(t.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
-                <p class="truncate">{{ t.title }}</p>
-              </div>
-              <button type="button" class="btn btn-sm" (click)="toAgent(t)"><app-icon name="agent" [size]="16" />Mandar</button>
+            <button type="button" class="btn btn-sm btn-ghost" (click)="dialogs.editTask(t.id)">Detalhes</button>
+            <button type="button" class="btn btn-sm btn-primary" (click)="review(t)"><app-icon name="pr" [size]="14" />{{ t.prUrl ? 'Revisar PR' : 'Revisar' }}</button>
+          </div>
+        }
+        @for (p of decide3(); track p.id) {
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-edge bg-panel px-5 py-3.5">
+            <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-later/15 text-later"><app-icon name="inbox" [size]="16" /></span>
+            <div class="min-w-[220px] flex-1">
+              @if (project(p.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
+              <p class="leading-snug">{{ p.title }}</p>
+              @if (p.nextAction) { <p class="mt-0.5 line-clamp-1 text-[13px] text-mute">Se aprovar: {{ p.nextAction }}</p> }
             </div>
-          } @empty {
-            <p class="rounded-2xl border border-dashed border-edge px-5 py-6 text-center text-mute">
-              Nada em "A fazer". Aprovar uma decisão cria a tarefa lá.</p>
-          }
-        </div>
-        <button type="button" class="btn mt-4" (click)="dialogs.newTurn()"><app-icon name="night" [size]="18" />Deixar evoluindo esta noite</button>
-      </section>
-
-      @if (revisit(); as idea) {
-        <section class="mt-9" aria-labelledby="revisitar">
-          <h2 id="revisitar" class="font-display text-xl font-semibold">Uma ideia para revisitar</h2>
-          <a routerLink="/ideias" class="mt-3 block rounded-2xl border border-edge bg-panel px-5 py-4 hover:border-faint">
-            @if (project(idea.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
-            <p class="font-display text-lg leading-snug">{{ idea.title }}</p>
-            <p class="mt-1 text-[13px] text-mute">Anotada {{ idea.createdAt | ago }}. {{ ideas.fresh().length }} ideias esperando na base.</p>
+            <button type="button" class="btn btn-sm btn-ghost !text-later" (click)="decide(p, 'defer')">Depois</button>
+            <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="decide(p, 'approve')">Aprovar</button>
+          </div>
+        }
+        @if (proposals.inbox().length > 3) {
+          <a routerLink="/decisoes" class="block px-1 text-[13px] text-frost hover:underline">Mais {{ proposals.inbox().length - 3 }} decisões</a>
+        }
+        @for (r of failed(); track r.id) {
+          <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="flex items-center gap-4 rounded-2xl border border-no/30 bg-no/5 px-5 py-3.5 hover:border-no/60">
+            <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-no/15 text-no"><app-icon name="stop" [size]="16" /></span>
+            <span class="min-w-0 flex-1">
+              @if (project(r.projectSlug); as pr) { <span class="block text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
+              <span class="block truncate">{{ r.title }}</span>
+              <span class="block text-[12.5px] text-mute">Falhou {{ r.finishedAt | ago }}</span>
+            </span>
+            <span class="text-[13px] text-no">Ver o que houve</span>
           </a>
-        </section>
-      }
-    } @else if (mode() === 'pilot') {
-      <!-- com gás: atalhos e retomar -->
-      <section class="mt-10" aria-labelledby="atalhos">
-        <h2 id="atalhos" class="font-display text-xl font-semibold">Começar</h2>
-        <div class="mt-3 grid grid-cols-3 gap-3">
-          <button type="button" class="quick" (click)="dialogs.newTask()"><app-icon name="kanban" [size]="24" class="text-frost" />
-            <span><b>Nova tarefa</b><small>Entra no backlog do projeto</small></span></button>
-          <button type="button" class="quick" (click)="dialogs.newRun()"><app-icon name="agent" [size]="24" class="text-yes" />
-            <span><b>Tarefa para agente</b><small>Começa agora, termina em PR</small></span></button>
-          <button type="button" class="quick" (click)="dialogs.newTurn()"><app-icon name="night" [size]="24" class="text-[#B48CFF]" />
-            <span><b>Deixar evoluindo</b><small>Vários agentes até um horário</small></span></button>
-          <button type="button" class="quick" (click)="dialogs.newProject()"><app-icon name="folder" [size]="24" class="text-later" />
-            <span><b>Novo projeto</b><small>Cria a pasta e clona repos</small></span></button>
-          <a routerLink="/backlog" class="quick"><app-icon name="kanban" [size]="24" class="text-mute" />
-            <span><b>Abrir o quadro</b><small>Kanban de todos os projetos</small></span></a>
-          <button type="button" class="quick" (click)="importPending()" [disabled]="importing()"><app-icon name="download" [size]="24" class="text-mute" />
-            <span><b>{{ importing() ? 'Importando…' : 'Importar pendências' }}</b><small>{{ importResult() ?? 'Memórias, roadmaps e PRs abertos' }}</small></span></button>
-        </div>
-      </section>
+        }
+        @if (!waiting()) {
+          <p class="rounded-2xl border border-dashed border-edge px-5 py-6 text-center text-mute">
+            Fila vazia. Abra um projeto abaixo e comece uma sessão, ou deixe o piloto automático trabalhar esta noite.</p>
+        }
+      </div>
+    </section>
 
-      <section class="mt-10" aria-labelledby="retomar">
-        <h2 id="retomar" class="font-display text-xl font-semibold">Retomar</h2>
-        <div class="mt-3 grid grid-cols-2 gap-3">
-          @for (p of recent(); track p.slug) {
-            <div class="rounded-2xl border border-edge bg-panel p-4">
-              <div class="flex items-center gap-3">
-                <span class="h-8 w-1 rounded-full" [style.background]="p.color"></span>
-                <div class="min-w-0 flex-1">
-                  <a [routerLink]="['/projetos', p.slug]" class="block truncate font-display text-[16px] font-semibold hover:underline">{{ p.name }}</a>
-                  <p class="truncate text-[12.5px] text-mute">{{ p.lastCommitSubject ?? 'Sem commits recentes' }}</p>
+    <!-- piloto automático -->
+    <section class="mt-10" aria-labelledby="piloto">
+      <div class="flex items-baseline justify-between gap-4">
+        <h2 id="piloto" class="flex items-center gap-2 font-display text-xl font-semibold"><app-icon name="night" [size]="20" class="text-[#B48CFF]" />Piloto automático</h2>
+        @if (piloted().length) {
+          <button type="button" class="text-[13px] text-frost hover:underline disabled:opacity-50" (click)="pulse.runNow()" [disabled]="pulse.running()">
+            {{ pulse.running() ? 'Rodando…' : 'Rodar agora' }}</button>
+        }
+      </div>
+      <p class="mt-1 text-[13.5px] text-mute">
+        De madrugada ({{ pulse.status()?.window ?? '01:00–06:00' }}), cada projeto ligado avança na direção que você deu: executa a próxima tarefa até um PR
+        ou, sem tarefa, planeja as próximas. Não começa outra enquanto houver uma em revisão.</p>
+      @if (pulse.error()) { <p role="alert" class="mt-2 text-[13px] text-no">{{ pulse.error() }}</p> }
+      <div class="mt-3 space-y-2">
+        @for (p of piloted(); track p.slug) {
+          @let last = pulseOf().get(p.slug);
+          <div class="flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-3">
+            <app-project-avatar [project]="p" [size]="30" />
+            <div class="min-w-0 flex-1">
+              <a [routerLink]="['/projetos', p.slug]" class="font-semibold hover:underline">{{ p.name }}</a>
+              <p class="truncate text-[12.5px] text-faint" [title]="p.autopilotBrief">Direção: {{ p.autopilotBrief || 'não definida' }}</p>
+              @if (last) {
+                <p class="truncate text-[13px]"><span [class]="tone(last)">{{ pulseLabel[last.action] }}</span><span class="text-mute">: {{ last.text }}</span></p>
+              } @else {
+                <p class="text-[13px] text-mute">Primeira passada na próxima madrugada.</p>
+              }
+            </div>
+            @if (last?.runId) { <a routerLink="/execucoes" [queryParams]="{ run: last!.runId }" class="btn btn-sm btn-ghost">Execução</a> }
+            @if (last?.action === 'empty' || last?.action === 'blocked') {
+              <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm">Abrir backlog</a>
+            }
+            <button type="button" class="btn btn-sm btn-ghost" (click)="dialogs.autopilot.set(p.slug)">Ajustar</button>
+            <button type="button" class="grid size-8 place-items-center rounded-lg text-faint hover:bg-raise hover:text-text" (click)="projects.setAutopilot(p.slug, false)"
+                    [attr.aria-label]="'Desligar piloto do ' + p.name" title="Desligar"><app-icon name="close" [size]="14" /></button>
+          </div>
+        }
+        @if (candidates().length) {
+          <div class="flex flex-wrap items-center gap-2 pt-1">
+            <span class="text-[13px] text-mute">{{ piloted().length ? 'Ligar também:' : 'Ligue nos projetos que você quer ver evoluindo:' }}</span>
+            @for (p of candidates(); track p.slug) {
+              <button type="button" (click)="dialogs.autopilot.set(p.slug)"
+                      class="flex items-center gap-2 rounded-full border border-dashed border-edge py-1 pr-3 pl-1 text-[13px] text-mute transition hover:border-[#B48CFF]/60 hover:text-text">
+                <app-project-avatar [project]="p" [size]="22" />{{ p.name }}<app-icon name="plus" [size]="13" /></button>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <!-- projetos: abrir uma sessão -->
+    @for (g of [{ id: 'evoluir', label: 'Evoluindo', list: evolving() }, { id: 'suporte', label: 'Em suporte', list: supporting() }]; track g.id) {
+      @if (g.list.length) {
+        <section class="mt-10" [attr.aria-labelledby]="g.id">
+          <h2 [id]="g.id" class="font-display text-xl font-semibold">{{ g.label }}</h2>
+          <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            @for (p of g.list; track p.slug) {
+              <div class="group rounded-2xl border border-edge bg-panel p-4 transition hover:border-faint">
+                <a [routerLink]="['/projetos', p.slug]" class="flex items-center gap-3">
+                  <app-project-avatar [project]="p" [size]="34" />
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-display text-[16px] font-semibold group-hover:underline">{{ p.name }}</span>
+                    <span class="block truncate text-[12.5px] text-mute">{{ p.lastCommitSubject ?? 'Sem commits recentes' }}@if (p.lastCommitAt) {, {{ p.lastCommitAt | ago }}}</span>
+                  </span>
+                </a>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                  <button type="button" class="btn btn-sm" (click)="session(p.slug, 'chat')"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Claude</button>
+                  <button type="button" class="btn btn-sm btn-ghost" (click)="session(p.slug, 'shell')"><img src="file-icons/powershell.svg" alt="" class="size-3.5" />Terminal</button>
+                  <span class="ml-auto flex gap-2 text-[12px]">
+                    @if (p.activeRuns) { <span class="text-yes">{{ p.activeRuns }} agente{{ p.activeRuns > 1 ? 's' : '' }}</span> }
+                    @if (p.openProposals) { <span class="text-later">{{ p.openProposals }} decis{{ p.openProposals > 1 ? 'ões' : 'ão' }}</span> }
+                    @if (p.autopilot) { <app-icon name="night" [size]="13" class="text-[#B48CFF]" title="Piloto automático ligado" /> }
+                  </span>
                 </div>
               </div>
-              <app-heartbeat class="mt-3 h-6" [values]="p.spark" [color]="p.color" [height]="22" />
-              <div class="mt-3 flex gap-2">
-                <button type="button" class="btn btn-sm" (click)="openCode(p.slug)"><app-icon name="code" [size]="15" />Código</button>
-                <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm btn-ghost">Quadro</a>
-              </div>
-            </div>
-          }
-        </div>
-      </section>
-
-      @if (inMotion().length) {
-        <section class="mt-10" aria-labelledby="andamento">
-          <h2 id="andamento" class="font-display text-xl font-semibold">Em andamento</h2>
-          <div class="mt-3 space-y-2">
-            @for (t of inMotion(); track t.id) {
-              <button type="button" (click)="dialogs.editTask(t.id)" class="flex w-full items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 text-left hover:border-faint">
-                <span class="rounded-full px-2 py-0.5 text-[12px] font-semibold" [class]="t.column === 'doing' ? 'bg-later/15 text-later' : 'bg-frost/15 text-frost'">
-                  {{ t.column === 'doing' ? 'Fazendo' : 'Revisão' }}</span>
-                <span class="min-w-0 flex-1 truncate">{{ t.title }}</span>
-                @if (project(t.projectSlug); as pr) { <span class="text-[12.5px]" [style.color]="pr.color">{{ pr.name }}</span> }
-              </button>
             }
           </div>
         </section>
       }
-    } @else {
-      <p class="mt-10 rounded-3xl border border-dashed border-edge p-8 text-center text-mute">
-        Escolha como está hoje. A Central monta o resto da tela para o seu ritmo.</p>
     }
   </div>
 
-  <!-- coluna fixa: cota, agentes, anotar -->
-  <aside class="space-y-8 pt-2">
+  <!-- coluna fixa: cota, automações, agentes, anotar -->
+  <aside class="grid content-start gap-8 pt-2 md:grid-cols-2 xl:grid-cols-1">
     <section class="rounded-3xl border border-edge bg-panel p-5" aria-labelledby="cota">
       <h2 id="cota" class="flex items-center gap-2 font-display text-lg font-semibold">
         <app-icon name="spark" [size]="20" class="text-[#E8956B]" />Cota do Claude</h2>
@@ -188,10 +163,34 @@
       }
     </section>
 
+    <section aria-labelledby="automacoes">
+      <div class="flex items-baseline justify-between">
+        <h2 id="automacoes" class="font-display text-lg font-semibold">Automações</h2>
+        <a routerLink="/rotinas" class="text-[13px] text-frost hover:underline">Rotinas</a>
+      </div>
+      @for (r of automations(); track r.id) {
+        <a routerLink="/rotinas" class="mt-2 flex items-center gap-2.5 rounded-xl px-1 py-1.5 hover:bg-raise/50">
+          <span class="size-2 shrink-0 rounded-full"
+                [class]="r.lastStatus === 'failed' ? 'bg-no' : r.lastSkipped ? 'bg-later' : r.lastStatus === 'succeeded' ? 'bg-yes' : 'bg-faint'"></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[13.5px]">{{ r.name }}</span>
+            <span class="block truncate text-[12px] text-faint">
+              @if (r.lastStatus === 'failed') { <span class="text-no">Falhou na última vez</span> }
+              @else if (r.lastSkipped) { <span class="text-later">Pulou: {{ r.lastSkipped }}</span> }
+              @else { {{ schedule(r) }} }
+            </span>
+          </span>
+          <span class="text-[12px] text-faint" title="Próxima execução">{{ r.nextRunAt.toLocaleDateString('pt-BR', { weekday: 'short' }) }} {{ r.nextRunAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</span>
+        </a>
+      } @empty {
+        <p class="mt-2 text-[13.5px] text-mute">Nenhuma rotina ligada. Agentes podem rodar sozinhos (erros do Sentry, marketing…).</p>
+      }
+    </section>
+
     <section aria-labelledby="agora">
       <div class="flex items-baseline justify-between">
-        <h2 id="agora" class="font-display text-lg font-semibold">Agentes agora</h2>
-        <a routerLink="/agentes" class="text-[13px] text-frost hover:underline">Abrir</a>
+        <h2 id="agora" class="font-display text-lg font-semibold">Trabalhando agora</h2>
+        <a routerLink="/execucoes" class="text-[13px] text-frost hover:underline">Abrir</a>
       </div>
       @for (t of turns.running(); track t.id) {
         <div class="mt-3 rounded-2xl border border-[#B48CFF]/40 bg-[#B48CFF]/10 px-4 py-3 text-[13.5px]">
@@ -201,7 +200,7 @@
         </div>
       }
       @for (r of runs.active(); track r.id) {
-        <a routerLink="/agentes" [queryParams]="{ run: r.id }" class="mt-2 flex items-center gap-2.5 rounded-xl px-1 py-1.5 hover:bg-raise/50">
+        <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="mt-2 flex items-center gap-2.5 rounded-xl px-1 py-1.5 hover:bg-raise/50">
           <span class="pulse size-1.5 rounded-full bg-yes"></span>
           <span class="min-w-0 flex-1 truncate text-[13.5px]">{{ r.title }}</span>
           <span class="text-[12px] text-faint">{{ runLabel[r.status] }}</span>
@@ -209,6 +208,22 @@
       } @empty {
         @if (!turns.running().length) { <p class="mt-2 text-[13.5px] text-mute">Nenhum agente trabalhando.</p> }
       }
+    </section>
+
+    <section aria-labelledby="conversar">
+      <div class="flex items-baseline justify-between">
+        <h2 id="conversar" class="font-display text-lg font-semibold">Conversar com</h2>
+        <a routerLink="/agentes" class="text-[13px] text-frost hover:underline">Agentes</a>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-2">
+        @for (a of agents.agents(); track a.id) {
+          <button type="button" (click)="talk(a.id)" [title]="a.name + (a.description ? ': ' + a.description : '')" [attr.aria-label]="'Conversar com ' + a.name"
+                  class="group flex items-center gap-2 rounded-full border border-edge py-1 pr-3 pl-1 text-[13px] transition hover:border-faint hover:bg-raise">
+            <app-project-avatar [project]="a" [size]="24" class="transition-transform group-hover:scale-110" />
+            <span class="max-w-28 truncate">{{ a.name }}</span>
+          </button>
+        }
+      </div>
     </section>
 
     <form (submit)="saveNote($event)" aria-labelledby="anotar">

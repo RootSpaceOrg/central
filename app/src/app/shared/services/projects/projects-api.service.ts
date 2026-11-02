@@ -11,6 +11,8 @@ export class ProjectsApiService {
   create(input: NewProjectInput) { return this.ipc.invoke('projects:create', input); }
   update(slug: string, patch: ProjectPatch) { return this.ipc.invoke('projects:update', slug, patch); }
   sync(slug: string | null) { return this.ipc.invoke('projects:sync', slug); }
+  remove(slug: string) { return this.ipc.invoke('projects:delete', slug); }
+  pickImage() { return this.ipc.invoke('dialog:image'); }
   repos(slug: string) { return this.ipc.invoke('repos:list', slug); }
   onChanged(cb: () => void) { return this.ipc.on('projects:changed', cb); }
   info() { return this.ipc.invoke('app:info'); }

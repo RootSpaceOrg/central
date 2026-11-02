@@ -1,37 +1,56 @@
-<div class="grid h-screen grid-rows-[40px_1fr_26px]">
+<div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[1fr]' : 'grid-rows-[40px_1fr_26px]'">
   <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
-  <header class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
-    <span class="grid size-6 place-items-center rounded-lg bg-frost text-[13px] font-extrabold text-night font-display">C</span>
+  <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
+    <img src="logo.png" alt="" class="size-6 rounded-lg" />
     <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
+    <span class="flex-1"></span>
+    <button type="button" class="no-drag flex w-[min(380px,40vw)] items-center gap-2 rounded-lg border border-edge bg-panel px-3 py-1 text-[12.5px] text-faint transition hover:border-faint hover:text-mute"
+            (click)="openPalette()" aria-label="Buscar ou executar um comando">
+      <app-icon name="spark" [size]="13" />Buscar ou fazer algo…<span class="flex-1"></span><kbd class="font-mono text-[11px]">Ctrl K</kbd>
+    </button>
+    <span class="flex-1"></span>
   </header>
 
-  <div class="grid min-h-0 grid-cols-[56px_252px_1fr]">
+  <!-- modo foco: só o conteúdo (a Grade) na tela cheia -->
+  <div class="grid min-h-0" [class]="layout.focus() ? 'grid-cols-[1fr]' : 'grid-cols-[56px_252px_1fr]'">
     <!-- barra de atividades -->
-    <nav class="flex flex-col items-center gap-1 border-r border-edge bg-night py-3" aria-label="Seções">
+    <nav [hidden]="layout.focus()" class="flex flex-col items-center gap-1.5 border-r border-edge bg-night py-3" aria-label="Seções">
+      <!-- agente Central: sempre à mão, destacado -->
+      <button type="button" (click)="chat.toggle()" [attr.aria-pressed]="chat.open()" aria-label="Agente Central (Ctrl+J)"
+              class="nav-item group mb-2 !bg-frost/12 !text-frost hover:!bg-frost/20" [class.!bg-frost]="chat.open()" [class.!text-night]="chat.open()">
+        <app-icon name="spark" [size]="21" [fill]="chat.open()" />
+        @if (chat.busy().size) { <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-frost ring-2 ring-night"></span> }
+        <span class="nav-tip">Agente Central <kbd>Ctrl J</kbd></span>
+      </button>
+
       @for (n of nav; track n.path) {
         <a [routerLink]="n.path" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ exact: !!n.exact }"
-           class="relative grid size-11 place-items-center rounded-xl text-mute hover:text-text"
-           [class.!text-text]="rla.isActive" [class.!bg-raise]="rla.isActive" [title]="n.label" [attr.aria-label]="n.label">
-          @if (rla.isActive) { <span class="absolute -left-[7px] h-5 w-[3px] rounded-full bg-frost"></span> }
-          <app-icon [name]="n.icon" [size]="23" [fill]="rla.isActive" />
+           class="nav-item group" [class.nav-active]="rla.isActive" [attr.aria-label]="n.label">
+          <span class="nav-bar" aria-hidden="true"></span>
+          <app-icon [name]="n.icon" [size]="21" [fill]="rla.isActive" class="transition-transform duration-150 group-hover:scale-110" />
           @if (badge(n.path); as b) {
-            <span class="absolute -right-0.5 -top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-night {{ b.tone }}">{{ b.n }}</span>
+            <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold ring-2 ring-night {{ b.tone }}">{{ b.n }}</span>
           }
-          @if (n.path === '/agentes' && runs.active().length) {
-            <span class="pulse absolute right-1.5 top-1.5 size-2.5 rounded-full bg-yes ring-2 ring-night"></span>
+          @if (n.path === '/execucoes' && runs.active().length) {
+            <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-yes ring-2 ring-night"></span>
           }
+          <span class="nav-tip">{{ n.label }}</span>
         </a>
       }
 
-      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()"
-              class="mt-auto grid size-10 place-items-center rounded-xl text-mute hover:text-text disabled:opacity-60"
-              title="Sincronizar repositórios" aria-label="Sincronizar repositórios">
+      <button type="button" (click)="dialogs.settings.set(true)" class="nav-item group mt-auto" aria-label="Preferências">
+        <app-icon name="settings" [size]="19" />
+        <span class="nav-tip">Preferências</span>
+      </button>
+      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()" class="nav-item group disabled:opacity-60"
+              aria-label="Sincronizar repositórios">
         <app-icon name="sync" [size]="19" [class.animate-spin]="projects.syncing()" />
+        <span class="nav-tip">Sincronizar repositórios</span>
       </button>
     </nav>
 
     <!-- projetos -->
-    <aside class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
+    <aside [hidden]="layout.focus()" class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
       <div class="flex items-center justify-between px-4 pt-4 pb-2">
         <h2 class="font-display text-[15px] font-semibold">Projetos</h2>
         <button type="button" class="btn btn-sm" (click)="dialogs.newProject()">
@@ -68,13 +87,13 @@
   </div>
 
   <!-- barra de status -->
-  <footer class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
+  <footer [hidden]="layout.focus()" class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
     <span class="flex items-center gap-1.5">
       @if (projects.syncing()) { <span class="pulse size-1.5 rounded-full bg-frost"></span> Sincronizando repositórios… }
       @else if (projects.lastSync(); as at) { {{ tick() >= 0 ? 'Sincronizado ' + (at | ago) : '' }} }
     </span>
     @if (runs.active().length) {
-      <a routerLink="/agentes" class="flex items-center gap-1.5 text-yes hover:underline">
+      <a routerLink="/execucoes" class="flex items-center gap-1.5 text-yes hover:underline">
         <span class="pulse size-1.5 rounded-full bg-yes"></span>
         {{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }}
       </a>
@@ -97,10 +116,10 @@
 </div>
 
 <ng-template #item let-p>
-  <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text"
-     class="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-mute hover:bg-raise/60 hover:text-text"
+  <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text" (contextmenu)="projectMenu($event, p)"
+     class="group flex items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
      [class.opacity-60]="p.status === 'dead'">
-    <span class="size-2.5 shrink-0 rounded-[4px]" [style.background]="p.color"></span>
+    <app-project-avatar [project]="p" [size]="20" class="transition-transform duration-150 group-hover:scale-110" />
     <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
     @if (runningIn(p)) { <span class="pulse size-1.5 rounded-full bg-yes" title="Agente trabalhando"></span> }
     @if (p.openProposals) {
@@ -114,3 +133,10 @@
 <app-task-dialog />
 <app-turn-dialog />
 <app-update-dialog />
+<app-project-edit-dialog />
+<app-central-chat />
+<app-context-menu />
+<app-settings-dialog />
+<app-command-palette />
+<app-import-session-dialog />
+<app-autopilot-dialog />
