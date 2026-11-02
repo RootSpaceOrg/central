@@ -102,6 +102,15 @@
 .md code { font-family: var(--font-mono); font-size: .86em; background: var(--color-night); border: 1px solid var(--color-edge); border-radius: 6px; padding: .08em .35em; color: var(--color-frost); }
 .md pre { background: var(--color-night); border: 1px solid var(--color-edge); border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
 .md pre code { background: none; border: 0; padding: 0; color: var(--color-text); font-size: .9em; line-height: 1.55; }
+.md-table { overflow-x: auto; border: 1px solid var(--color-edge); border-radius: 10px; }
+/* tabela nunca esmaga as colunas: cresce até o conteúdo e rola na horizontal se não couber */
+.md table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: .94em; }
+.md th { text-align: left; font-weight: 600; color: var(--color-text); background: var(--color-raise); }
+.md th, .md td { padding: .45em .8em; border-bottom: 1px solid var(--color-edge); vertical-align: top; overflow-wrap: normal; word-break: normal; min-width: 5em; max-width: 30em; }
+.md tbody tr:last-child td { border-bottom: 0; }
+.md tbody tr:hover td { background: rgb(255 255 255 / 0.025); }
+.md del { color: var(--color-faint); }
+.md .ar { text-align: right; } .md .ac { text-align: center; }
 .md blockquote { border-left: 3px solid var(--color-edge); padding-left: 12px; color: var(--color-mute); }
 .md hr { border: 0; border-top: 1px solid var(--color-edge); }
 
