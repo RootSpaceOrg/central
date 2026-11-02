@@ -51,6 +51,7 @@ export class OfficeScene {
         const { OfficeWorld } = await import('../../../../office-world');
         if (gone) return;
         this.world = new OfficeWorld(this.stage().nativeElement, { pick: k => this.pick.emit(k), open: k => this.open.emit(k) });
+        (this.stage().nativeElement as HTMLElement & { office?: OfficeWorld }).office = this.world;
         this.sync();
       } catch {
         this.failed.set(true);

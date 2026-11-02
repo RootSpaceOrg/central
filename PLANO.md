@@ -201,7 +201,9 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   `note`; `create_idea`/`update_idea` aceitam `milestone_id`.
 - **Escritório em 3D** (three.js, carregado só nessa tela): bonecos voxel que sentam, digitam, andam pelo corredor e viram;
   nicks estilo jogo na cabeça e balão do que estão fazendo; estagiários em volta da mesa. Arrastar gira (Q/E giram 90°),
-  roda aproxima; as paredes do lado da câmera somem. ~30 quadros com gente trabalhando, ~12 parado.
+  roda aproxima; as paredes do lado da câmera somem.
+- v0.16.1: fluidez do 3D. Câmera mexendo ou gente andando desenha em todo quadro (240 fps num monitor de 240 Hz);
+  só digitando, 60; só a copa, 30. Mobília parada juntada por material (620 → ~200 chamadas de desenho, ~0,5 ms por quadro).
 
 ## Próximos marcos
 

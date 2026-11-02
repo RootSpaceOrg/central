@@ -1,9 +1,10 @@
 import {
-  AmbientLight, BoxGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, IcosahedronGeometry,
+  AmbientLight, BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, IcosahedronGeometry,
   Material, Mesh, MeshLambertMaterial, NearestFilter, Object3D, OrthographicCamera, PCFSoftShadowMap, PlaneGeometry, Raycaster,
   RepeatWrapping, RingGeometry, SRGBColorSpace, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 import { CORRIDOR_Y, ELEVATOR, MAP_H, MAP_W, Placement, ROOM, ROOMS, RoomId, route, skinOf } from './office-map';
@@ -187,6 +188,11 @@ export class OfficeWorld {
   private home: Vector3;
   private down: { x: number; y: number } | null = null;
   private selected: string | null = null;
+  private interacting = false;
+  /** até quando continuar desenhando a cada quadro (zoom pela roda, fim do arraste) */
+  private moving = 0;
+  /** medição (depuração): quadros desenhados, ms gastos, chamadas de desenho */
+  readonly stats = { frames: 0, ms: 0, calls: 0 };
 
   constructor(private readonly host: HTMLElement, private readonly on: { pick: (key: string | null) => void; open: (key: string) => void }) {
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true });
@@ -209,6 +215,7 @@ export class OfficeWorld {
     this.floor.position.set(-MAP_W / 2, 0, -MAP_H / 2);
     this.scene.add(this.floor);
     this.build();
+    for (const g of [this.floor, ...this.walls.map(w => w.g)]) merge(g);
 
     this.home = new Vector3(18, 17, 20);
     this.camera.position.copy(this.home);
@@ -217,6 +224,10 @@ export class OfficeWorld {
     Object.assign(this.controls, { enableDamping: true, dampingFactor: 0.08, minZoom: 0.6, maxZoom: 3.2, minPolarAngle: 0.25, maxPolarAngle: 1.3, screenSpacePanning: true });
     this.controls.target.set(0, 0, 0);
     this.controls.update();
+    // mexendo na câmera (arrastar, roda, amortecimento): desenha em todo quadro
+    this.controls.addEventListener('start', () => { this.interacting = true; });
+    this.controls.addEventListener('end', () => { this.interacting = false; this.moving = performance.now() + 600; });
+    this.controls.addEventListener('change', () => { this.moving = performance.now() + 300; });
 
     const el = this.renderer.domElement;
     el.style.display = 'block';
@@ -501,8 +512,12 @@ export class OfficeWorld {
 
   private loop(t: number): void {
     this.raf = requestAnimationFrame(x => this.loop(x));
-    const busy = this.spin !== 0 || [...this.actors.values()].some(a => a.working || a.path.length);
-    if (t - this.drawn < (busy ? 33 : 80)) return;
+    // câmera mexendo ou alguém andando: todo quadro (fica liso em monitor de 144/240 Hz);
+    // só gente digitando: 60; só a copa respirando: 30
+    const actors = [...this.actors.values()];
+    const live = this.interacting || this.spin !== 0 || t < this.moving || actors.some(a => a.path.length);
+    const gap = live ? 0 : actors.some(a => a.working) ? 15 : 32;
+    if (t - this.drawn < gap) return;
     const dt = Math.min(0.1, (t - (this.last || t)) / 1000);
     this.last = t;
     this.drawn = t;
@@ -523,8 +538,10 @@ export class OfficeWorld {
     for (const w of this.walls) w.g.visible = dir.dot(w.n) > -0.2;
     for (const g of this.graphs) g.offset.x = (g.offset.x + dt * 0.06) % 1;
 
+    const t0 = performance.now();
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
+    this.stats.frames++; this.stats.ms += performance.now() - t0; this.stats.calls = this.renderer.info.render.calls;
   }
 
   private animate(a: Actor, dt: number, s: number): void {
@@ -605,6 +622,38 @@ export class OfficeWorld {
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.domElement.remove();
+  }
+}
+
+/**
+ * Junta a mobília parada por material: centenas de caixas viram poucas chamadas de desenho (a sombra também agradece).
+ * Só filhos diretos que são Mesh e compartilham material; telas (material próprio) e grupos ficam como estão.
+ */
+function merge(parent: Object3D): void {
+  const groups = new Map<Material, Mesh[]>();
+  for (const o of parent.children) {
+    if (!(o instanceof Mesh) || Array.isArray(o.material)) continue;
+    const list = groups.get(o.material) ?? [];
+    list.push(o);
+    groups.set(o.material, list);
+  }
+  for (const [material, meshes] of groups) {
+    if (meshes.length < 2) continue;
+    const geos: BufferGeometry[] = meshes.map(m => {
+      m.updateMatrix();
+      const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(m.matrix);
+      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+      return g;
+    });
+    const merged = mergeGeometries(geos);
+    geos.forEach(g => g.dispose());
+    if (!merged) continue;
+    const mesh = new Mesh(merged, material);
+    mesh.castShadow = meshes.some(m => m.castShadow);
+    mesh.receiveShadow = true;
+    mesh.renderOrder = meshes[0].renderOrder;
+    for (const m of meshes) parent.remove(m);
+    parent.add(mesh);
   }
 }
 
