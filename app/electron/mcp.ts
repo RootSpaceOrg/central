@@ -166,7 +166,9 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     instructions: z.string().optional().describe('papel e jeito de trabalhar do agente'), color: z.string().optional(),
     icon_kind: z.enum(['letter', 'emoji', 'lucide']).optional(), icon_value: z.string().optional().describe('emoji ou nome de ícone Lucide'),
     tools: z.array(z.string()).optional().describe('ferramentas extras, ex.: mcp__sentry'), permission: permission.optional(),
-    model: z.enum(['', 'sonnet', 'opus', 'haiku']).optional(),
+    model: z.enum(['', 'sonnet', 'opus', 'haiku', 'fable']).optional(),
+    room: z.enum(['', 'gestao', 'eng', 'monitor', 'creative', 'business']).optional()
+      .describe('sala no Escritório: gestao, eng (engenharia), monitor, creative, business; vazio = deduz pelo papel'),
   };
   tool('list_agents', 'Agentes definidos (papel, projeto, ferramentas extras, quantas conversas, rotinas e execuções).', {}, () =>
     listAgents().map(a => ({ id: a.id, name: a.name, description: a.description, project: a.project_slug, tools: a.tools, permission: a.permission, model: a.model, builtin: a.builtin, chats: a.chats, routines: a.routines, runs: a.runs, instructions: a.instructions.slice(0, 400) })));
