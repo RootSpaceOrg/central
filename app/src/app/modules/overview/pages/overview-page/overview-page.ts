@@ -12,6 +12,7 @@ import { RoadmapService } from '../../../../shared/services/roadmap/roadmap.serv
 import { RUN_STATUS_LABEL } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { TasksService } from '../../../../shared/services/tasks/tasks.service';
+import { ReleaseService } from '../../../../shared/services/release/release.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Heartbeat } from '../../../../shared/ui/heartbeat';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
@@ -61,6 +62,15 @@ export class OverviewPage {
   private readonly ideas = inject(IdeasService);
   private readonly roadmap = inject(RoadmapService);
   private readonly direction = inject(DirectionService);
+  private readonly release = inject(ReleaseService);
+
+  /** a caminho de produção: projetos com algo em develop que não está em main */
+  protected readonly shipping = computed(() => this.projects.living().map(p => {
+    const repos = (this.release.bySlug()[p.slug] ?? []).filter(r => r.items.length);
+    const prs = repos.reduce((n, r) => n + (r.items.filter(i => i.pr).length || r.items.length), 0);
+    const oldest = repos.map(r => r.oldestAt).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+    return { p, repos: repos.length, prs, oldest, agent: repos.some(r => r.items.some(i => i.delivery)) };
+  }).filter(x => x.prs).sort((a, b) => (a.oldest?.getTime() ?? 0) - (b.oldest?.getTime() ?? 0)));
 
   protected readonly statusLabel = STATUS_LABEL;
   protected readonly runLabel = RUN_STATUS_LABEL;
@@ -123,6 +133,7 @@ export class OverviewPage {
     });
     // o rumo de cada projeto (data da última revisão)
     effect(() => { for (const p of this.projects.living()) this.direction.ensure(p.slug); });
+    this.release.loadAll();
   }
 
   protected link(s: Signal, slug: string): { route: unknown[]; query: Record<string, string> | null } {

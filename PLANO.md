@@ -245,6 +245,20 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
 - Vocabulário mais calmo: "Urgente" → "Prioritária" (laranja, não vermelho); saúde: Pede ação / Pendências / Sem movimento /
   Em dia; "Precisa de você" → "Para você olhar"; execução que falhou → "não terminou", sem vermelho no Início.
 
+## Feito (v0.20)
+
+- **Responsável pelo "A fazer"** (barra do Backlog, por projeto): o agente escolhido pega sozinho cada tarefa que entra em
+  A fazer (uma execução por tarefa, ligada a ela: nota de entrega e revisão). Travas: até N por vez, horário ("08-22"),
+  não dispara com a sessão acima de 80% e não insiste por 12 h numa tarefa que não terminou. Confere a cada minuto e quando
+  o backlog muda. Desligado até você escolher.
+- **A caminho de produção**: aba Produção do projeto (por repositório, PRs em develop que não estão em main, há quanto tempo,
+  de qual entrega de agente; back-merges fora) e resumo na Visão geral (projetos com algo esperando, o mais antigo
+  primeiro). "Preparar subida" pede ao responsável (ou à Central) o pacote develop→main como decisão para você aprovar.
+- Agentes com liberdade total podem mergear PR em develop se o papel deles disser (push direto e main: nunca).
+- Tech Lead KultivAi: instruções ajustadas (uma tarefa por execução, merge em develop após revisão, sempre em worktree, a
+  Kanban é da Central); rotina "Revisão técnica diária" criada desligada (dias úteis, 8h). Backup das instruções antigas
+  em %APPDATA%\Centralackups.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

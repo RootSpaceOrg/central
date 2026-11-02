@@ -27,6 +27,9 @@ const toProject = (d: ProjectDto): Project => ({
   activeRuns: d.active_runs,
   parentSlug: d.parent_slug ?? null,
   position: d.position ?? 0,
+  todoAgentId: d.todo_agent_id ?? null,
+  todoParallel: d.todo_parallel ?? 1,
+  todoHours: d.todo_hours ?? '',
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -118,6 +121,19 @@ export class ProjectsService {
   setStatus(slug: string, status: ProjectStatus): void {
     this.patchLocal(slug, { status });
     this.api.update(slug, { status }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
+  }
+
+  /** Responsável pelo "A fazer": agente, quantas por vez, horário. Lança o erro para a tela mostrar. */
+  async setTodoOwner(slug: string, patch: { agentId?: number | null; parallel?: number; hours?: string }): Promise<void> {
+    const p = this.bySlug().get(slug);
+    if (p) this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, todoAgentId: patch.agentId === undefined ? x.todoAgentId : patch.agentId,
+      todoParallel: patch.parallel ?? x.todoParallel, todoHours: patch.hours ?? x.todoHours } : x)));
+    try {
+      await this.api.update(slug, { todo_agent_id: patch.agentId, todo_parallel: patch.parallel, todo_hours: patch.hours });
+    } catch (e) {
+      this.load();
+      throw new Error(errorMessage(e));
+    }
   }
 
   setDescription(slug: string, description: string): void {

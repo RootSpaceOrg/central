@@ -41,6 +41,12 @@ export interface ProjectDto {
   parent_slug: string | null;
   /** ordem na barra lateral (entre irmãos) */
   position: number;
+  /** responsável pelo "A fazer": agente que pega as tarefas que entram em A fazer (null = ninguém) */
+  todo_agent_id: number | null;
+  /** quantas tarefas dele ao mesmo tempo */
+  todo_parallel: number;
+  /** horário em que pode disparar ("08-22"; vazio = qualquer hora) */
+  todo_hours: string;
 }
 
 export interface NewProjectInput {
@@ -64,6 +70,9 @@ export interface ProjectPatch {
   folder?: string;
   /** colocar dentro de um projeto-grupo (null = tirar do grupo) */
   parent_slug?: string | null;
+  todo_agent_id?: number | null;
+  todo_parallel?: number;
+  todo_hours?: string;
 }
 
 export interface RepoDto {
@@ -509,6 +518,35 @@ export interface NewFactInput {
   pinned?: boolean;
 }
 
+// ---------- a caminho de produção (develop → main) ----------
+
+export interface ReleaseItemDto {
+  sha: string;
+  at: string;
+  author: string;
+  title: string;
+  /** número do PR (merge ou squash), null = commit direto */
+  pr: number | null;
+  url: string | null;
+  /** nota de entrega do agente que fez o PR, se houver */
+  delivery: string | null;
+  task_id: number | null;
+}
+
+export interface ReleaseRepoDto {
+  path: string;
+  name: string;
+  /** main/master (null = não achou) */
+  prod: string | null;
+  /** develop/dev (null = o repositório não usa) */
+  dev: string | null;
+  /** commits em develop que não estão em main */
+  commits: number;
+  items: ReleaseItemDto[];
+  oldest_at: string | null;
+  error: string | null;
+}
+
 // ---------- entregas e "enquanto você estava fora" ----------
 
 export type DeliveryStatus = 'pending' | 'review' | 'info' | 'accepted' | 'adjusting' | 'discarded';
@@ -806,6 +844,9 @@ export interface Api {
   'deliveries:review': (id: number, action: 'accepted' | 'adjusting' | 'discarded', note: string | null) => void;
   /** tudo o que aconteceu desde (ISO) */
   'digest:get': (since: string) => DigestDto;
+  /** o que está em develop e não em main, por repositório (refresh busca o remoto) */
+  'release:status': (projectSlug: string, refresh?: boolean) => ReleaseRepoDto[];
+  'release:summary': () => { slug: string; repos: ReleaseRepoDto[] }[];
   'memories:list': (scope: number | 'shared' | 'all', retired?: boolean) => MemoryDto[];
   'memories:create': (input: NewMemoryInput) => MemoryDto;
   'memories:update': (id: number, patch: { text?: string; kind?: MemoryKind; pinned?: boolean; agent_id?: number | null }) => void;

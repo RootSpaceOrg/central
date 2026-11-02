@@ -26,7 +26,7 @@ npm start             # build completo e abre o app
 - `src/app/shared/contract.ts`: tudo o que a interface pode pedir ao processo principal.
 - `src/app/`: interface Angular (convenções de `modules/`, `shared/`, services em duas camadas).
 - Self-checks: `node electron/backlog.check.mjs`, `electron/updater.check.mjs`, `electron/routines.check.mjs`,
-  `scripts/file-icons.check.mjs`, `scripts/markdown.check.mjs`, `scripts/grid-tree.check.mjs`, `scripts/context.check.mjs`, `scripts/activity.check.mjs`, `scripts/office.check.mjs`, `scripts/memories.check.mjs`, `scripts/health.check.mjs`, `scripts/deliveries.check.mjs`.
+  `scripts/file-icons.check.mjs`, `scripts/markdown.check.mjs`, `scripts/grid-tree.check.mjs`, `scripts/context.check.mjs`, `scripts/activity.check.mjs`, `scripts/office.check.mjs`, `scripts/memories.check.mjs`, `scripts/health.check.mjs`, `scripts/deliveries.check.mjs`, `scripts/dispatch.check.mjs`.
 
 Depuração: `--data=<pasta>` usa outro banco; `--route=/projetos/x?aba=backlog` (ou `?nova=chat`) abre numa tela;
 `--capture=arquivo.png` salva um print e fecha (`--exec64=<js em base64>` roda um script antes).

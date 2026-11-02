@@ -40,6 +40,29 @@
     }
   </section>
 
+  <!-- a caminho de produção -->
+  @if (shipping().length) {
+    <section class="mt-10" aria-labelledby="prod">
+      <div class="mb-3 flex items-baseline justify-between">
+        <h2 id="prod" class="font-display text-xl font-semibold">A caminho de produção</h2>
+        <span class="text-[13px] text-faint">em develop, ainda não em main · o mais antigo primeiro</span>
+      </div>
+      <ul class="overflow-hidden rounded-2xl border border-edge bg-panel">
+        @for (s of shipping(); track s.p.slug) {
+          <li class="border-b border-edge last:border-0">
+            <a [routerLink]="['/projetos', s.p.slug]" [queryParams]="{ aba: 'producao' }" class="flex items-center gap-3 px-5 py-3 hover:bg-raise/50">
+              <app-project-avatar [project]="s.p" [size]="22" />
+              <span class="w-48 shrink-0 truncate font-semibold" [style.color]="s.p.color">{{ s.p.name }}</span>
+              <span class="flex-1 text-[14px]">{{ s.prs }} {{ s.prs === 1 ? 'PR' : 'PRs' }} em {{ s.repos }} {{ s.repos === 1 ? 'repositório' : 'repositórios' }}@if (s.agent) { <span class="text-[12px] text-frost"> · com entregas de agentes</span> }</span>
+              @if (s.oldest) { <span class="text-[12.5px] text-mute">o mais antigo {{ s.oldest | ago }}</span> }
+              <span class="text-faint">›</span>
+            </a>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
   <!-- saúde dos projetos -->
   <section class="mt-10" aria-labelledby="saude">
     <div class="mb-3 flex items-baseline justify-between">

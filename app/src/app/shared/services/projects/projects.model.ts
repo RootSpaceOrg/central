@@ -25,6 +25,10 @@ export interface Project {
   /** subprojeto (frente) de um projeto-grupo */
   parentSlug: string | null;
   position: number;
+  /** responsável pelo "A fazer" (agente que pega as tarefas), quantas por vez e horário ("08-22") */
+  todoAgentId: number | null;
+  todoParallel: number;
+  todoHours: string;
 }
 
 export interface Repo {

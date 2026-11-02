@@ -18,6 +18,8 @@ import { closeSession, createSession, listSessions, updateSession } from './sess
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
+import { dispatchTodo } from './dispatch';
+import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
@@ -25,7 +27,7 @@ import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, u
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
-import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
+import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
 import { createProject, deleteProject, listProjects, listRepos, recent, reorderProjects, syncProjects, updateProject } from './projects';
 import {
   cloneRepo, createTerminal, githubRepos, killAllTerminals, killTerminal, listDir, readFile, resizeTerminal, writeFile, writeTerminal,
@@ -49,7 +51,19 @@ function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]
 const changed = () => send('projects:changed', null);
 const routinesChanged = () => send('routines:changed', null);
 const agentsChanged = () => send('agents:changed', null);
-const backlogChanged = () => send('backlog:changed', null);
+// backlog mexeu (tela, MCP, execução): avisa a tela e vê se o responsável pelo "A fazer" tem tarefa nova
+let dispatchTimer: ReturnType<typeof setTimeout> | null = null;
+const backlogChanged = () => {
+  send('backlog:changed', null);
+  if (!dispatchTimer) dispatchTimer = setTimeout(() => { dispatchTimer = null; dispatchNow(); }, 2000);
+};
+const dispatchNow = () => {
+  if (CAPTURE && !process.argv.includes('--dispatch')) return; // testes não disparam agentes sozinhos (a não ser que peçam)
+  dispatchTodo({
+    quota: () => getUsage(false).then(u => u.limits.find(l => l.kind === 'session')?.percent ?? null, () => null),
+    start: input => startRun({ ...input, budget_usd: SIZE_BUDGET.large, proposal_id: null }, emitRun),
+  }).catch(() => {});
+};
 const contextChanged = (project: string) => send('context:changed', { project });
 const factProject = (id: number) => get<{ p: string }>('select project_slug p from facts where id = ?', id)?.p ?? '';
 const navigate = (route: string) => send('app:navigate', route);
@@ -197,6 +211,8 @@ function registerIpc(): void {
   handle('deliveries:list', (since, status) => listDeliveries(since, status));
   handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); backlogChanged(); });
   handle('digest:get', since => digest(since));
+  handle('release:status', (slug, refresh) => releaseStatus(slug, !!refresh));
+  handle('release:summary', () => releaseSummary());
   handle('memories:list', (scope, retired) => listMemories(scope, !!retired));
   handle('memories:create', input => { const m = createMemory(input); agentsChanged(); return m; });
   handle('memories:update', (id, patch) => { updateMemory(id, patch); agentsChanged(); });
@@ -276,6 +292,8 @@ app.whenReady().then(() => {
   startContext(slug => contextChanged(slug));
   onActivity((scope, ref, activity) => send('activity', { scope, ref, activity: activity as never }));
   onChatStream((chat_id, text) => send('chat:stream', { chat_id, text }));
+  // responsável pelo "A fazer": confere de minuto em minuto (vaga liberada, cota voltou, horário abriu)
+  setInterval(dispatchNow, 60_000);
   setTimeout(() => {
     indexAll();
     for (const p of all<{ slug: string }>(`select slug from projects where status <> 'dead'`)) importClaudeMemory(p.slug);

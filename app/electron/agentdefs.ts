@@ -126,7 +126,7 @@ export function agentPromptFile(a: AgentDto): string {
     project
       ? `## Projeto\nVocê atua no projeto "${project.name}" (slug ${a.project_slug}), pasta ${project.folder}.\nRepositórios: ${repos.join(', ') || 'nenhum'}.${project.description ? `\nSobre: ${project.description}` : ''}`
       : a.builtin ? '' : `## Projeto\nVocê não pertence a um projeto. Sua pasta de trabalho é ${agentCwd(a)} (pode guardar rascunhos e notas lá). Use as ferramentas da Central para ver os projetos.`,
-    a.permission === 'full' ? 'Você pode editar arquivos e rodar comandos sem perguntar. Nunca faça push para main, master ou develop.'
+    a.permission === 'full' ? 'Você pode editar arquivos e rodar comandos sem perguntar. Nunca faça push direto para main, master ou develop (merge de PR em develop só se o seu papel disser que pode; em main/master, nunca).'
       : !a.project_slug && !a.builtin ? 'Você pode criar e editar arquivos só na sua pasta de trabalho. Para mexer em código de projeto, crie tarefas ou coloque um agente para trabalhar (start_agent).'
       : 'Você não edita arquivos de código: para isso, crie tarefas ou coloque um agente para trabalhar (start_agent).',
   ];

@@ -114,9 +114,12 @@ export function updateProject(slug: string, patch: ProjectPatch): void {
     if (get('select 1 from projects where folder = ? and slug <> ?', patch.folder, slug)) throw new Error('Essa pasta já é de outro projeto.');
   }
   if (patch.parent_slug) checkParent(slug, patch.parent_slug);
+  if (patch.todo_agent_id && !get('select 1 from agents where id = ?', patch.todo_agent_id)) throw new Error('Agente não encontrado.');
+  if (patch.todo_parallel !== undefined && !(patch.todo_parallel >= 1 && patch.todo_parallel <= 4)) throw new Error('Entre 1 e 4 por vez.');
+  if (patch.todo_hours && !/^\d{1,2}-\d{1,2}$/.test(patch.todo_hours.trim())) throw new Error('Horário no formato 08-22.');
   const fields = Object.entries(patch)
     // campo ausente chega como undefined pelo IPC: não mexe nele (senão vira null e quebra colunas NOT NULL, ex.: folder)
-    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'parent_slug'].includes(k))
+    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'parent_slug', 'todo_agent_id', 'todo_parallel', 'todo_hours'].includes(k))
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,
     ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | number | null), slug);
