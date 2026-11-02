@@ -7,7 +7,7 @@
         @default { {{ queue().length }} coisas para triar. }
       }
     </h1>
-    <p class="mt-2 text-mute">Decisões primeiro, depois ideias novas. Atalhos: A aprova, D deixa para depois, N recusa/descarta.</p>
+    <p class="mt-2 text-mute">Decisões primeiro, depois ideias novas. Atalhos: A aprova, D deixa para depois, N recusa/descarta, R direciona.</p>
 
     @if (proposals.error() || error()) {
       <p role="alert" class="mt-6 rounded-2xl bg-no/10 px-5 py-4 text-no">{{ error() ?? proposals.error() }}</p>
@@ -59,11 +59,30 @@
               <span class="font-semibold text-yes">Se aprovar:</span> vira insumo do backlog do projeto. Quando você pedir, o gestor do projeto quebra em tarefas.</p>
           }
 
+          @if (steering()) {
+            <div class="mt-6 rounded-2xl border border-frost/40 bg-night p-3">
+              <label for="tri-guidance" class="px-1 text-[13px] font-semibold text-frost">O que fazer com isto?</label>
+              <textarea id="tri-guidance" class="mt-1.5 min-h-24 w-full resize-y bg-transparent px-1 leading-relaxed outline-none placeholder:text-faint"
+                        placeholder="Ex.: divide em duas, runbook primeiro e o agente depois · aprova só para o KultivAi · junta com a ideia de onboarding · pesquisa antes e me traz 2 opções"
+                        [value]="guidance()" (input)="guidance.set($any($event.target).value)"
+                        (keydown.control.enter)="steer()" (keydown.escape)="steering.set(false)"></textarea>
+              <div class="mt-2 flex items-center gap-2">
+                <span class="flex-1 px-1 text-[12px] text-faint">A Central recebe o item inteiro e o seu texto, e age pelas ferramentas dela. Ctrl+Enter envia.</span>
+                <button type="button" class="btn btn-sm btn-ghost" (click)="steering.set(false)">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" (click)="steer()" [disabled]="!guidance().trim() || sending()">
+                  <app-icon name="send" [size]="14" />{{ sending() ? 'Enviando…' : 'Mandar para a Central' }}</button>
+              </div>
+            </div>
+          }
+
           <div class="mt-8 flex gap-2">
             <button type="button" (click)="decide('reject')" class="flex-1 rounded-full border-2 border-edge py-3.5 font-semibold text-no hover:border-no">
               {{ item.kind === 'idea' ? 'Descartar' : 'Não' }} <kbd class="ml-1 text-xs opacity-60">N</kbd></button>
             <button type="button" (click)="decide('defer')" class="flex-1 rounded-full border-2 border-edge py-3.5 font-semibold text-later hover:border-later">
               Depois <kbd class="ml-1 text-xs opacity-60">D</kbd></button>
+            <button type="button" (click)="openSteer()" [attr.aria-pressed]="steering()" title="Dizer o que fazer: a Central lê e age"
+                    class="flex-1 rounded-full border-2 py-3.5 font-semibold text-frost hover:border-frost" [class]="steering() ? 'border-frost' : 'border-edge'">
+              Direcionar <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
             <button type="button" (click)="decide('approve')" class="flex-[1.6] rounded-full bg-yes py-3.5 font-semibold text-night hover:brightness-110">
               Aprovar <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
           </div>
@@ -91,6 +110,22 @@
         <p class="px-1 text-[12px] text-faint">Entra na triagem. Ideias suas também passam por aqui: aprovar é dizer "isso entra no rumo".</p>
       </div>
     </form>
+
+    @if (discussing().length) {
+      <section aria-labelledby="conversa">
+        <h2 id="conversa" class="mb-3 font-display text-xl font-semibold">Em conversa com a Central</h2>
+        @for (d of discussing(); track d.id) {
+          <button type="button" (click)="openChat(d.id)" class="mb-2 flex w-full items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 text-left hover:border-faint">
+            @if (d.live) { <span class="pulse size-2 shrink-0 rounded-full bg-frost"></span> }
+            @else { <app-icon name="check" [size]="14" class="shrink-0 text-yes" /> }
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[14px]">{{ d.title }}</span>
+              <span class="block truncate text-[12px] text-faint">{{ d.live ? 'Trabalhando há ' + live.since(d.live.startedAt) + (d.live.step ? ' · ' + d.live.step : '') : 'Respondeu ' + (d.at | ago) + ' · abrir conversa' }}</span>
+            </span>
+          </button>
+        }
+      </section>
+    }
 
     <section aria-labelledby="gestor">
       <div class="mb-3 flex items-baseline justify-between">

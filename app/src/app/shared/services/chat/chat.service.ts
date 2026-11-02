@@ -202,6 +202,27 @@ export class ChatService extends ChatSession {
     this.open.set(true);
   }
 
+  /**
+   * Conversa nova "por trás" (sem trocar a conversa aberta no painel): o agente começa a trabalhar e ela fica no histórico.
+   * Devolve o id da conversa.
+   */
+  async startBackground(agentId: number, text: string): Promise<number> {
+    try {
+      const d = this.prefs.prefs().chatDefaults ?? { model: '', effort: '' };
+      const id = await this.api.send(null, agentId, text, null, d);
+      this.loadChats();
+      return id;
+    } catch (e) {
+      throw new Error(errorMessage(e));
+    }
+  }
+
+  /** Abre uma conversa no painel lateral (Ctrl+J). */
+  openInPanel(chatId: number): void {
+    this.select(chatId);
+    this.open.set(true);
+  }
+
   /** Continua a sessão de uma execução já terminada. Devolve o id da conversa. */
   async fromRun(runId: number): Promise<number> {
     try {
