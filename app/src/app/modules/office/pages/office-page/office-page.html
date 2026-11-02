@@ -5,7 +5,10 @@
         <app-icon name="office" [size]="28" class="text-frost" />Escritório</h1>
       <p class="mt-1 text-mute">O time no andar: cada um na sala do seu tipo de trabalho, dizendo o que está fazendo. Clique numa pessoa; duplo clique entra na conversa.</p>
     </div>
-    <div class="flex gap-2 text-[13px]">
+    <div class="flex flex-wrap items-center gap-2 text-[13px]">
+      <button type="button" class="flex items-center gap-1.5 rounded-full border px-3 py-1 transition-colors" (click)="toggleMap()" [attr.aria-pressed]="map3d()"
+              [class]="map3d() ? 'border-frost/60 bg-frost/10 text-text' : 'border-edge bg-panel text-mute hover:text-text'"
+              [title]="map3d() ? 'Esconder o mapa 3D (libera espaço)' : 'Mostrar o mapa 3D'"><app-icon name="office" [size]="14" />Mapa 3D {{ map3d() ? 'ligado' : 'desligado' }}</button>
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b class="text-frost">{{ workers().length }}</b> trabalhando</span>
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b class="text-[#C6A6FF]">{{ subsRunning() }}</b> estagiários</span>
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b>{{ idle().length }}</b> na copa</span>
@@ -58,10 +61,12 @@
   }
 
   <!-- o andar -->
-  <div class="office-sky mt-6 overflow-hidden rounded-3xl border border-edge shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
-    <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [members]="members()" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
-                      (pick)="pick($event)" (open)="openKey($event)" />
-  </div>
+  @if (map3d()) {
+    <div class="office-sky mt-6 overflow-hidden rounded-3xl border border-edge shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
+      <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [members]="members()" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
+                        (pick)="pick($event)" (open)="openKey($event)" />
+    </div>
+  }
 
   <div class="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
     <!-- mesas: o detalhe de quem está trabalhando -->

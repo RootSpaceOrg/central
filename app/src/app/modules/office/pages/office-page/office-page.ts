@@ -43,6 +43,7 @@ interface Worker {
 
 const GESTOR = '[gestor:planejar]';
 const FILTER_KEY = 'central.office.filter';
+const MAP_KEY = 'central.office.map';
 const CLAUDE = '#D97757';
 
 /** Sala de um agente: a que ele escolheu, ou deduzida pelo papel (a Central fica na gestão). */
@@ -133,6 +134,14 @@ export class OfficePage {
   });
 
   // ---------- filtro por projeto (frente conta como o projeto-pai; '' = sem projeto) ----------
+  /** mapa 3D ligado (desligar libera espaço e não carrega o three.js; o quadro e as mesas continuam) */
+  protected readonly map3d = signal(localStorage.getItem(MAP_KEY) !== 'off');
+
+  protected toggleMap(): void {
+    this.map3d.update(v => !v);
+    localStorage.setItem(MAP_KEY, this.map3d() ? 'on' : 'off');
+  }
+
   protected readonly filter = signal<ReadonlySet<string>>(new Set(JSON.parse(localStorage.getItem(FILTER_KEY) ?? '[]') as string[]));
   private readonly topOf = (slug: string | null) => (slug ? this.projects.bySlug().get(slug)?.parentSlug ?? slug : '');
   private readonly shown = (slug: string | null) => !this.filter().size || this.filter().has(this.topOf(slug));
