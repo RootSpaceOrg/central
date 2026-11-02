@@ -218,6 +218,18 @@ export class ChatService extends ChatSession {
     }
   }
 
+  /** Manda mensagem numa conversa que já existe, sem abri-la. */
+  async sendTo(chatId: number, agentId: number, text: string): Promise<void> {
+    try { await this.api.send(chatId, agentId, text, null, null); this.loadChats(); }
+    catch (e) { throw new Error(errorMessage(e)); }
+  }
+
+  /** Última resposta do agente numa conversa (null se ainda não respondeu). */
+  async lastReply(chatId: number): Promise<string | null> {
+    const list = await this.api.messages(chatId);
+    return [...list].reverse().find(m => m.role === 'assistant')?.text ?? null;
+  }
+
   /** Abre uma conversa no painel lateral (Ctrl+J). */
   openInPanel(chatId: number): void {
     this.select(chatId);

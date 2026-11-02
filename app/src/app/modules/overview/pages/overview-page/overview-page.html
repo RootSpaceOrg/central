@@ -15,7 +15,7 @@
 
   <!-- o que precisa de você -->
   <section class="mt-8" aria-labelledby="needs">
-    <h2 id="needs" class="mb-3 font-display text-xl font-semibold">Precisa de você</h2>
+    <h2 id="needs" class="mb-3 font-display text-xl font-semibold">Para você olhar</h2>
     @if (needs().length) {
       <ul class="overflow-hidden rounded-2xl border border-edge bg-panel">
         @for (n of allNeeds() ? needs() : needs().slice(0, 6); track $index) {
@@ -36,7 +36,7 @@
           {{ allNeeds() ? 'Mostrar menos' : 'Ver todos (' + needs().length + ')' }}</button>
       }
     } @else {
-      <p class="rounded-2xl border border-dashed border-edge px-5 py-4 text-mute">Nada esperando você. Os projetos estão em dia.</p>
+      <p class="rounded-2xl border border-dashed border-edge px-5 py-4 text-mute">Nada para olhar. Os projetos estão em dia.</p>
     }
   </section>
 
@@ -73,7 +73,7 @@
             <dt class="text-faint">Backlog</dt>
             <dd class="min-w-0 truncate">
               {{ c.backlog.todo }} a fazer · {{ c.backlog.doing }} fazendo · {{ c.backlog.review }} revisão
-              @if (c.backlog.urgent) { · <b class="text-no">{{ c.backlog.urgent }} urgente{{ c.backlog.urgent > 1 ? 's' : '' }}</b> }
+              @if (c.backlog.urgent) { · <b class="text-later">{{ c.backlog.urgent }} prioritária{{ c.backlog.urgent > 1 ? 's' : '' }}</b> }
             </dd>
             <dt class="text-faint">Agora</dt>
             <dd class="min-w-0">

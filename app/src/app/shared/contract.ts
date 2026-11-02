@@ -509,6 +509,51 @@ export interface NewFactInput {
   pinned?: boolean;
 }
 
+// ---------- entregas e "enquanto você estava fora" ----------
+
+export type DeliveryStatus = 'pending' | 'review' | 'info' | 'accepted' | 'adjusting' | 'discarded';
+
+export interface DeliveryDto {
+  id: number;
+  run_id: number;
+  project_slug: string | null;
+  project_name: string | null;
+  agent_id: number | null;
+  agent_name: string | null;
+  task_id: number | null;
+  title: string;
+  what: string;
+  why: string | null;
+  how_to_test: string | null;
+  risks: string | null;
+  /** o agente contou (report_delivery) ou a Central montou do resultado */
+  explained: boolean;
+  /** como a execução terminou: succeeded, failed */
+  outcome: string | null;
+  pr_url: string | null;
+  files: number;
+  additions: number;
+  deletions: number;
+  diff_stat: string | null;
+  status: DeliveryStatus;
+  review_note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface DigestDto {
+  since: string;
+  deliveries: DeliveryDto[];
+  tasks_done: { id: number; title: string; project_slug: string }[];
+  roadmap: { kind: string; title: string; detail: string | null; author: string; at: string; project_slug: string }[];
+  ideas: number;
+  decisions: number;
+  memories: number;
+  runs: number;
+  minutes: number;
+  cost_usd: number;
+}
+
 // ---------- memória dos agentes ----------
 
 export type MemoryKind = 'preferencia' | 'fato' | 'decisao' | 'pessoa' | 'como_fazer';
@@ -756,6 +801,11 @@ export interface Api {
   /** o que um agente recebe no prompt para este foco (prévia na tela) */
   'context:block': (projectSlug: string, focus: string, budget: number) => string;
   /** memória de um agente, a compartilhada ('shared') ou tudo ('all'); retired inclui as esquecidas */
+  /** entregas desde (ISO) e/ou num status */
+  'deliveries:list': (since: string | null, status: DeliveryStatus | null) => DeliveryDto[];
+  'deliveries:review': (id: number, action: 'accepted' | 'adjusting' | 'discarded', note: string | null) => void;
+  /** tudo o que aconteceu desde (ISO) */
+  'digest:get': (since: string) => DigestDto;
   'memories:list': (scope: number | 'shared' | 'all', retired?: boolean) => MemoryDto[];
   'memories:create': (input: NewMemoryInput) => MemoryDto;
   'memories:update': (id: number, patch: { text?: string; kind?: MemoryKind; pinned?: boolean; agent_id?: number | null }) => void;

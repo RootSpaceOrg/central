@@ -230,6 +230,21 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   parado / saudável) e os porquês, última atualização, ritmo, backlog, marco de Agora, rumo e triagem. Manutenção cobra
   menos; congelado só risco.
 
+## Feito (v0.19)
+
+- **Nota de entrega**: toda execução termina contando o que mudou, por quê, como testar e o que ficou de risco
+  (`report_delivery` no MCP). A Central completa com o diff (arquivos, +/−) e o PR; sem nota, monta do resultado e marca
+  "sem explicação". Quem mexeu em código vai para a revisão; o resto é informativo.
+- **Enquanto você estava fora** (Início): desde o último "Já vi" (até 7 dias), números (entregas, tarefas concluídas, marcos,
+  execuções e horas de agente, o que não terminou), por projeto as entregas, tarefas e o que andou no roadmap, e o que surgiu
+  (ideias, decisões, memórias). "Pedir à Central um resumo em texto": 6 linhas com o que avançou, o que precisa de você e
+  o próximo passo.
+- **Fila de revisão** (Esperando você): cada entrega com a nota e o diff; Aceitar (tarefa vai para Feito; o merge do PR
+  fica no GitHub), Pedir ajuste (o texto volta para o agente na mesma sessão e worktree, com permissão de editar; ao terminar,
+  a entrega volta para a revisão com o diff novo) ou Descartar. Testado: entrega real com 2 arquivos e ajuste com commit novo.
+- Vocabulário mais calmo: "Urgente" → "Prioritária" (laranja, não vermelho); saúde: Pede ação / Pendências / Sem movimento /
+  Em dia; "Precisa de você" → "Para você olhar"; execução que falhou → "não terminou", sem vermelho no Início.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

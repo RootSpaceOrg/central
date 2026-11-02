@@ -8,6 +8,7 @@ import { agentCwd, agentPromptFile, agentTools, getAgent } from './agentdefs';
 import { moveTaskForRun } from './backlog';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
+import { closeDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
 import { memoryBlock } from './memories';
 import { getUsage } from './usage';
@@ -173,6 +174,8 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
   // concluída vai para Revisão (alguém precisa olhar o PR); falha volta para A fazer
   if (task) moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
   procs.delete(id);
+  // nota de entrega: garante, mede o diff e decide se vai para a revisão
+  closeDelivery(id).catch(() => {}).finally(() => emit.changed());
   emit.changed();
   pump(emit);
 }
@@ -293,7 +296,9 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
 - Não exclua nada pela Central.
 - Comece declarando seu plano na lista de tarefas (TaskCreate, 3 a 6 passos) e marque cada um (TaskUpdate) ao avançar:
   é assim que o Gustavo vê para onde você está indo.
-- Ao começar cada etapa, chame set_status (fase + o que, curto${task ? `, task_id ${task.id}` : ''}): é o quadro que o Gustavo olha.`;
+- Ao começar cada etapa, chame set_status (fase + o que, curto${task ? `, task_id ${task.id}` : ''}): é o quadro que o Gustavo olha.
+- Antes de terminar, chame report_delivery: o que mudou, por quê, como testar em 1 minuto e o que ficou de risco.
+  É o que o Gustavo lê quando volta; sem isso ele não sabe o que você fez.`;
 
   if (where.kind === 'workspace') {
     return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.

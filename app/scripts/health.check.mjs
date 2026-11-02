@@ -22,7 +22,7 @@ const t = (column, priority = 2, updated = 1, title = 'x') => ({ column, priorit
 
 ok(health(base, NOW).health === 'ok', 'tudo em dia = saudável');
 ok(health({ ...base, folderExists: false }, NOW).health === 'risco', 'pasta sumiu = risco');
-ok(health({ ...base, tasks: [t('todo', 0, 1, 'Corrigir login')] }, NOW).signals[0].text.includes('Corrigir login'), 'urgente mostra o título');
+ok(health({ ...base, tasks: [t('todo', 0, 1, 'Corrigir login')] }, NOW).signals[0].text.includes('Corrigir login'), 'prioritária mostra o título');
 ok(health({ ...base, tasks: [t('done', 0)] }, NOW).health === 'ok', 'urgente feita não conta');
 ok(health({ ...base, failedRuns7d: 2 }, NOW).health === 'risco', 'execução falhou = risco');
 ok(health({ ...base, openProposals: 1 }, NOW).health === 'atencao', 'decisão = atenção');

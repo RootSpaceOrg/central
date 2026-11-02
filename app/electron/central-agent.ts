@@ -9,6 +9,7 @@ import { createInterface } from 'node:readline';
 import type { ChatDto, ChatMessageDto, ChatOptions, ChatRole } from '../src/app/shared/contract';
 import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, sessionPromptFile } from './agentdefs';
 import { DEV_ROOT, all, get, now, run } from './db';
+import { reopenDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
 import { recordTouch } from './context/context';
@@ -89,7 +90,9 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
 
   // --include-partial-messages: o texto chega em pedaços enquanto o Claude escreve (a tela mostra ao vivo)
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
-  if (slug) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${SESSION_TOOLS.join(',')}"`);
+  // continuação de uma execução (pedir ajuste): edita no worktree dela como a execução editava
+  const fromRun = !!chat?.cwd && !!get('select 1 from runs where worktree_path = ?', chat.cwd);
+  if (slug || fromRun) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SESSION_TOOLS, ...agentTools(agent)])].join(',')}"`);
   else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
   else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
   const model = chosen.model || agent.model;
@@ -152,6 +155,9 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
     onStream(id, '');
     if (code !== 0 && !answered) save(id, 'error', stderr.trim() || 'Resposta interrompida.', notify);
     notify(id, null, false);
+    // terminou um ajuste pedido na entrega: ela volta para a revisão com o diff novo
+    const runId = fromRun ? get<{ id: number }>('select id from runs where worktree_path = ?', chat!.cwd)?.id : null;
+    if (runId) reopenDelivery(runId).then(onCentralChange, () => {});
   });
   return id;
 }
@@ -179,7 +185,7 @@ export function describe(name: string, input: any): string {
     memory_recall: 'Consultou a memória do projeto', memory_remember: `Guardou na memória: "${String(input?.text ?? '').slice(0, 60)}"`,
     memory_supersede: `Atualizou o fato #${input?.id ?? ''}`,
     remember: `Lembrou${input?.para === 'todos' ? ' (para todos)' : ''}: "${String(input?.text ?? '').slice(0, 60)}"`, recall: 'Consultou a memória',
-    forget: `Esqueceu a memória #${input?.id ?? ''}`, set_status: `${String(input?.phase ?? '')}: ${String(input?.doing ?? '').slice(0, 60)}`,
+    forget: `Esqueceu a memória #${input?.id ?? ''}`, report_delivery: `Entrega: ${String(input?.title ?? '').slice(0, 60)}`, set_status: `${String(input?.phase ?? '')}: ${String(input?.doing ?? '').slice(0, 60)}`,
     Read: `Leu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-2).join('/')}`, Grep: `Buscou "${input?.pattern ?? ''}"`, Glob: `Listou ${input?.pattern ?? ''}`,
     Agent: `Subagente: ${input?.description ?? ''}`, Task: `Subagente: ${input?.description ?? ''}`,
     TaskCreate: `Plano: ${input?.subject ?? ''}`, TaskUpdate: `Plano: passo ${input?.taskId ?? ''} ${input?.status === 'completed' ? 'concluído' : input?.status === 'in_progress' ? 'em andamento' : 'atualizado'}`,

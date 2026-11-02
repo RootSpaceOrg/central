@@ -20,7 +20,10 @@ import { SettingsApiService } from '../../../../shared/services/settings/setting
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { TurnsService } from '../../../../shared/services/turns/turns.service';
 import { UsageService, untilReset } from '../../../../shared/services/usage/usage.service';
+import { DeliveriesService } from '../../../../shared/services/deliveries/deliveries.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
+import { AwayDigest } from './components/away-digest/away-digest';
+import { DeliveryCard } from './components/delivery-card/delivery-card';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
@@ -30,7 +33,7 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
  */
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar],
+  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, AwayDigest, DeliveryCard],
   templateUrl: './home-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })
@@ -70,6 +73,9 @@ export class HomePage {
   private readonly router = inject(Router);
 
   protected readonly since = signal<Date>(new Date(Date.now() - 86_400_000));
+  /** "Enquanto você estava fora": desde o último "Já vi" (no máximo 7 dias) */
+  protected readonly awaySince = signal<Date | null>(null);
+  protected readonly deliveries = inject(DeliveriesService);
   protected readonly note = signal('');
   protected readonly noteSaved = signal(false);
   protected readonly runLabel = RUN_STATUS_LABEL;
@@ -85,11 +91,15 @@ export class HomePage {
 
   // ---------- esperando você ----------
   /** terminar antes de começar: PRs prontos primeiro */
-  protected readonly reviews = computed(() => this.tasks.tasks().filter(t => t.column === 'review').slice(0, 6));
+  protected readonly reviews = computed(() => {
+    // tarefas em revisão que já têm entrega na fila aparecem pela entrega (com a nota)
+    const covered = new Set(this.deliveries.queue().map(d => d.taskId).filter(Boolean));
+    return this.tasks.tasks().filter(t => t.column === 'review' && !covered.has(t.id)).slice(0, 6);
+  });
   protected readonly decide3 = computed(() => this.proposals.inbox().slice(0, 3));
   protected readonly failed = computed(() =>
     this.runs.runs().filter(r => r.status === 'failed' && r.finishedAt && r.finishedAt > this.since()).slice(0, 3));
-  protected readonly waiting = computed(() => this.reviews().length + this.proposals.inbox().length + this.ideas.fresh().length + this.failed().length);
+  protected readonly waiting = computed(() => this.deliveries.queue().length + this.reviews().length + this.proposals.inbox().length + this.ideas.fresh().length + this.failed().length);
   protected readonly finished = computed(() =>
     this.runs.runs().filter(r => r.status === 'succeeded' && r.finishedAt && r.finishedAt > this.since()));
 
@@ -117,6 +127,17 @@ export class HomePage {
       if (v) this.since.set(new Date(v));
       this.settings.set('home:lastSeen', new Date().toISOString());
     });
+    this.settings.get('home:awaySeen').then(v => {
+      const week = Date.now() - 7 * 86_400_000;
+      this.awaySince.set(new Date(Math.max(v ? Date.parse(v) : Date.now() - 86_400_000, week)));
+    });
+  }
+
+  /** "Já vi": o resumo recomeça a partir de agora */
+  protected markSeen(): void {
+    const now = new Date();
+    this.settings.set('home:awaySeen', now.toISOString());
+    this.awaySince.set(now);
   }
 
   protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }

@@ -2,8 +2,8 @@
  * Saúde de um projeto a partir do que a Central já sabe (commits, backlog, roadmap, rumo, triagem, execuções).
  * Puro de propósito: a Visão geral monta a entrada; o check em scripts/health.check.mjs cobre as regras.
  *
- * risco    = algo quebrado ou urgente (pasta sumiu, execução falhou, tarefa urgente aberta)
- * atenção  = algo esperando ou envelhecendo (decisão, PR para revisar, tarefa travada, sem rumo/marco…)
+ * risco    = pede uma ação sua (pasta sumiu, execução não terminou, tarefa prioritária aberta)
+ * atenção  = pendências: algo esperando ou envelhecendo (decisão, PR para revisar, tarefa parada, sem rumo/marco…)
  * parado   = projeto ativo sem commit nem agente há 30 dias
  * saudável = nada disso
  * Manutenção cobra menos (sem rumo/marco/ritmo); congelado só olha risco.
@@ -48,9 +48,9 @@ export function health(i: HealthInput, now = Date.now()): { health: Health; sign
   const open = i.tasks.filter(t => t.column !== 'done');
 
   if (!i.folderExists) risk('a pasta do projeto não existe mais', 'projeto');
-  if (i.failedRuns7d) risk(`${plural(i.failedRuns7d, 'execução falhou', 'execuções falharam')} nesta semana`, 'execucoes');
+  if (i.failedRuns7d) risk(`${plural(i.failedRuns7d, 'execução não terminou', 'execuções não terminaram')} nesta semana`, 'execucoes');
   const urgent = open.filter(t => t.priority === 0);
-  if (urgent.length) risk(urgent.length === 1 ? `urgente: ${urgent[0].title}` : `${urgent.length} tarefas urgentes abertas`, 'backlog');
+  if (urgent.length) risk(urgent.length === 1 ? `prioritária: ${urgent[0].title}` : `${urgent.length} tarefas prioritárias abertas`, 'backlog');
 
   if (!frozen) {
     if (i.openProposals) warn(`${plural(i.openProposals, 'decisão esperando', 'decisões esperando')} você`, 'triagem');
@@ -74,8 +74,8 @@ export function health(i: HealthInput, now = Date.now()): { health: Health; sign
 }
 
 export const HEALTH: Record<Health, { label: string; color: string; order: number }> = {
-  risco: { label: 'Em risco', color: '#F07A7A', order: 0 },
-  atencao: { label: 'Atenção', color: '#E8C46A', order: 1 },
-  parado: { label: 'Parado', color: '#9aa3b5', order: 2 },
-  ok: { label: 'Saudável', color: '#7ED69A', order: 3 },
+  risco: { label: 'Pede ação', color: '#E8A36A', order: 0 },
+  atencao: { label: 'Pendências', color: '#8FB4FF', order: 1 },
+  parado: { label: 'Sem movimento', color: '#9aa3b5', order: 2 },
+  ok: { label: 'Em dia', color: '#7ED69A', order: 3 },
 };

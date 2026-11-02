@@ -41,7 +41,7 @@ export const COLUMNS: { id: TaskColumn; label: string; hint: string }[] = [
 ];
 
 export const PRIORITY: Record<TaskPriority, { label: string; tone: string }> = {
-  0: { label: 'Urgente', tone: 'text-no' },
+  0: { label: 'Prioritária', tone: 'text-later' },
   1: { label: 'Alta', tone: 'text-later' },
   2: { label: 'Normal', tone: 'text-mute' },
   3: { label: 'Baixa', tone: 'text-faint' },

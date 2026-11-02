@@ -20,6 +20,7 @@ import {
   updateIdea, updateTask,
 } from './backlog';
 import { get } from './db';
+import { reportDelivery } from './deliveries';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
 import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
 import { setStatus } from './activity';
@@ -260,6 +261,17 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     forgetMemory(a.id, a.reason, 'agente');
     return 'Esquecida.';
   }, h.agents);
+
+  // ---------- nota de entrega (só execuções) ----------
+  if (caller?.kind === 'run') {
+    tool('report_delivery', 'Antes de terminar, conte ao Gustavo o que você entregou. Ele lê isso no resumo de quando estava fora e na fila de revisão.', {
+      title: z.string().max(160).describe('a entrega em uma linha (ex.: "Exportação do roadmap em PDF")'),
+      what: z.string().max(2000).describe('o que mudou, concreto (arquivos/telas/comportamento)'),
+      why: z.string().optional().describe('por que assim'),
+      how_to_test: z.string().optional().describe('como o Gustavo confere em 1 minuto'),
+      risks: z.string().optional().describe('o que ficou de fora, dúvidas, riscos'),
+    }, a => { reportDelivery(caller.id, a); return 'Entrega registrada.'; }, h.backlog);
+  }
 
   // ---------- status ao vivo (só quando a sessão foi aberta pela Central e sabemos quem chama) ----------
   if (caller) {

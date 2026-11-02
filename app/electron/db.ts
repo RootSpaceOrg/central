@@ -234,6 +234,32 @@ db.exec(`
     done_at      text
   );
 
+  -- nota de entrega de cada execução (o que mudou, por quê, como testar, riscos) e a revisão do Gustavo
+  -- status: pending (rodando) → review (mexeu em código) | info (não mexeu) → accepted | adjusting | discarded
+  create table if not exists deliveries (
+    id          integer primary key autoincrement,
+    run_id      integer not null unique references runs on delete cascade,
+    project_slug text,
+    agent_id    integer,
+    task_id     integer,
+    title       text not null,
+    what        text not null,
+    why         text,
+    how_to_test text,
+    risks       text,
+    explained   integer not null default 0,
+    outcome     text,
+    pr_url      text,
+    files       integer not null default 0,
+    additions   integer not null default 0,
+    deletions   integer not null default 0,
+    diff_stat   text,
+    status      text not null default 'pending',
+    review_note text,
+    created_at  text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    reviewed_at text
+  );
+
   -- memória dos agentes: do agente (agent_id) ou de todos (agent_id null); esquecer retira com o motivo
   create table if not exists memories (
     id             integer primary key autoincrement,
