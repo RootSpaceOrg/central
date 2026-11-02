@@ -68,7 +68,13 @@
               "node_modules/@xterm/xterm/css/xterm.css",
               "src/styles.css"
             ],
-            "baseHref": "./"
+            "baseHref": "./",
+            "allowedCommonJsDependencies": [
+              "graphology-communities-louvain",
+              "graphology-layout-forceatlas2",
+              "events",
+              "graphology-utils"
+            ]
           },
           "configurations": {
             "production": {

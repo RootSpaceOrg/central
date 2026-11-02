@@ -1,0 +1,283 @@
+<!-- coluna de controle -->
+<aside class="flex min-h-0 flex-col border-r border-edge bg-panel">
+  <div class="border-b border-edge p-4">
+    @if (status(); as s) {
+      <div class="flex items-center gap-2">
+        <span class="size-2 rounded-full" [class]="s.error ? 'bg-no' : s.indexing ? 'pulse bg-later' : s.indexedAt ? 'bg-yes' : 'bg-faint'"></span>
+        <span class="text-[13px] font-semibold">{{ s.indexing ? 'Indexando…' : s.error ? 'Erro no índice' : s.indexedAt ? 'Índice em dia' : 'Sem índice ainda' }}</span>
+        <span class="flex-1"></span>
+        <button type="button" class="rounded-md p-1 text-faint hover:bg-raise hover:text-text" (click)="reindex()" title="Atualizar o índice (incremental)" aria-label="Atualizar o índice">
+          <app-icon name="sync" [size]="14" [class.animate-spin]="s.indexing" /></button>
+      </div>
+      <p class="mt-1 text-[12.5px] text-mute">{{ s.files }} arquivos · {{ s.nodes }} símbolos · {{ s.edges }} ligações</p>
+      @if (s.indexedAt && !s.indexing) { <p class="text-[12px] text-faint">{{ s.indexedAt | ago }}@if (s.ms !== null) {, em {{ s.ms }} ms}. Acompanha mudanças sozinho.</p> }
+      @if (s.indexing && s.total) {
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-night"><div class="h-full rounded-full bg-later transition-all" [style.width.%]="s.done / s.total * 100"></div></div>
+      }
+      @if (s.error) { <p class="mt-1 text-[12px] text-no">{{ s.error }}</p> }
+    }
+  </div>
+
+  <nav class="flex gap-1 border-b border-edge p-2" role="tablist" aria-label="Contexto">
+    @for (t of [{ id: 'grafo', label: 'Grafo', icon: 'summary' }, { id: 'memoria', label: 'Memória', icon: 'ideas' }, { id: 'prompt', label: 'Prompt', icon: 'central' }]; track t.id) {
+      <button type="button" role="tab" [attr.aria-selected]="pane() === t.id" (click)="pane.set($any(t.id))"
+              class="flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12.5px] font-semibold"
+              [class]="pane() === t.id ? 'bg-raise text-text' : 'text-mute hover:text-text'">
+        <app-icon [name]="$any(t.icon)" [size]="13" />{{ t.label }}
+        @if (t.id === 'memoria' && facts().length) { <span class="text-[11px] text-faint">{{ facts().length }}</span> }
+      </button>
+    }
+  </nav>
+
+  <div class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+    <div>
+      <input class="field w-full" placeholder="Buscar arquivo, classe, função, rota…" aria-label="Buscar no código" [value]="query()" (input)="query.set($any($event.target).value)" />
+      @if (hits().length) {
+        <ul class="mt-2 max-h-72 space-y-0.5 overflow-y-auto">
+          @for (h of hits(); track h.key) {
+            <li><button type="button" (click)="goHit(h)" class="flex w-full items-baseline gap-2 rounded-lg px-2 py-1 text-left hover:bg-raise">
+              <span class="w-16 shrink-0 text-[10.5px] uppercase tracking-wide text-faint">{{ h.kind }}</span>
+              <span class="min-w-0 flex-1"><span class="block truncate text-[13px]">{{ h.qualname }}</span>
+                <span class="block truncate font-mono text-[10.5px] text-faint">{{ short(h.file_key) }}</span></span>
+            </button></li>
+          }
+        </ul>
+      }
+    </div>
+
+    @if (pane() === 'grafo') {
+      <div>
+        <p class="mb-1.5 text-[12px] font-semibold text-faint">Detalhe</p>
+        <div class="flex rounded-lg border border-edge p-0.5" role="radiogroup" aria-label="Nível de detalhe">
+          @for (d of [{ v: 0, l: 'Arquivos' }, { v: 1, l: 'Pastas' }, { v: 2, l: 'Pastas 2' }, { v: 3, l: '3' }]; track d.v) {
+            <button type="button" role="radio" [attr.aria-checked]="depth() === d.v" (click)="depth.set(d.v); selected.set(null)"
+                    class="flex-1 rounded-md py-1 text-[12px]" [class]="depth() === d.v ? 'bg-raise font-semibold text-text' : 'text-mute hover:text-text'">{{ d.l }}</button>
+          }
+        </div>
+      </div>
+      <div>
+        <p class="mb-1.5 text-[12px] font-semibold text-faint">Camada</p>
+        <div class="grid gap-1" role="radiogroup" aria-label="Camada">
+          @for (l of [{ v: 'code', l: 'Código', h: 'cor por ' + (colorBy() === 'repo' ? 'repositório' : 'comunidade') }, { v: 'memory', l: 'Memória', h: 'arquivos com fatos ligados' }, { v: 'agent', l: 'Agentes', h: 'o que leram e editaram (30 dias)' }]; track l.v) {
+            <button type="button" role="radio" [attr.aria-checked]="layer() === l.v" (click)="layer.set($any(l.v))"
+                    class="flex items-baseline gap-2 rounded-lg border px-3 py-1.5 text-left text-[13px]"
+                    [class]="layer() === l.v ? 'border-frost bg-frost/10' : 'border-edge hover:border-faint'">
+              <span class="font-semibold">{{ l.l }}</span><span class="text-[11.5px] text-faint">{{ l.h }}</span></button>
+          }
+        </div>
+        @if (layer() === 'code') {
+          <button type="button" class="mt-1.5 text-[12px] text-frost hover:underline" (click)="colorBy.set(colorBy() === 'repo' ? 'community' : 'repo')">
+            Colorir por {{ colorBy() === 'repo' ? 'comunidade (módulos que conversam entre si)' : 'repositório' }}</button>
+        }
+      </div>
+      @if (layer() === 'code' && colorBy() === 'repo') {
+        <div>
+          <p class="mb-1.5 text-[12px] font-semibold text-faint">Repositórios</p>
+          <ul class="space-y-1">
+            @for (r of repos(); track r.name) {
+              <li class="flex items-center gap-2 text-[12.5px]"><span class="size-2.5 shrink-0 rounded-full" [style.background]="r.color"></span>
+                <span class="min-w-0 flex-1 truncate">{{ r.name }}</span><span class="text-faint">{{ r.files }}</span></li>
+            }
+          </ul>
+        </div>
+      }
+      <div>
+        <p class="mb-1.5 text-[12px] font-semibold text-faint">Ligações</p>
+        <ul class="space-y-1">
+          @for (e of legend; track e.label) {
+            <li class="flex items-center gap-2 text-[12px] text-mute"><span class="h-0.5 w-5 rounded-full" [style.background]="e.color"></span>{{ e.label }}</li>
+          }
+        </ul>
+      </div>
+    }
+  </div>
+</aside>
+
+<!-- área principal -->
+<div class="relative min-h-0 min-w-0">
+  @switch (pane()) {
+    @case ('grafo') {
+      <div class="grid-bg absolute inset-0"></div>
+      @if (data(); as d) {
+        @if (d.nodes.length) {
+          <app-graph-canvas class="absolute inset-0" [data]="d" [depth]="depth()" [colorBy]="colorBy()" [layer]="layer()" [selected]="selected()" (picked)="pick($event)" />
+        } @else {
+          <div class="absolute inset-0 grid place-items-center text-center text-mute">
+            <div><p class="font-display text-lg text-text">Nada indexado ainda</p>
+              <p class="mt-1 text-[13.5px]">O índice lê os arquivos versionados dos repositórios do projeto (TypeScript, Python, Terraform).</p>
+              <button type="button" class="btn btn-primary btn-sm mt-4" (click)="reindex(true)"><app-icon name="sync" [size]="14" />Indexar agora</button></div>
+          </div>
+        }
+      }
+      <div class="absolute bottom-4 left-4 flex gap-1 rounded-xl border border-edge bg-panel/90 p-1 backdrop-blur">
+        <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="zoom(1.5)" aria-label="Aproximar"><app-icon name="plus" [size]="14" /></button>
+        <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="zoom(1 / 1.5)" aria-label="Afastar"><span class="text-[16px] leading-none">−</span></button>
+        <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="resetView(); selected.set(null)" aria-label="Ver tudo"><app-icon name="focus" [size]="13" /></button>
+      </div>
+
+      <!-- painel do nó -->
+      @if (selected(); as sel) {
+        <section class="absolute top-3 right-3 bottom-3 flex w-[min(400px,44%)] flex-col overflow-hidden rounded-2xl border border-edge bg-panel/95 shadow-2xl backdrop-blur" aria-label="Detalhes">
+          @if (sel.startsWith('dir:')) {
+            <header class="flex items-start gap-2 border-b border-edge p-4">
+              <app-icon name="folder" [size]="18" class="mt-0.5 text-later" />
+              <div class="min-w-0 flex-1"><p class="truncate font-semibold">{{ sel.split(':').slice(1).join(':') }}/</p>
+                <p class="text-[12px] text-mute">{{ groupFiles().length }} arquivos. Clique para ver um.</p></div>
+              <button type="button" class="rounded-md p-1 text-faint hover:bg-raise hover:text-text" (click)="selected.set(null)" aria-label="Fechar"><app-icon name="close" [size]="14" /></button>
+            </header>
+            <ul class="min-h-0 flex-1 overflow-y-auto p-2">
+              @for (f of groupFiles(); track f.key) {
+                <li><button type="button" (click)="depth.set(0); selected.set(f.key)" class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-raise">
+                  <span class="min-w-0 flex-1 truncate">{{ f.path }}</span>
+                  @if (f.facts) { <span class="text-[11px] text-later">◆ {{ f.facts }}</span> }
+                  <span class="text-[11px] text-faint">{{ f.defs }}</span></button></li>
+              }
+            </ul>
+          } @else {
+            @if (detail(); as d) {
+              <header class="border-b border-edge p-4">
+                <div class="flex items-start gap-2">
+                  <span class="mt-0.5 rounded-md bg-raise px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-mute">{{ d.kind }}</span>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate font-semibold" [title]="d.qualname">{{ d.kind === 'route' ? d.name : d.qualname.split('/').pop() }}</p>
+                    <p class="truncate font-mono text-[11px] text-faint" [title]="d.file ?? ''">{{ short(d.key) }}</p>
+                  </div>
+                  <button type="button" class="rounded-md p-1 text-faint hover:bg-raise hover:text-text" (click)="selected.set(null)" aria-label="Fechar"><app-icon name="close" [size]="14" /></button>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-1.5">
+                  @if (d.file) { <button type="button" class="btn btn-sm" (click)="open(d)"><app-icon name="code" [size]="13" />Abrir no editor</button> }
+                  <button type="button" class="btn btn-sm" (click)="ask(d)"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Perguntar ao Claude</button>
+                </div>
+              </header>
+              <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-[13px]">
+                @if (d.outgoing.length || d.incoming.length) {
+                  <div class="grid grid-cols-2 gap-3">
+                    @for (side of [{ l: 'Usa', items: d.outgoing }, { l: 'Usado por', items: d.incoming }]; track side.l) {
+                      <div class="min-w-0">
+                        <p class="mb-1 text-[11.5px] font-semibold text-faint">{{ side.l }} ({{ side.items.length }})</p>
+                        <ul class="space-y-0.5">
+                          @for (n of side.items.slice(0, 40); track n.key) {
+                            <li><button type="button" (click)="selected.set(n.key)" [title]="n.kinds.join(', ') + (n.confidence < 0.8 ? ' · heurística' : '')"
+                                        class="block w-full truncate rounded px-1.5 py-0.5 text-left text-[12px] hover:bg-raise" [class.text-mute]="n.confidence < 0.8">
+                              {{ n.label.split('/').pop() }}</button></li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  </div>
+                }
+                @if (d.symbols.length) {
+                  <div>
+                    <p class="mb-1 text-[11.5px] font-semibold text-faint">Símbolos ({{ d.symbols.length }})</p>
+                    <ul class="space-y-0.5 font-mono text-[11.5px]">
+                      @for (s of d.symbols.slice(0, 60); track s.key) {
+                        <li class="truncate" [title]="s.signature ?? s.qualname"><span class="text-faint">{{ s.line }}</span> <span class="text-frost">{{ s.kind }}</span> {{ s.qualname }}</li>
+                      }
+                    </ul>
+                  </div>
+                }
+                <div>
+                  <p class="mb-1 text-[11.5px] font-semibold text-faint">Memória ({{ d.facts.length }})</p>
+                  @for (f of d.facts; track f.id) {
+                    <p class="mb-1 rounded-lg bg-night/60 px-2.5 py-1.5 text-[12.5px]" [class.line-through]="f.status === 'retired'">
+                      <span class="text-later">◆ {{ factLabel[f.kind] }}</span> {{ f.text }}</p>
+                  }
+                  <div class="flex gap-1.5">
+                    <select class="field !w-28 !py-1 text-[12px]" aria-label="Tipo do fato" [value]="noteKind()" (change)="noteKind.set($any($event.target).value)">
+                      @for (k of kinds; track k) { <option [value]="k" [selected]="noteKind() === k">{{ factLabel[k] }}</option> }
+                    </select>
+                    <input class="field flex-1 !py-1 text-[12.5px]" placeholder="Lembrar algo sobre isto…" aria-label="Novo fato" [value]="noteText()"
+                           (input)="noteText.set($any($event.target).value)" (keydown.enter)="remember([d.key])" />
+                  </div>
+                  @if (error()) { <p class="mt-1 text-[12px] text-no">{{ error() }}</p> }
+                </div>
+                @if (d.touches.length) {
+                  <div>
+                    <p class="mb-1 text-[11.5px] font-semibold text-faint">Agentes</p>
+                    @for (t of d.touches.slice(0, 8); track $index) {
+                      <p class="text-[12px] text-mute">{{ t.how === 'edit' ? 'editou' : t.how === 'read' ? 'leu' : 'consultou' }} · {{ t.run_id ? 'execução #' + t.run_id : 'conversa #' + t.chat_id }} · {{ t.at.slice(0, 16).replace('T', ' ') }}</p>
+                    }
+                  </div>
+                }
+                @if (d.preview) {
+                  <div>
+                    <p class="mb-1 text-[11.5px] font-semibold text-faint">Código</p>
+                    <pre class="max-h-80 overflow-auto rounded-lg bg-night p-3 font-mono text-[11px] leading-relaxed text-mute selectable">{{ d.preview }}</pre>
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="p-6 text-mute">Carregando…</p>
+            }
+          }
+        </section>
+      }
+    }
+
+    @case ('memoria') {
+      <div class="h-full overflow-y-auto px-8 py-6">
+        <div class="mx-auto max-w-3xl">
+          <div class="flex items-start gap-4">
+            <div class="flex-1">
+              <h2 class="font-display text-xl font-semibold">Memória do projeto</h2>
+              <p class="mt-1 text-[13.5px] text-mute">Fatos curtos que o código não mostra: decisões, convenções, armadilhas. Os fixados vão em todo prompt; os outros entram quando combinam com a tarefa. Agentes também registram aqui.</p>
+            </div>
+            <button type="button" class="btn btn-sm shrink-0" (click)="importMemory()"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Importar memória do Claude</button>
+          </div>
+          <div class="mt-4 flex gap-2">
+            <select class="field !w-36" aria-label="Tipo do fato" [value]="noteKind()" (change)="noteKind.set($any($event.target).value)">
+              @for (k of kinds; track k) { <option [value]="k" [selected]="noteKind() === k">{{ factLabel[k] }}</option> }
+            </select>
+            <input class="field flex-1" placeholder="Ex.: Lambdas usam o Logger do powertools; nada de print." aria-label="Novo fato" [value]="noteText()"
+                   (input)="noteText.set($any($event.target).value)" (keydown.enter)="remember([])" />
+            <button type="button" class="btn btn-primary" (click)="remember([])" [disabled]="!noteText().trim()">Guardar</button>
+          </div>
+          @if (error()) { <p class="mt-2 text-[13px] text-later">{{ error() }}</p> }
+          <label class="mt-4 flex items-center gap-2 text-[12.5px] text-mute">
+            <input type="checkbox" [checked]="showRetired()" (change)="showRetired.set($any($event.target).checked)" />Mostrar retirados</label>
+          <ul class="mt-2 space-y-2">
+            @for (f of visibleFacts(); track f.id) {
+              <li class="group rounded-2xl border border-edge bg-panel px-4 py-3" [class.opacity-50]="f.retired">
+                <div class="flex items-start gap-3">
+                  <span class="mt-0.5 shrink-0 rounded-md bg-later/15 px-1.5 py-0.5 text-[11px] font-semibold text-later">{{ factLabel[f.kind] }}</span>
+                  <p class="flex-1 leading-snug" [class.line-through]="f.retired">{{ f.text }}</p>
+                  <button type="button" (click)="togglePin(f)" [title]="f.pinned ? 'Fixado: vai em todo prompt' : 'Fixar (vai em todo prompt)'"
+                          class="shrink-0 rounded-md px-1.5 text-[13px]" [class]="f.pinned ? 'text-frost' : 'text-faint opacity-0 group-hover:opacity-100'">📌</button>
+                </div>
+                <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-faint">
+                  <span>{{ f.author }} · {{ f.source === 'claude_auto_memory' ? 'memória do Claude' : f.source }} · {{ f.createdAt | ago }}</span>
+                  @for (l of f.links.slice(0, 3); track l) {
+                    <button type="button" class="font-mono text-frost/80 hover:underline" (click)="pane.set('grafo'); depth.set(0); selected.set(l.split('#')[0])">{{ short(l) }}</button>
+                  }
+                  <span class="flex-1"></span>
+                  @if (!f.retired) {
+                    <button type="button" class="opacity-0 hover:text-text group-hover:opacity-100" (click)="edit(f)">Editar</button>
+                    <button type="button" class="opacity-0 hover:text-later group-hover:opacity-100" (click)="retire(f)">Retirar</button>
+                  }
+                  <button type="button" class="opacity-0 hover:text-no group-hover:opacity-100" (click)="remove(f)">Apagar</button>
+                </div>
+              </li>
+            } @empty {
+              <li class="rounded-2xl border border-dashed border-edge px-5 py-8 text-center text-mute">Nada guardado ainda. Comece pelo que você sempre precisa explicar de novo para o Claude.</li>
+            }
+          </ul>
+        </div>
+      </div>
+    }
+
+    @case ('prompt') {
+      <div class="flex h-full flex-col px-8 py-6">
+        <h2 class="font-display text-xl font-semibold">O que o agente recebe</h2>
+        <p class="mt-1 text-[13.5px] text-mute">A Central junta o mapa do código (ranqueado para a tarefa) e a memória do projeto no prompt de cada agente e sessão. Escreva uma tarefa para ver o recorte.</p>
+        <div class="mt-4 flex gap-2">
+          <input class="field flex-1" placeholder="Ex.: corrigir o timeout do Instagram no publicador" aria-label="Tarefa de exemplo" [value]="focusText()" (input)="focusText.set($any($event.target).value)" />
+          <select class="field !w-40" aria-label="Orçamento" [value]="budget()" (change)="budget.set(+$any($event.target).value)">
+            @for (b of [1000, 1500, 2000, 4000, 8000]; track b) { <option [value]="b" [selected]="budget() === b">{{ b }} tokens</option> }
+          </select>
+        </div>
+        <p class="mt-2 text-[12px] text-faint">≈ {{ blockTokens() }} tokens. Depois do primeiro turno, este bloco vai para o cache do Claude e custa cerca de 10%.</p>
+        <pre class="mt-3 min-h-0 flex-1 overflow-auto rounded-2xl border border-edge bg-night p-4 font-mono text-[11.5px] leading-relaxed text-mute selectable">{{ block() || 'Índice vazio para este projeto.' }}</pre>
+      </div>
+    }
+  }
+</div>

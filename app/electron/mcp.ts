@@ -23,6 +23,8 @@ import { setMcpConfigPath } from './mcp-config';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
+import { codeImpact, codeMap, codeNeighbors, codeSymbol, searchCode } from './context/context';
+import { createFact, recallFacts, supersedeFact } from './context/memory';
 
 export interface Hooks { emit: Emit; projects: () => void; backlog: () => void; routines: () => void; agents: () => void }
 
@@ -168,6 +170,42 @@ function build(h: Hooks): McpServer {
   // ---------- outros ----------
   tool('get_claude_usage', 'Cota do plano do Claude: sessão (5h), semana e limites por modelo, com horário de reinício.', {}, async () => (await getUsage(false)).limits);
   tool('import_pending', 'Importa pendências espalhadas: memórias do Claude, checklists de ROADMAP/PLAN e PRs abertos.', {}, () => importPending(), h.backlog);
+
+  // ---------- código (índice local: símbolos, ligações e rank) ----------
+  const kind = z.enum(['any', 'file', 'class', 'interface', 'type', 'function', 'method', 'component', 'service', 'route', 'lambda', 'tf_resource']);
+  tool('code_map', 'Mapa ranqueado do código do projeto (arquivos e assinaturas mais relevantes para o foco), dentro de um orçamento de tokens. Use para se orientar antes de abrir arquivos.', {
+    project: z.string().describe('slug do projeto'),
+    focus: z.array(z.string()).optional().describe('arquivos, símbolos ou termos da tarefa: puxam o ranking para perto deles'),
+    repo: z.string().optional().describe('nome do repositório para limitar'),
+    budget: z.number().int().min(256).max(8000).optional().describe('tokens; padrão 2000'),
+  }, a => codeMap(a.project, a.focus ?? [], a.budget ?? 2000, a.repo ?? null) || 'Índice vazio para este projeto (ainda indexando ou sem repositórios).');
+  tool('code_search', 'Busca símbolos e arquivos por nome ou termo (pedaços de camelCase/snake_case valem), ordenados por relevância e importância.', {
+    project: z.string(), query: z.string(), kind: kind.optional(), limit: z.number().int().max(50).optional(),
+  }, a => searchCode(a.project, a.query, a.kind ?? 'any', a.limit ?? 15));
+  tool('code_symbol', 'Definição de um símbolo ou arquivo: assinatura, doc, local e o código-fonte (com limite de linhas). key vem do code_search; nome simples também serve.', {
+    key: z.string(), project: z.string().optional(), source: z.boolean().optional(), max_lines: z.number().int().max(400).optional(),
+  }, a => codeSymbol(a.key, a.source ?? true, a.max_lines ?? 120, a.project ?? null));
+  tool('code_neighbors', 'Quem usa e o que usa um símbolo, arquivo ou rota (importa, chama, injeta, chama a rota, rota declarada em, publica, testa). Ligações com confiança < 0.8 são heurísticas.', {
+    key: z.string(), project: z.string().optional(), direction: z.enum(['in', 'out', 'both']).optional(),
+    kinds: z.array(z.string()).optional().describe('imports, calls, references, injects, http_calls, routes_to, deploys, tests, template'),
+    depth: z.number().int().min(1).max(3).optional(), limit: z.number().int().max(100).optional(),
+  }, a => codeNeighbors(a.key, a.direction ?? 'both', a.depth ?? 1, a.kinds ?? null, a.limit ?? 30, a.project ?? null));
+  tool('code_impact', 'Raio de impacto de uma mudança: arquivos, rotas e testes que dependem dos símbolos (ou das mudanças atuais no git).', {
+    project: z.string(), keys: z.array(z.string()).optional(), git_diff: z.boolean().optional().describe('usar os arquivos alterados no working tree'),
+    depth: z.number().int().min(1).max(4).optional(),
+  }, a => codeImpact(a.project, a.keys ?? [], a.git_diff ?? false, a.depth ?? 2));
+
+  // ---------- memória do projeto ----------
+  tool('memory_recall', 'Fatos, decisões, convenções e armadilhas registrados do projeto (opcionalmente ligados a arquivos/símbolos).', {
+    project: z.string(), query: z.string().optional(), keys: z.array(z.string()).optional(), limit: z.number().int().max(30).optional(),
+  }, a => recallFacts(a.project, a.query ?? '', a.keys ?? [], a.limit ?? 10));
+  tool('memory_remember', 'Registra um fato durável que o código não mostra (decisão, convenção, armadilha, como fazer). Uma afirmação curta e auto-contida.', {
+    project: z.string(), kind: z.enum(['decision', 'convention', 'gotcha', 'fact', 'howto']), text: z.string().max(400),
+    links: z.array(z.string()).optional().describe('keys de arquivos/símbolos relacionados (do code_search)'),
+  }, a => createFact({ project_slug: a.project, kind: a.kind, text: a.text, links: a.links, source_kind: 'agent', author: 'agente' }), h.projects);
+  tool('memory_supersede', 'Marca um fato como inválido (com motivo) e opcionalmente registra o substituto.', {
+    id: z.number().int(), reason: z.string(), replacement: z.string().max(400).optional(),
+  }, a => supersedeFact(a.id, a.reason, a.replacement ?? null, 'agente') ?? 'ok', h.projects);
   return s;
 }
 

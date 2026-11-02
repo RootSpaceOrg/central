@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { AgentDto, AgentPatch, NewAgentInput } from '../src/app/shared/contract';
 import { DEV_ROOT, all, get, run } from './db';
 import { slugify } from './projects';
+import { contextBlock } from './context/context';
 
 export const CENTRAL_SLUG = 'central';
 
@@ -111,6 +112,8 @@ export function agentPromptFile(a: AgentDto): string {
       : !a.project_slug && !a.builtin ? 'Você pode criar e editar arquivos só na sua pasta de trabalho. Para mexer em código de projeto, crie tarefas ou coloque um agente para trabalhar (start_agent).'
       : 'Você não edita arquivos de código: para isso, crie tarefas ou coloque um agente para trabalhar (start_agent).',
   ];
+  // agente de projeto: mapa do código + memória (o foco é o papel dele)
+  if (a.project_slug) parts.push(contextBlock(a.project_slug, [a.description ?? '', a.instructions], 1500));
   const dir = join(app.getPath('userData'), 'agents');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${a.slug}.md`);
@@ -126,7 +129,7 @@ export function sessionPromptFile(slug: string): string {
   const p = get<{ name: string; folder: string; description: string | null }>('select name, folder, description from projects where slug = ?', slug);
   if (!p) throw new Error('Projeto não encontrado.');
   const repos = all<{ name: string }>('select name from repos where project_slug = ? order by name', slug).map(r => r.name);
-  const text = [
+  let text = [
     CENTRAL_CONTEXT,
     `## Sessão de trabalho no ${p.name}\nO Gustavo abriu esta sessão no projeto "${p.name}" (slug ${slug}), pasta ${p.folder}, e está conduzindo.
 Repositórios: ${repos.join(', ') || 'nenhum'}.${p.description ? `\nSobre: ${p.description}` : ''}
@@ -138,6 +141,8 @@ use as ferramentas \`central\` para consultar backlog, ideias e decisões antes 
   const dir = join(app.getPath('userData'), 'agents');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `session-${slug}.md`);
+  const ctx = contextBlock(slug, [p.description ?? ''], 1000);
+  if (ctx) text += `\n\n${ctx}`;
   writeFileSync(file, text);
   return file;
 }

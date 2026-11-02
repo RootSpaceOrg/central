@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
-import { DB_PATH, DEV_ROOT } from './db';
+import { DB_PATH, DEV_ROOT, all, get } from './db';
 import { killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
@@ -16,6 +16,8 @@ import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray }
 import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
+import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
+import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { pulseStatus, runPulse, watchPulse } from './pulse';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
@@ -44,6 +46,8 @@ const changed = () => send('projects:changed', null);
 const routinesChanged = () => send('routines:changed', null);
 const agentsChanged = () => send('agents:changed', null);
 const backlogChanged = () => send('backlog:changed', null);
+const contextChanged = (project: string) => send('context:changed', { project });
+const factProject = (id: number) => get<{ p: string }>('select project_slug p from facts where id = ?', id)?.p ?? '';
 const navigate = (route: string) => send('app:navigate', route);
 // testes (--capture) não mostram notificação na tela de quem está usando o PC
 const toast = (title: string, body: string, route: string | null) => { if (!CAPTURE) notify(title, body, route, () => win, navigate); };
@@ -170,6 +174,18 @@ function registerIpc(): void {
   handle('sessions:update', (id, patch) => updateSession(id, patch));
   handle('sessions:close', id => closeSession(id));
   handle('claude:sessions', () => listClaudeSessions());
+  handle('context:status', () => contextStatus());
+  handle('context:reindex', (slug, force) => { indexProject(slug, force); importClaudeMemory(slug); });
+  handle('context:graph', slug => graphData(slug));
+  handle('context:node', key => nodeDetail(key));
+  handle('context:search', (slug, q) => searchHits(slug, q));
+  handle('context:block', (slug, focus, budget) => contextBlock(slug, focus ? [focus] : [], budget));
+  handle('facts:list', slug => listFacts(slug));
+  handle('facts:create', input => { const f = createFact(input); contextChanged(input.project_slug); return f; });
+  handle('facts:update', (id, patch) => { updateFact(id, patch); contextChanged(factProject(id)); });
+  handle('facts:supersede', (id, reason, replacement) => { supersedeFact(id, reason, replacement); contextChanged(factProject(id)); });
+  handle('facts:delete', id => { const p = factProject(id); deleteFact(id); contextChanged(p); });
+  handle('facts:import', slug => { const n = importClaudeMemory(slug); contextChanged(slug); return n; });
   handle('claude:import', (id, slug) => importClaudeSession(id, slug));
   handle('chat:fromRun', runId => chatFromRun(runId));
   handle('chat:rename', (id, title) => { renameChat(id, title); });
@@ -238,6 +254,12 @@ app.whenReady().then(() => {
     const started = s.last?.items.filter(i => i.action === 'started') ?? [];
     if (started.length) toast('Piloto automático', `${started.map(i => i.name).join(', ')}: agente trabalhando até o PR.`, '/');
   });
+  // índice de código: um processo à parte indexa os projetos e acompanha as mudanças
+  startContext(slug => contextChanged(slug));
+  setTimeout(() => {
+    indexAll();
+    for (const p of all<{ slug: string }>(`select slug from projects where status <> 'dead'`)) importClaudeMemory(p.slug);
+  }, CAPTURE ? 500 : 8000);
   startMcp({ emit: emitRun, projects: changed, backlog: backlogChanged, routines: routinesChanged, agents: agentsChanged })
     .catch(e => console.error('MCP da Central não subiu', e));
   // sincroniza repositórios e, depois, leva para Feito as tarefas cujo PR foi mergeado
@@ -247,7 +269,8 @@ app.whenReady().then(() => {
       if (prs) backlogChanged();
       if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/decisoes'); }
     });
-  syncProjects(null, changed).then(watchGithub);
+  // depois da varredura dos repositórios, o índice pega os que acabaram de aparecer (incremental: barato)
+  syncProjects(null, changed).then(() => { indexAll(); return watchGithub(); });
   setInterval(watchGithub, 15 * 60_000);
 });
 

@@ -51,6 +51,7 @@
 
   <div class="relative min-h-0 flex-1">
     @if (tab() === 'resumo') { <app-summary [project]="p" /> }
+    @if (tab() === 'contexto') { <app-context-view class="absolute inset-0" [slug]="p.slug" (openFile)="openFile($event)" /> }
     @if (tab() === 'backlog') {
       <div class="flex h-full flex-col px-8 pt-5 pb-5">
         <div class="mb-4 flex justify-end gap-2">

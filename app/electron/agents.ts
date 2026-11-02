@@ -13,6 +13,7 @@ import { getUsage } from './usage';
 import { git, gitOr } from './git';
 import { slugify } from './projects';
 import { childEnv } from './workspace';
+import { contextBlock, recordTouch } from './context/context';
 
 const MAX_PARALLEL = 4;
 const MAX_BUDGET = 50;
@@ -218,6 +219,11 @@ async function execute(id: number, emit: Emit): Promise<void> {
     frame = framePrompt(r, { kind: 'repo', branch, base });
   }
 
+  // mapa do código focado na tarefa + memória do projeto (índice local da Central)
+  if (r.project_slug) {
+    const ctx = contextBlock(r.project_slug, [r.prompt], r.scope === 'repo' ? 2000 : 1500);
+    if (ctx) frame += `\n\n${ctx}`;
+  }
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-budget-usd', String(r.budget_usd)];
   const mcp = mcpConfigPath();
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
@@ -244,6 +250,7 @@ async function execute(id: number, emit: Emit): Promise<void> {
       for (const block of msg.message?.content ?? []) {
         if (block.type === 'text' && block.text.trim()) event(id, 'text', block.text.trim(), emit);
         if (block.type === 'tool_use' && !INTERNAL.has(block.name)) {
+          recordTouch(block.name, block.input, { runId: id });
           const central = String(block.name).startsWith('mcp__central__');
           event(id, 'tool', central ? `Central: ${describe(block.name, block.input)}` : describeTool(block.name, block.input), emit);
           // a sessão mexeu no backlog pela Central: atualiza a tela

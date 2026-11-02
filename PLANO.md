@@ -108,11 +108,31 @@ a sinais (CI, Sentry, issues), **automações** (rotinas de agentes) aparecem no
 - **Modo foco** (F11 ou botão Foco): tela cheia só com a grade.
 - Ícones originais das ferramentas (Claude, PowerShell, CMD, Git Bash) nas abas, menus, painéis e no Início.
 
+## Feito (v0.10)
+
+- **Contexto do projeto** (aba Contexto; pesquisa em `reports/contexto-de-codigo.md`):
+  - **Índice de código local**: tree-sitter (WASM) lê TypeScript/Angular, Python e Terraform num processo à parte; símbolos,
+    imports, chamadas, inject, e as ligações do stack (Angular `http.get` → rota → API Gateway → Lambda → handler Python).
+    Incremental (tamanho/data/hash) e acompanha mudanças sozinho. KultivAi: 2 mil arquivos em ~14 s.
+  - **Mapa do código** ranqueado (PageRank personalizado pela tarefa, estilo Aider) dentro de um orçamento de tokens, injetado no
+    prompt de execuções, agentes de projeto e sessões; prévia exata na aba ("Prompt").
+  - **Ferramentas MCP**: `code_map`, `code_search`, `code_symbol`, `code_neighbors`, `code_impact`, `memory_recall`,
+    `memory_remember`, `memory_supersede`.
+  - **Memória do projeto**: fatos (decisão, convenção, armadilha…) com autor, fonte e histórico (retirar ≠ apagar), ligados a
+    arquivos/símbolos; importa a auto memory do Claude Code.
+  - **Grafo** (sigma.js/WebGL): arquivos ou pastas, cor por repositório ou comunidade, camadas de memória e do que os agentes
+    leram/editaram, busca, foco nos vizinhos, painel do nó (ligações, símbolos, código, memória, "Perguntar ao Claude").
+- **Importar sessões do Claude Code** (Orca, terminal) para um projeto, com o histórico; sessões passam a conhecer a Central.
+- **Grade**: várias sessões de uma vez, "+" no painel, minimapa com prévia ao arrastar, animação e fundo quadriculado.
+- **Piloto automático com direção**: para onde levar o projeto + autonomia (só aprovadas, propor, planejar e fazer).
+- Ícone novo; correção ao editar projeto com imagem.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |
 |---|---|---|
 | M3+ | **Planejador do turno**: "objetivo + prazo + teto" vira as tarefas sozinho (hoje você escolhe as tarefas) | turno criado só com o objetivo |
+| M8 | **Contexto, medição** | A/B de tokens por projeto (com e sem mapa); embeddings locais só se a medição pedir | ≥ 25% menos tokens sem piorar |
 | M4 | **Celular**: Central como servidor MCP + Tailscale (ou bot) para decidir e disparar de fora | turno disparado do celular em < 2 min |
 | M5 | **Ingestão**: CI falho, Gmail, transcrições de reunião, WhatsApp Coexistence → decisões | bug relatado no WhatsApp vira PR com um "sim" |
 | M6 | **Scouts + portfólio**: tendências, métricas próprias, revisão semanal empurra/congela/mata | primeira decisão de portfólio com dados da Central |

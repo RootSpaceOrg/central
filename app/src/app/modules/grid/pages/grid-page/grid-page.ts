@@ -46,18 +46,6 @@ import { GridNodeView } from './components/grid-node/grid-node';
       @if (grids.dragging()) { <app-grid-minimap class="absolute bottom-5 left-1/2 z-30 -translate-x-1/2" /> }
     </div>
     <app-add-sessions [(open)]="grids.addOpen" />`,
-  styles: [`
-    /* quadriculado com degradê: linhas finas que somem nas bordas + duas luzes de cor */
-    .grid-bg {
-      background-color: #0f131a;
-      background-image:
-        radial-gradient(900px 520px at 12% -10%, rgb(127 162 255 / 0.20), transparent 60%),
-        radial-gradient(800px 520px at 105% 110%, rgb(180 140 255 / 0.16), transparent 60%),
-        linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
-        linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
-      background-size: auto, auto, 28px 28px, 28px 28px;
-    }
-  `],
 })
 export class GridPage implements OnDestroy {
   protected readonly grids = inject(GridsService);

@@ -94,6 +94,7 @@ export class CommandPalette {
         ['Backlog', '/backlog', 'kanban'], ['Agentes', '/agentes', 'agent'], ['Execuções', '/execucoes', 'activity'], ['Rotinas', '/rotinas', 'routine'],
       ].map(([label, url, icon]) => ({ section: 'Telas', label, icon: icon as IconName, run: go(url) })),
       ...this.projects.living().map(p => ({ section: 'Projetos', label: p.name, avatar: p, hint: p.lastCommitSubject ?? undefined, run: go(`/projetos/${p.slug}`) })),
+      ...this.projects.living().map(p => ({ section: 'Projetos', label: `Contexto do ${p.name}`, icon: 'graph' as IconName, hint: 'grafo do código e memória', run: go(`/projetos/${p.slug}?aba=contexto`) })),
       ...this.agents.agents().map(a => ({ section: 'Agentes', label: `Conversar com ${a.name}`, avatar: a, hint: a.description ?? undefined, run: talk(a.id) })),
       ...this.tasks.tasks().filter(t => t.column !== 'done').map(t => ({
         section: 'Tarefas', label: t.title, icon: 'kanban' as IconName, hint: this.projects.bySlug().get(t.projectSlug)?.name, run: () => this.dialogs.editTask(t.id),

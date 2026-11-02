@@ -15,17 +15,20 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { SessionKind } from '../../../../shared/contract';
 import { SessionsService } from '../../../../shared/services/sessions/sessions.service';
 import { ProjectSessions } from './components/sessions/sessions';
+import { ContextView } from './components/context/context-view';
+import { EditorService } from '../../services/editor/editor.service';
+import { CODE_TAB } from '../../../../shared/services/sessions/sessions.service';
 import { Summary } from './components/summary/summary';
 
-type Tab = 'sessoes' | 'resumo' | 'backlog' | 'agentes';
+type Tab = 'sessoes' | 'resumo' | 'backlog' | 'contexto' | 'agentes';
 const TABS = [
   { id: 'sessoes', label: 'Sessões', icon: 'terminal' }, { id: 'resumo', label: 'Resumo', icon: 'summary' },
-  { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'agentes', label: 'Agentes', icon: 'agent' },
+  { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'contexto', label: 'Contexto', icon: 'graph' }, { id: 'agentes', label: 'Agentes', icon: 'agent' },
 ] as const;
 
 @Component({
   selector: 'app-project-page',
-  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar],
+  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar, ContextView],
   templateUrl: './project-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -35,6 +38,7 @@ export class ProjectPage {
   protected readonly dialogs = inject(DialogsService);
 
   private readonly sessions = inject(SessionsService);
+  private readonly editor = inject(EditorService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly query = toSignal(this.route.queryParamMap);
@@ -71,4 +75,12 @@ export class ProjectPage {
   }
 
   protected go(tab: Tab): void { this.tab.set(tab); }
+
+  /** "Abrir no editor" do grafo: vai para a aba de código das sessões com o arquivo aberto. */
+  protected openFile(path: string): void {
+    const slug = this.slug();
+    this.sessions.select(slug, CODE_TAB);
+    this.tab.set('sessoes');
+    this.editor.open(slug, path);
+  }
 }

@@ -210,6 +210,40 @@ db.exec(`
     created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
   );
 
+  -- memória do projeto: fatos duráveis (decisão, convenção, armadilha…) com proveniência, ligados a nós do índice de código
+  create table if not exists facts (
+    id             integer primary key autoincrement,
+    project_slug   text not null references projects on delete cascade,
+    kind           text not null,
+    text           text not null,
+    source_kind    text not null,
+    source_ref     text,
+    author         text not null,
+    pinned         integer not null default 0,
+    status         text not null default 'active',
+    created_at     text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    invalidated_at text,
+    superseded_by  integer
+  );
+  create table if not exists fact_links (
+    fact_id  integer not null references facts on delete cascade,
+    node_key text not null,
+    primary key (fact_id, node_key)
+  ) without rowid;
+
+  -- o que cada execução/conversa tocou (arquivos lidos, editados, consultados no índice)
+  create table if not exists touches (
+    id           integer primary key autoincrement,
+    project_slug text,
+    run_id       integer,
+    chat_id      integer,
+    node_key     text not null,
+    how          text not null,
+    at           text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+  create index if not exists touches_by_run on touches(run_id);
+  create index if not exists touches_by_project on touches(project_slug, at);
+
   create table if not exists settings (
     key   text primary key,
     value text not null

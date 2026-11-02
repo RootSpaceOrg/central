@@ -430,6 +430,87 @@ export interface ClaudeSessionDto {
   imported_chat_id: number | null;
 }
 
+// ---------- contexto de código (índice, grafo e memória) ----------
+
+export interface ContextStatusDto {
+  project: string;
+  files: number;
+  nodes: number;
+  edges: number;
+  indexed_at: string | null;
+  ms: number | null;
+  error: string | null;
+  indexing: boolean;
+  done: number;
+  total: number;
+}
+
+export interface GraphNodeDto {
+  key: string;
+  /** file | route */
+  kind: string;
+  label: string;
+  repo: string;
+  path: string;
+  lang: string;
+  rank: number;
+  /** símbolos no arquivo */
+  defs: number;
+  /** fatos da memória ligados */
+  facts: number;
+  /** vezes que agentes tocaram (30 dias) */
+  touches: number;
+}
+
+export interface GraphEdgeDto { source: string; target: string; kinds: string[]; weight: number }
+export interface GraphDto { nodes: GraphNodeDto[]; edges: GraphEdgeDto[] }
+
+export interface NodeLinkDto { key: string; label: string; kinds: string[]; confidence: number }
+
+export interface NodeDetailDto {
+  key: string;
+  kind: string;
+  name: string;
+  qualname: string;
+  signature: string | null;
+  doc: string | null;
+  file: string | null;
+  line: number | null;
+  symbols: { key: string; kind: string; qualname: string; signature: string | null; line: number | null }[];
+  outgoing: NodeLinkDto[];
+  incoming: NodeLinkDto[];
+  preview: string | null;
+  facts: FactDto[];
+  touches: { how: string; at: string; run_id: number | null; chat_id: number | null }[];
+}
+
+export interface CodeHitDto { key: string; kind: string; qualname: string; signature: string | null; line: number | null; file_key: string }
+
+export type FactKind = 'decision' | 'convention' | 'gotcha' | 'fact' | 'howto';
+
+export interface FactDto {
+  id: number;
+  project_slug: string;
+  kind: FactKind;
+  text: string;
+  source_kind: string;
+  source_ref: string | null;
+  author: string;
+  pinned: boolean;
+  status: 'active' | 'retired';
+  created_at: string;
+  invalidated_at: string | null;
+  links: string[];
+}
+
+export interface NewFactInput {
+  project_slug: string;
+  kind: FactKind;
+  text: string;
+  links?: string[];
+  pinned?: boolean;
+}
+
 // ---------- agente Central (chat) ----------
 
 export interface ChatDto {
@@ -547,6 +628,19 @@ export interface Api {
   'sessions:update': (id: number, patch: { title?: string; chat_id?: number }) => void;
   'sessions:close': (id: number) => void;
   'claude:sessions': () => ClaudeSessionDto[];
+  'context:status': () => ContextStatusDto[];
+  'context:reindex': (projectSlug: string, force: boolean) => void;
+  'context:graph': (projectSlug: string) => GraphDto;
+  'context:node': (key: string) => NodeDetailDto | null;
+  'context:search': (projectSlug: string, query: string) => CodeHitDto[];
+  /** o que um agente recebe no prompt para este foco (prévia na tela) */
+  'context:block': (projectSlug: string, focus: string, budget: number) => string;
+  'facts:list': (projectSlug: string) => FactDto[];
+  'facts:create': (input: NewFactInput) => FactDto;
+  'facts:update': (id: number, patch: { text?: string; kind?: FactKind; pinned?: boolean; links?: string[] }) => void;
+  'facts:supersede': (id: number, reason: string, replacement: string | null) => void;
+  'facts:delete': (id: number) => void;
+  'facts:import': (projectSlug: string) => number;
   'claude:import': (sessionId: string, projectSlug: string) => SessionDto;
   'pty:write': (id: number, data: string) => void;
   'pty:resize': (id: number, cols: number, rows: number) => void;
@@ -619,6 +713,8 @@ export interface Events {
   'agents:changed': null;
   /** pedido do main (bandeja, notificação) para abrir uma tela */
   'app:navigate': string;
+  /** índice ou memória de um projeto mudou */
+  'context:changed': { project: string };
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
 }

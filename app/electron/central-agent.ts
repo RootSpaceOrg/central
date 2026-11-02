@@ -11,6 +11,7 @@ import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, get
 import { DEV_ROOT, all, get, now, run } from './db';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
+import { recordTouch } from './context/context';
 
 type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) => void;
 
@@ -96,6 +97,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
       for (const b of m.message?.content ?? []) {
         if (b.type === 'text' && b.text.trim()) { answered = true; save(id, 'assistant', b.text.trim(), notify); }
         if (b.type === 'tool_use' && !INTERNAL.has(b.name)) {
+          recordTouch(b.name, b.input, { chatId: id });
           save(id, 'tool', describe(b.name, b.input), notify);
           if (String(b.name).startsWith('mcp__central__')) setTimeout(onCentralChange, 800);
         }
@@ -132,6 +134,10 @@ export function describe(name: string, input: any): string {
     list_agents: 'Consultou os agentes', create_agent: `Criou o agente "${input?.name ?? ''}"`, update_agent: `Editou o agente #${input?.id ?? ''}`,
     delete_agent: `Excluiu o agente #${input?.id ?? ''}`,
     get_claude_usage: 'Conferiu a cota do Claude', import_pending: 'Importou pendências',
+    code_map: 'Leu o mapa do código', code_search: `Buscou no índice "${input?.query ?? ''}"`, code_symbol: `Abriu ${String(input?.key ?? '').split(/[#:]/).pop()}`,
+    code_neighbors: `Viu as ligações de ${String(input?.key ?? '').split(/[#:]/).pop()}`, code_impact: 'Calculou o impacto da mudança',
+    memory_recall: 'Consultou a memória do projeto', memory_remember: `Guardou na memória: "${String(input?.text ?? '').slice(0, 60)}"`,
+    memory_supersede: `Atualizou o fato #${input?.id ?? ''}`,
     Read: `Leu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-2).join('/')}`, Grep: `Buscou "${input?.pattern ?? ''}"`, Glob: `Listou ${input?.pattern ?? ''}`,
     WebSearch: `Pesquisou "${input?.query ?? ''}"`, WebFetch: 'Leu uma página', Bash: `Rodou ${String(input?.command ?? '').slice(0, 60)}`,
     Write: `Escreveu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`, Edit: `Editou ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`,
