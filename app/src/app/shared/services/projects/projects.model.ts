@@ -1,6 +1,6 @@
-import { AutopilotMode, ProjectIconKind, ProjectStatus } from '../../contract';
+import { ProjectIconKind, ProjectStatus } from '../../contract';
 
-export type { AutopilotMode, ProjectIconKind, ProjectStatus };
+export type { ProjectIconKind, ProjectStatus };
 
 export interface Project {
   slug: string;
@@ -22,10 +22,6 @@ export interface Project {
   lastCommitRepo: string | null;
   openProposals: number;
   activeRuns: number;
-  /** piloto automático: de madrugada um agente pega a tarefa do topo de "A fazer" */
-  autopilot: boolean;
-  autopilotBrief: string;
-  autopilotMode: AutopilotMode;
 }
 
 export interface Repo {

@@ -99,7 +99,7 @@
       </a>
     }
     @if (proposals.inbox().length) {
-      <a routerLink="/decisoes" class="text-later hover:underline">
+      <a routerLink="/triagem" class="text-later hover:underline">
         {{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão esperando' : 'decisões esperando' }}
       </a>
     }
@@ -139,4 +139,3 @@
 <app-settings-dialog />
 <app-command-palette />
 <app-import-session-dialog />
-<app-autopilot-dialog />

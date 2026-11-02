@@ -12,6 +12,7 @@ import type { CodeHitDto, ContextStatusDto, GraphDto, NodeDetailDto } from '../.
 import { all, get, run } from '../db';
 import { openIndex, words } from './index-db';
 import { listFacts } from './memory';
+import { directionBlock } from '../direction';
 import { ppr, tokens } from './rank';
 
 let proc: UtilityProcess | null = null;
@@ -261,15 +262,17 @@ export function codeMap(project: string, focus: string[] = [], budget = 2000, re
 
 /** Bloco que vai no prompt dos agentes e sessões do projeto: mapa + memória + como usar as ferramentas. */
 export function contextBlock(project: string, focus: string[], mapBudget: number): string {
+  const rumo = directionBlock(project);
   let map = '';
   try { map = codeMap(project, focus, mapBudget); } catch { /* índice ainda não existe */ }
   const facts = listFacts(project, false).filter(f => f.status === 'active');
   const text = focus.join(' ').toLowerCase();
   const chosen = [...facts.filter(f => f.pinned), ...facts.filter(f => !f.pinned && text && words(f.text).split(' ').some(w => w.length > 4 && text.includes(w)))]
     .slice(0, 12);
-  if (!map && !chosen.length) return '';
+  if (!map && !chosen.length) return rumo;
   const st = idx?.prepare('select files, indexed_at from index_state where project = ?').get(project) as { files: number; indexed_at: string } | undefined;
   return [
+    rumo,
     map ? `## Mapa do código (índice da Central, ${st?.files ?? '?'} arquivos, ${st?.indexed_at?.slice(0, 16).replace('T', ' ') ?? ''})\n${map}` : '',
     chosen.length ? `## Memória do projeto\n${chosen.map(f => `- [${f.kind} #${f.id}] ${f.text}${f.links.length ? ` → ${f.links.slice(0, 2).map(short).join(', ')}` : ''}`).join('\n')}` : '',
     'Antes de Grep/Glob amplos, use as ferramentas da Central: code_search, code_symbol, code_neighbors, code_impact e code_map (mais detalhe).\n'

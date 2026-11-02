@@ -37,7 +37,17 @@
           </div>
         }
         @if (proposals.inbox().length > 3) {
-          <a routerLink="/decisoes" class="block px-1 text-[13px] text-frost hover:underline">Mais {{ proposals.inbox().length - 3 }} decisões</a>
+          <a routerLink="/triagem" class="block px-1 text-[13px] text-frost hover:underline">Mais {{ proposals.inbox().length - 3 }} decisões</a>
+        }
+        @if (ideas.fresh().length) {
+          <a routerLink="/triagem" class="flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-3.5 hover:border-faint">
+            <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-frost/15 text-frost"><app-icon name="ideas" [size]="16" /></span>
+            <span class="min-w-0 flex-1">
+              <span class="block">{{ ideas.fresh().length }} {{ ideas.fresh().length === 1 ? 'ideia nova para triar' : 'ideias novas para triar' }}</span>
+              <span class="block text-[12.5px] text-mute">Aprovar = entra no rumo e vira insumo do backlog.</span>
+            </span>
+            <span class="text-[13px] text-frost">Triar</span>
+          </a>
         }
         @for (r of failed(); track r.id) {
           <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="flex items-center gap-4 rounded-2xl border border-no/30 bg-no/5 px-5 py-3.5 hover:border-no/60">
@@ -52,56 +62,7 @@
         }
         @if (!waiting()) {
           <p class="rounded-2xl border border-dashed border-edge px-5 py-6 text-center text-mute">
-            Fila vazia. Abra um projeto abaixo e comece uma sessão, ou deixe o piloto automático trabalhar esta noite.</p>
-        }
-      </div>
-    </section>
-
-    <!-- piloto automático -->
-    <section class="mt-10" aria-labelledby="piloto">
-      <div class="flex items-baseline justify-between gap-4">
-        <h2 id="piloto" class="flex items-center gap-2 font-display text-xl font-semibold"><app-icon name="night" [size]="20" class="text-[#B48CFF]" />Piloto automático</h2>
-        @if (piloted().length) {
-          <button type="button" class="text-[13px] text-frost hover:underline disabled:opacity-50" (click)="pulse.runNow()" [disabled]="pulse.running()">
-            {{ pulse.running() ? 'Rodando…' : 'Rodar agora' }}</button>
-        }
-      </div>
-      <p class="mt-1 text-[13.5px] text-mute">
-        De madrugada ({{ pulse.status()?.window ?? '01:00–06:00' }}), cada projeto ligado avança na direção que você deu: executa a próxima tarefa até um PR
-        ou, sem tarefa, planeja as próximas. Não começa outra enquanto houver uma em revisão.</p>
-      @if (pulse.error()) { <p role="alert" class="mt-2 text-[13px] text-no">{{ pulse.error() }}</p> }
-      <div class="mt-3 space-y-2">
-        @for (p of piloted(); track p.slug) {
-          @let last = pulseOf().get(p.slug);
-          <div class="flex items-center gap-4 rounded-2xl border border-edge bg-panel px-5 py-3">
-            <app-project-avatar [project]="p" [size]="30" />
-            <div class="min-w-0 flex-1">
-              <a [routerLink]="['/projetos', p.slug]" class="font-semibold hover:underline">{{ p.name }}</a>
-              <p class="truncate text-[12.5px] text-faint" [title]="p.autopilotBrief">Direção: {{ p.autopilotBrief || 'não definida' }}</p>
-              @if (last) {
-                <p class="truncate text-[13px]"><span [class]="tone(last)">{{ pulseLabel[last.action] }}</span><span class="text-mute">: {{ last.text }}</span></p>
-              } @else {
-                <p class="text-[13px] text-mute">Primeira passada na próxima madrugada.</p>
-              }
-            </div>
-            @if (last?.runId) { <a routerLink="/execucoes" [queryParams]="{ run: last!.runId }" class="btn btn-sm btn-ghost">Execução</a> }
-            @if (last?.action === 'empty' || last?.action === 'blocked') {
-              <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm">Abrir backlog</a>
-            }
-            <button type="button" class="btn btn-sm btn-ghost" (click)="dialogs.autopilot.set(p.slug)">Ajustar</button>
-            <button type="button" class="grid size-8 place-items-center rounded-lg text-faint hover:bg-raise hover:text-text" (click)="projects.setAutopilot(p.slug, false)"
-                    [attr.aria-label]="'Desligar piloto do ' + p.name" title="Desligar"><app-icon name="close" [size]="14" /></button>
-          </div>
-        }
-        @if (candidates().length) {
-          <div class="flex flex-wrap items-center gap-2 pt-1">
-            <span class="text-[13px] text-mute">{{ piloted().length ? 'Ligar também:' : 'Ligue nos projetos que você quer ver evoluindo:' }}</span>
-            @for (p of candidates(); track p.slug) {
-              <button type="button" (click)="dialogs.autopilot.set(p.slug)"
-                      class="flex items-center gap-2 rounded-full border border-dashed border-edge py-1 pr-3 pl-1 text-[13px] text-mute transition hover:border-[#B48CFF]/60 hover:text-text">
-                <app-project-avatar [project]="p" [size]="22" />{{ p.name }}<app-icon name="plus" [size]="13" /></button>
-            }
-          </div>
+            Fila vazia. Aponte o rumo de um projeto abaixo ou peça ao gestor para planejar.</p>
         }
       </div>
     </section>
@@ -121,14 +82,25 @@
                     <span class="block truncate text-[12.5px] text-mute">{{ p.lastCommitSubject ?? 'Sem commits recentes' }}@if (p.lastCommitAt) {, {{ p.lastCommitAt | ago }}}</span>
                   </span>
                 </a>
+                <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'rumo' }" class="mt-3 block rounded-xl bg-night/60 px-3 py-2 text-[13px] hover:bg-night">
+                  @if (rumo(p.slug); as r) {
+                    <span class="flex items-center gap-1.5 text-[11.5px] font-semibold text-faint"><app-icon name="flag" [size]="11" />RUMO</span>
+                    <span class="line-clamp-2 text-text/85">{{ r }}</span>
+                  } @else {
+                    <span class="flex items-center gap-1.5 text-faint"><app-icon name="flag" [size]="12" />Sem rumo. Escrever para onde este projeto vai.</span>
+                  }
+                </a>
                 <div class="mt-3 flex flex-wrap items-center gap-2">
                   <button type="button" class="btn btn-sm" (click)="session(p.slug, 'chat')"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Claude</button>
                   <button type="button" class="btn btn-sm btn-ghost" (click)="session(p.slug, 'shell')"><img src="file-icons/powershell.svg" alt="" class="size-3.5" />Terminal</button>
                   <span class="ml-auto flex gap-2 text-[12px]">
                     @if (p.activeRuns) { <span class="text-yes">{{ p.activeRuns }} agente{{ p.activeRuns > 1 ? 's' : '' }}</span> }
                     @if (p.openProposals) { <span class="text-later">{{ p.openProposals }} decis{{ p.openProposals > 1 ? 'ões' : 'ão' }}</span> }
-                    @if (p.autopilot) { <app-icon name="night" [size]="13" class="text-[#B48CFF]" title="Piloto automático ligado" /> }
+                    @if (waitingOf(p.slug); as n) { <span class="text-frost">{{ n }} aprovada{{ n > 1 ? 's' : '' }} sem tarefa</span> }
                   </span>
+                  <button type="button" class="btn btn-sm btn-ghost" (click)="plan(p.slug)" [disabled]="direction.planning()[p.slug] || !!planned()[p.slug]"
+                          title="O gestor do projeto organiza o backlog a partir do rumo e das ideias aprovadas">
+                    <app-icon name="kanban" [size]="14" />{{ planned()[p.slug] ? 'Gestor trabalhando' : 'Planejar' }}</button>
                 </div>
               </div>
             }

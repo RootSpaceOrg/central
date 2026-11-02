@@ -26,7 +26,6 @@ import { ContextMenu } from './shared/ui/context-menu';
 import { SettingsDialog } from './shared/components/settings-dialog/settings-dialog';
 import { CommandPalette } from './shared/components/command-palette/command-palette';
 import { ImportSessionDialog } from './shared/components/import-session-dialog/import-session-dialog';
-import { AutopilotDialog } from './shared/components/autopilot-dialog/autopilot-dialog';
 import { PrefsApiService } from './shared/services/prefs/prefs-api.service';
 import { ContextMenuService, MenuEntry } from './shared/services/context-menu/context-menu.service';
 import { AgentsService } from './shared/services/agents/agents.service';
@@ -43,7 +42,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 @Component({
   selector: 'app-root',
   host: { '(document:keydown.f11)': 'toggleFocus($event)' },
-  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog, AutopilotDialog],
+  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog],
   templateUrl: './app.html',
 })
 export class App {
@@ -63,7 +62,7 @@ export class App {
   protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
     { path: '/', label: 'Início', icon: 'home', exact: true },
     { path: '/visao-geral', label: 'Visão geral', icon: 'overview' },
-    { path: '/decisoes', label: 'Decisões', icon: 'inbox' },
+    { path: '/triagem', label: 'Triagem (decisões e ideias novas)', icon: 'inbox' },
     { path: '/ideias', label: 'Ideias', icon: 'ideas' },
     { path: '/backlog', label: 'Backlog', icon: 'kanban' },
     { path: '/agentes', label: 'Agentes', icon: 'agent' },
@@ -74,8 +73,9 @@ export class App {
 
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {
-    if (path === '/decisoes' && this.proposals.inbox().length) return { n: this.proposals.inbox().length, tone: 'bg-later text-night' };
-    if (path === '/ideias' && this.ideas.fresh().length) return { n: this.ideas.fresh().length, tone: 'bg-edge text-text' };
+    const triage = this.proposals.inbox().length + this.ideas.fresh().length;
+    if (path === '/triagem' && triage) return { n: triage, tone: 'bg-later text-night' };
+    if (path === '/ideias' && this.ideas.waiting().length) return { n: this.ideas.waiting().length, tone: 'bg-edge text-text' };
     const review = this.tasks.tasks().filter(t => t.column === 'review').length;
     if (path === '/backlog' && review) return { n: review, tone: 'bg-frost text-night' };
     return null;
@@ -118,7 +118,7 @@ export class App {
       .map(s => ({ label: `Marcar como ${STATUS_LABEL[s].toLowerCase()}`, icon: s === 'dead' ? 'archive' as const : 'flag' as const, run: () => this.projects.setStatus(p.slug, s) }));
     this.menu.open(e, [
       { label: 'Abrir', icon: 'terminal', run: () => go() },
-      { label: 'Resumo', icon: 'summary', run: () => go('resumo') },
+      { label: 'Rumo do projeto', icon: 'flag', run: () => go('rumo') },
       { label: 'Backlog', icon: 'kanban', run: () => go('backlog') },
       { label: 'Conversa com o Claude', img: 'file-icons/claude.svg', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'chat' } }) },
       { label: 'Novo terminal', img: 'file-icons/powershell.svg', run: () => this.router.navigate(['/projetos', p.slug], { queryParams: { nova: 'shell' } }) },

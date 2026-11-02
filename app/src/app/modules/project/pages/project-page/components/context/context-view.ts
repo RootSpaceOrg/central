@@ -5,7 +5,7 @@ import { SessionsService } from '../../../../../../shared/services/sessions/sess
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
 import { CodeHit, ContextService, FACT_LABEL, Fact, FactKind } from '../../../../services/context/context.service';
-import { ColorBy, GraphCanvas, Layer } from './graph-canvas';
+import { CodeMap, Layer, Scope, placeOf } from './code-map';
 
 type Pane = 'grafo' | 'memoria' | 'prompt';
 const KINDS = Object.keys(FACT_LABEL) as FactKind[];
@@ -21,14 +21,14 @@ const EDGE_LEGEND = [
  */
 @Component({
   selector: 'app-context-view',
-  imports: [Icon, AgoPipe, GraphCanvas],
+  imports: [Icon, AgoPipe, CodeMap],
   templateUrl: './context-view.html',
   host: { class: 'grid h-full min-h-0 grid-cols-[290px_minmax(0,1fr)]' },
 })
 export class ContextView {
   protected readonly ctx = inject(ContextService);
   private readonly sessions = inject(SessionsService);
-  private readonly canvas = viewChild(GraphCanvas);
+  private readonly canvas = viewChild(CodeMap);
 
   readonly slug = input.required<string>();
   /** abrir um arquivo no editor (a página leva para a aba de código) */
@@ -36,8 +36,8 @@ export class ContextView {
 
   protected readonly pane = signal<Pane>('grafo');
   protected readonly data = signal<GraphDto | null>(null);
-  protected readonly depth = signal(0);
-  protected readonly colorBy = signal<ColorBy>('repo');
+  /** pasta aberta no mapa ([] = raiz do projeto) */
+  protected readonly scope = signal<Scope>([]);
   protected readonly layer = signal<Layer>('code');
   protected readonly selected = signal<string | null>(null);
   protected readonly detail = signal<NodeDetailDto | null>(null);
@@ -65,13 +65,15 @@ export class ContextView {
   });
   protected readonly visibleFacts = computed(() => this.facts().filter(f => this.showRetired() || !f.retired));
   protected readonly blockTokens = computed(() => Math.ceil(this.block().length / 3.5));
-  /** pasta selecionada: os arquivos dentro */
-  protected readonly groupFiles = computed(() => {
-    const sel = this.selected();
-    if (!sel?.startsWith('dir:')) return [];
-    const files = this.canvas()?.members.get(sel) ?? [];
-    const byKey = new Map(this.data()?.nodes.map(n => [n.key, n]) ?? []);
-    return files.map(k => byKey.get(k)!).filter(Boolean).sort((a, b) => b.rank - a.rank);
+  /** trilha de navegação: raiz, repo, pastas */
+  protected readonly crumbs = computed(() => this.scope().map((name, i) => ({ name, scope: this.scope().slice(0, i + 1) })));
+  /** o que tem na pasta atual (para a lista textual equivalente ao mapa) */
+  protected readonly here = computed(() => {
+    const d = this.data();
+    const s = this.scope();
+    if (!d) return { files: 0, folders: 0 };
+    const inside = d.nodes.filter(n => s.every((x, i) => placeOf(n)[i] === x));
+    return { files: inside.length, folders: new Set(inside.map(n => placeOf(n)[s.length]).filter(Boolean)).size };
   });
 
   constructor() {
@@ -84,7 +86,7 @@ export class ContextView {
     effect(() => {
       const sel = this.selected();
       untracked(() => {
-        if (!sel || sel.startsWith('dir:')) { this.detail.set(null); return; }
+        if (!sel) { this.detail.set(null); return; }
         this.ctx.node(sel).then(d => { if (this.selected() === sel) this.detail.set(d); });
       });
     });
@@ -110,7 +112,7 @@ export class ContextView {
     // projeto grande abre agrupado por pasta (nunca a "bola de pelos" inteira); o detalhe aumenta sob demanda
     if (this.loadedSlug !== slug) {
       this.loadedSlug = slug;
-      this.depth.set(data.nodes.length > 250 ? 1 : 0);
+      this.scope.set([]);
       this.selected.set(null);
     }
     this.data.set(data);
@@ -119,12 +121,20 @@ export class ContextView {
 
   protected pick(key: string | null): void { this.selected.set(key); }
 
-  /** Resultado da busca: símbolo → seleciona o arquivo dele. */
-  protected goHit(h: CodeHit): void {
-    this.depth.set(0);
+  /** Entrar numa pasta do mapa. */
+  protected open_(scope: Scope): void { this.selected.set(null); this.scope.set(scope); }
+
+  /** Seleciona um arquivo/rota de qualquer lugar: o mapa vai até a pasta dele. */
+  protected select(key: string): void {
+    const fileKey = key.split('#')[0];
+    const n = this.data()?.nodes.find(x => x.key === fileKey);
+    if (n) this.scope.set(placeOf(n));
     this.pane.set('grafo');
-    this.selected.set(h.file_key);
+    this.selected.set(n ? n.key : fileKey);
   }
+
+  /** Resultado da busca: símbolo → seleciona o arquivo dele. */
+  protected goHit(h: CodeHit): void { this.select(h.file_key); }
 
   protected reindex(force = false): void { this.ctx.reindex(this.slug(), force); }
 
@@ -189,5 +199,5 @@ export class ContextView {
   }
 
   protected zoom(f: number): void { this.canvas()?.zoom(f); }
-  protected resetView(): void { this.canvas()?.reset(); }
+  protected resetView(): void { this.canvas()?.fit(); }
 }

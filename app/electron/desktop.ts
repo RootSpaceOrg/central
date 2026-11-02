@@ -50,7 +50,7 @@ export function setupTray(win: () => BrowserWindow | null, navigate: (route: str
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Abrir a Central', click: () => show(win()) },
     { type: 'separator' },
-    { label: 'Decisões', click: go('/decisoes') },
+    { label: 'Triagem', click: go('/triagem') },
     { label: 'Agentes', click: go('/agentes') },
     { label: 'Execuções', click: go('/execucoes') },
     { label: 'Rotinas', click: go('/rotinas') },

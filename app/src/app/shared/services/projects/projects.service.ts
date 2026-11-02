@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { CloneProgressDto, GithubRepoDto, ProjectDto, RepoDto } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
 import { ProjectsApiService } from './projects-api.service';
-import { AutopilotMode, NewProject, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
+import { NewProject, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
 
 const toProject = (d: ProjectDto): Project => ({
   slug: d.slug,
@@ -25,9 +25,6 @@ const toProject = (d: ProjectDto): Project => ({
   lastCommitRepo: d.last_commit_repo,
   openProposals: d.open_proposals,
   activeRuns: d.active_runs,
-  autopilot: d.autopilot,
-  autopilotBrief: d.autopilot_brief ?? '',
-  autopilotMode: d.autopilot_mode ?? 'tasks',
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -103,21 +100,6 @@ export class ProjectsService {
   setStatus(slug: string, status: ProjectStatus): void {
     this.patchLocal(slug, { status });
     this.api.update(slug, { status }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
-  }
-
-  /** Liga/ajusta o piloto com a direção. Lança o erro para o diálogo mostrar. */
-  async configureAutopilot(slug: string, c: { on: boolean; brief: string; mode: AutopilotMode }): Promise<void> {
-    try {
-      await this.api.update(slug, { autopilot: c.on, autopilot_brief: c.brief.trim(), autopilot_mode: c.mode });
-    } catch (e) {
-      throw new Error(errorMessage(e));
-    }
-    this.patchLocal(slug, { autopilot: c.on, autopilotBrief: c.brief.trim(), autopilotMode: c.mode });
-  }
-
-  setAutopilot(slug: string, autopilot: boolean): void {
-    this.patchLocal(slug, { autopilot });
-    this.api.update(slug, { autopilot }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   setDescription(slug: string, description: string): void {

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -9,7 +9,7 @@ import { Project } from '../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { Proposal, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
-import { PULSE_LABEL, PulseItem, PulseService } from '../../../../shared/services/pulse/pulse.service';
+import { DirectionService } from '../../../../shared/services/direction/direction.service';
 import { RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 import { RUN_STATUS_LABEL } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
@@ -41,7 +41,7 @@ export class HomePage {
   protected readonly usage = inject(UsageService);
   protected readonly dialogs = inject(DialogsService);
   protected readonly agents = inject(AgentsService);
-  protected readonly pulse = inject(PulseService);
+  protected readonly direction = inject(DirectionService);
   protected readonly routines = inject(RoutinesService);
   private readonly chat = inject(ChatService);
   private readonly settings = inject(SettingsApiService);
@@ -51,7 +51,7 @@ export class HomePage {
   protected readonly note = signal('');
   protected readonly noteSaved = signal(false);
   protected readonly runLabel = RUN_STATUS_LABEL;
-  protected readonly pulseLabel = PULSE_LABEL;
+  protected readonly planned = signal<Record<string, number>>({});
   protected readonly reset = untilReset;
   protected readonly schedule = describeSchedule;
 
@@ -67,15 +67,9 @@ export class HomePage {
   protected readonly decide3 = computed(() => this.proposals.inbox().slice(0, 3));
   protected readonly failed = computed(() =>
     this.runs.runs().filter(r => r.status === 'failed' && r.finishedAt && r.finishedAt > this.since()).slice(0, 3));
-  protected readonly waiting = computed(() => this.reviews().length + this.proposals.inbox().length + this.failed().length);
+  protected readonly waiting = computed(() => this.reviews().length + this.proposals.inbox().length + this.ideas.fresh().length + this.failed().length);
   protected readonly finished = computed(() =>
     this.runs.runs().filter(r => r.status === 'succeeded' && r.finishedAt && r.finishedAt > this.since()));
-
-  // ---------- piloto automático ----------
-  protected readonly piloted = computed(() => this.projects.living().filter(p => p.autopilot));
-  /** projetos para evoluir que ainda não estão no piloto */
-  protected readonly candidates = computed(() => this.projects.living().filter(p => p.status === 'active' && !p.autopilot));
-  protected readonly pulseOf = computed(() => new Map((this.pulse.status()?.items ?? []).map(i => [i.slug, i])));
 
   // ---------- projetos ----------
   private readonly byActivity = (list: Project[]) => [...list].sort((a, b) => (b.lastCommitAt?.getTime() ?? 0) - (a.lastCommitAt?.getTime() ?? 0));
@@ -95,6 +89,8 @@ export class HomePage {
   });
 
   constructor() {
+    // rumo de cada projeto vivo para os cartões
+    effect(() => { for (const p of this.projects.living()) untracked(() => this.direction.ensure(p.slug)); });
     this.settings.get('home:lastSeen').then(v => {
       if (v) this.since.set(new Date(v));
       this.settings.set('home:lastSeen', new Date().toISOString());
@@ -121,13 +117,18 @@ export class HomePage {
     else this.dialogs.editTask(t.id);
   }
 
-  protected tone(i: PulseItem | undefined): string {
-    switch (i?.action) {
-      case 'started': return 'text-yes';
-      case 'waiting': return 'text-frost';
-      case 'blocked': case 'quota': return 'text-later';
-      default: return 'text-mute';
-    }
+  /** primeira linha útil do rumo (sem markdown), para o cartão do projeto */
+  protected rumo(slug: string): string | null {
+    const d = this.direction.bySlug()[slug];
+    if (!d) return null;
+    return d.text.split('\n').map(l => l.replace(/[*#>_`-]/g, '').trim()).filter(Boolean).slice(0, 2).join(' · ');
+  }
+
+  protected waitingOf(slug: string): number { return this.ideas.waiting().filter(i => i.projectSlug === slug).length; }
+
+  protected async plan(slug: string): Promise<void> {
+    try { const id = await this.direction.plan(slug); this.planned.update(m => ({ ...m, [slug]: id })); }
+    catch (e) { alert((e as Error).message); }
   }
 
   protected async saveNote(e: Event): Promise<void> {

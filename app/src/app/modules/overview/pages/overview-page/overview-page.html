@@ -4,7 +4,7 @@
   <p class="mt-2 max-w-3xl text-[15px] leading-relaxed text-mute">
     {{ projects.living().length }} projetos vivos, {{ commits7d() }} commits nos últimos 7 dias.
     @if (proposals.inbox().length) {
-      <a routerLink="/decisoes" class="text-later hover:underline">{{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão espera' : 'decisões esperam' }} você.</a>
+      <a routerLink="/triagem" class="text-later hover:underline">{{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão espera' : 'decisões esperam' }} você.</a>
     }
     @if (runs.active().length) {
       <a routerLink="/execucoes" class="text-yes hover:underline">{{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }} agora.</a>
@@ -90,10 +90,10 @@
       <section aria-labelledby="dec">
         <div class="mb-3 flex items-baseline justify-between">
           <h2 id="dec" class="font-display text-xl font-semibold">Esperando você</h2>
-          @if (proposals.inbox().length) { <a routerLink="/decisoes" class="text-[13px] text-frost hover:underline">Decidir agora</a> }
+          @if (proposals.inbox().length) { <a routerLink="/triagem" class="text-[13px] text-frost hover:underline">Decidir agora</a> }
         </div>
         @for (p of proposals.inbox().slice(0, 4); track p.id) {
-          <a routerLink="/decisoes" class="mb-2 block rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
+          <a routerLink="/triagem" class="mb-2 block rounded-2xl border border-edge bg-panel px-4 py-3 hover:border-faint">
             @if (p.projectSlug) {
               <span class="text-[12.5px] font-semibold" [style.color]="color(p.projectSlug)">{{ projects.bySlug().get(p.projectSlug)?.name }}</span>
             }

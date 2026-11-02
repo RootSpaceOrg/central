@@ -37,16 +37,7 @@ export interface ProjectDto {
   last_commit_repo: string | null;
   open_proposals: number;
   active_runs: number;
-  /** piloto automático: de madrugada um agente pega a tarefa do topo de "A fazer" */
-  autopilot: boolean;
-  /** para onde o Gustavo quer levar o projeto (vai em todo prompt do piloto) */
-  autopilot_brief: string;
-  autopilot_mode: AutopilotMode;
 }
-
-/** tasks = só executa o que está em "A fazer"; plan = sem tarefa, planeja e propõe como decisões;
- *  trust = sem tarefa, planeja e já coloca em "A fazer" */
-export type AutopilotMode = 'tasks' | 'plan' | 'trust';
 
 export interface NewProjectInput {
   name: string;
@@ -65,29 +56,6 @@ export interface ProjectPatch {
   icon_value?: string | null;
   /** caminho absoluto; os repositórios são redescobertos */
   folder?: string;
-  autopilot?: boolean;
-  autopilot_brief?: string;
-  autopilot_mode?: AutopilotMode;
-}
-
-// ---------- piloto automático ----------
-
-/** started = agente trabalhando; waiting = já há tarefa em andamento/revisão; empty = nada em "A fazer";
- *  blocked = tarefa sem repositório; quota = cota alta */
-export type PulseAction = 'started' | 'planning' | 'waiting' | 'empty' | 'blocked' | 'quota';
-
-export interface PulseItemDto {
-  slug: string;
-  name: string;
-  action: PulseAction;
-  text: string;
-  run_id?: number;
-}
-
-export interface PulseStatusDto {
-  last: { at: string; manual: boolean; items: PulseItemDto[] } | null;
-  /** janela da madrugada, ex.: 01:00–06:00 */
-  window: string;
 }
 
 export interface RepoDto {
@@ -201,7 +169,8 @@ export interface UsageDto {
 
 // ---------- ideias e backlog ----------
 
-export type IdeaStatus = 'new' | 'promoted' | 'archived';
+/** new = para triagem; approved = aprovada, vira insumo do backlog; doing = já tem tarefas; done = tarefas concluídas; archived = descartada */
+export type IdeaStatus = 'new' | 'approved' | 'doing' | 'done' | 'archived';
 export type TaskColumn = 'backlog' | 'todo' | 'doing' | 'review' | 'done';
 export type TaskPriority = 0 | 1 | 2 | 3;
 
@@ -214,6 +183,22 @@ export interface IdeaDto {
   source: string;
   source_ref: string;
   task_id: number | null;
+  created_at: string;
+  /** 'gustavo' ou o agente que sugeriu */
+  author: string;
+  approved_at: string | null;
+  /** tarefas ligadas e quantas já estão feitas */
+  tasks: number;
+  tasks_done: number;
+}
+
+/** Rumo do projeto: versão atual (e quem mexeu por último). */
+export interface DirectionDto {
+  id: number;
+  project_slug: string;
+  text: string;
+  author: string;
+  note: string | null;
   created_at: string;
 }
 
@@ -655,6 +640,11 @@ export interface Api {
   'ideas:list': () => IdeaDto[];
   'ideas:create': (input: NewIdeaInput) => IdeaDto;
   'ideas:update': (id: number, patch: IdeaPatch) => void;
+  'direction:get': (projectSlug: string) => DirectionDto | null;
+  'direction:history': (projectSlug: string) => DirectionDto[];
+  'direction:set': (projectSlug: string, text: string, note: string | null) => DirectionDto;
+  /** gestor do projeto: lê rumo, ideias aprovadas, backlog e código e organiza o backlog (execução de agente) */
+  'backlog:plan': (projectSlug: string, request: string | null) => RunDto;
   'ideas:promote': (id: number, projectSlug: string) => TaskDto;
   'ideas:import': () => ImportResultDto;
   'tasks:list': (slug: string | null) => TaskDto[];
@@ -667,9 +657,6 @@ export interface Api {
   'settings:get': (key: string) => string | null;
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];
-  'pulse:status': () => PulseStatusDto;
-  /** projectSlug: só esse projeto ("Rodar agora" no diálogo do piloto) */
-  'pulse:run': (projectSlug?: string | null) => PulseStatusDto;
   'routines:create': (input: NewRoutineInput) => RoutineDto;
   'routines:update': (id: number, patch: RoutinePatch) => void;
   'routines:delete': (id: number) => void;

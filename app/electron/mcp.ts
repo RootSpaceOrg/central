@@ -23,6 +23,7 @@ import { setMcpConfigPath } from './mcp-config';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
+import { getDirection, planBacklog, setDirection } from './direction';
 import { codeImpact, codeMap, codeNeighbors, codeSymbol, searchCode } from './context/context';
 import { createFact, recallFacts, supersedeFact } from './context/memory';
 
@@ -31,8 +32,9 @@ export interface Hooks { emit: Emit; projects: () => void; backlog: () => void; 
 const INSTRUCTIONS = `Central do Gustavo: o lugar onde vivem os projetos dele (cada um é uma pasta em Development com vários repositórios),
 o backlog (tarefas em Kanban: backlog, todo, doing, review, done), a base de ideias, as decisões que esperam por ele,
 os agentes (definições com papel e instruções, com ou sem projeto), as execuções de agentes e as rotinas (execuções com agenda).
-Use estas ferramentas para consultar e manter tudo verdadeiro. Tarefas e decisões sempre pertencem a um projeto (slug).
-Prefira registrar descobertas como tarefa no backlog ou ideia em vez de só mencioná-las.`;
+Cada projeto tem um rumo (get_direction) que o Gustavo define: siga-o. Ideias novas vão para a triagem dele; só as aprovadas
+viram tarefas (create_task com idea_id). Tarefas e decisões sempre pertencem a um projeto (slug).
+Prefira registrar descobertas como ideia (para triagem) ou tarefa ligada a uma ideia aprovada, em vez de só mencioná-las.`;
 
 type Result = { content: { type: 'text'; text: string }[]; isError?: boolean };
 const ok = (v: unknown): Result => ({ content: [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v ?? { ok: true }) }] });
@@ -56,8 +58,10 @@ function build(h: Hooks): McpServer {
     return {
       projects: listProjects().map(p => ({ slug: p.slug, name: p.name, status: p.status, repos: p.repo_count, commits_7d: p.commits_7d, last_commit: p.last_commit_subject })),
       tasks: Object.fromEntries(['backlog', 'todo', 'doing', 'review', 'done'].map(c => [c, tasks.filter(t => t.column === c).length])),
+      directions: listProjects().filter(p => p.status !== 'dead').map(p => ({ slug: p.slug, rumo: getDirection(p.slug)?.text.split('\n').slice(0, 3).join(' ') ?? null })),
       open_decisions: listProposals(['proposed']).length,
-      new_ideas: listIdeas().filter(i => i.status === 'new').length,
+      ideas_to_triage: listIdeas().filter(i => i.status === 'new').length,
+      approved_ideas: listIdeas().filter(i => i.status === 'approved').length,
       running_agents: listRuns(null).filter(r => ['queued', 'preparing', 'running'].includes(r.status)).map(r => ({ id: r.id, project: r.project_slug, prompt: r.prompt.slice(0, 120) })),
       claude_usage: usage.limits.map(l => `${l.label}: ${l.percent}%`),
     };
@@ -96,7 +100,8 @@ function build(h: Hooks): McpServer {
   tool('create_task', 'Cria tarefa no backlog de um projeto. priority: 0 urgente, 1 alta, 2 normal, 3 baixa.', {
     project_slug: z.string(), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     repo_path: z.string().optional().describe('caminho do repositório, se já souber onde o trabalho acontece'),
-  }, a => createTask({ project_slug: a.project_slug, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
+    idea_id: z.number().int().optional().describe('ideia aprovada de onde a tarefa nasceu (a ideia passa para "em andamento")'),
+  }, a => createTask({ project_slug: a.project_slug, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
   tool('update_task', 'Edita ou move uma tarefa (coluna, prioridade, título, descrição, projeto, repositório).', {
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     project_slug: z.string().optional(), repo_path: z.string().optional(),
@@ -104,13 +109,26 @@ function build(h: Hooks): McpServer {
   tool('delete_task', 'Exclui uma tarefa. Só use se o Gustavo pediu.', { id: z.number().int() }, ({ id }) => deleteTask(id), h.backlog);
 
   // ---------- ideias ----------
-  tool('list_ideas', 'Lista ideias. status: new (padrão), promoted, archived.', { status: z.enum(['new', 'promoted', 'archived']).optional(), project_slug: z.string().optional() }, a =>
-    listIdeas().filter(i => i.status === (a.status ?? 'new') && (!a.project_slug || i.project_slug === a.project_slug)).map(i => ({ id: i.id, project: i.project_slug, title: i.title, body: i.body?.slice(0, 300), source: i.source })));
-  tool('create_idea', 'Guarda uma ideia na base (sem compromisso de fazer).', { title: z.string(), body: z.string().optional(), project_slug: z.string().optional() }, a =>
-    createIdea({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, source: 'central' }), h.backlog);
-  tool('update_idea', 'Edita, arquiva (status archived) ou restaura (status new) uma ideia.', {
-    id: z.number().int(), title: z.string().optional(), body: z.string().optional(), project_slug: z.string().optional(), status: z.enum(['new', 'archived']).optional(),
+  const ideaStatus = z.enum(['new', 'approved', 'doing', 'done', 'archived']);
+  tool('list_ideas', 'Lista ideias. status: new (esperando triagem do Gustavo), approved (aprovadas: insumo para o backlog), doing (já têm tarefas), done, archived (descartadas). Padrão: new e approved.', {
+    status: ideaStatus.optional(), project_slug: z.string().optional(),
+  }, a => listIdeas().filter(i => (a.status ? i.status === a.status : ['new', 'approved'].includes(i.status)) && (!a.project_slug || i.project_slug === a.project_slug))
+    .map(i => ({ id: i.id, project: i.project_slug, status: i.status, title: i.title, body: i.body?.slice(0, 300), author: i.author, tasks: i.tasks, tasks_done: i.tasks_done })));
+  tool('create_idea', 'Sugere uma ideia (vai para a triagem do Gustavo; só vira backlog depois que ele aprovar).', { title: z.string(), body: z.string().optional(), project_slug: z.string().optional() }, a =>
+    createIdea({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, source: 'central', author: 'agente' }), h.backlog);
+  tool('update_idea', 'Edita uma ideia ou muda o status. Aprovar (approved) ou descartar (archived) só quando o Gustavo pedir.', {
+    id: z.number().int(), title: z.string().optional(), body: z.string().optional(), project_slug: z.string().optional(), status: ideaStatus.optional(),
   }, ({ id, ...patch }) => updateIdea(id, patch), h.backlog);
+
+  // ---------- rumo do projeto e gestor ----------
+  tool('get_direction', 'Rumo atual do projeto (para onde vamos: objetivo, foco do momento, o que não fazer), definido pelo Gustavo.', { project_slug: z.string() }, a =>
+    getDirection(a.project_slug) ?? 'Este projeto ainda não tem rumo escrito.');
+  tool('update_direction', 'Atualiza o rumo do projeto (nova versão; a anterior fica no histórico). Só quando o Gustavo pediu ou quando o que você viu deixou o rumo desatualizado; explique o motivo em note.', {
+    project_slug: z.string(), text: z.string().describe('rumo completo em markdown curto: Objetivo, Foco agora, Não fazer, Próximos marcos'), note: z.string().describe('por que mudou'),
+  }, a => setDirection(a.project_slug, a.text, 'agente', a.note), h.projects);
+  tool('plan_backlog', 'Põe o gestor do projeto para organizar o backlog a partir do rumo e das ideias aprovadas (roda como execução de agente). Use quando o Gustavo pedir para planejar/organizar um projeto.', {
+    project_slug: z.string(), request: z.string().optional().describe('pedido específico do Gustavo'),
+  }, a => { const r = planBacklog(a.project_slug, a.request ?? null, h.emit); return `Gestor trabalhando (execução #${r.id}).`; }, h.backlog);
   tool('promote_idea', 'Transforma uma ideia em tarefa no backlog do projeto.', { id: z.number().int(), project_slug: z.string() }, a => promoteIdea(a.id, a.project_slug), h.backlog);
 
   // ---------- decisões ----------

@@ -70,10 +70,9 @@
             ],
             "baseHref": "./",
             "allowedCommonJsDependencies": [
-              "graphology-communities-louvain",
-              "graphology-layout-forceatlas2",
-              "events",
-              "graphology-utils"
+              "cytoscape-fcose",
+              "cose-base",
+              "layout-base"
             ]
           },
           "configurations": {

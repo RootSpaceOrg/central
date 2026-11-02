@@ -3,17 +3,12 @@ import { RouterLink } from '@angular/router';
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
-import { IDEA_SOURCE_LABEL, Idea, IdeaStatus, IdeasService } from '../../../../shared/services/ideas/ideas.service';
+import { IDEA_SOURCE_LABEL, IDEA_STATUS, Idea, IdeaStatus, IdeasService } from '../../../../shared/services/ideas/ideas.service';
 import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 
-const FILTERS: { id: IdeaStatus; label: string }[] = [
-  { id: 'new', label: 'Novas' },
-  { id: 'promoted', label: 'Viraram tarefa' },
-  { id: 'archived', label: 'Arquivadas' },
-];
 
 @Component({
   selector: 'app-ideas-page',
@@ -25,8 +20,10 @@ export class IdeasPage {
   protected readonly ideas = inject(IdeasService);
   protected readonly projects = inject(ProjectsService);
 
-  protected readonly filters = FILTERS;
-  protected readonly status = signal<IdeaStatus>('new');
+  protected readonly filters = IDEA_STATUS;
+  protected readonly status = signal<IdeaStatus>('approved');
+  protected readonly hint = computed(() => IDEA_STATUS.find(f => f.id === this.status())!.hint);
+  protected readonly error = signal<string | null>(null);
   protected readonly projectFilter = signal('');
   protected readonly query = signal('');
   protected readonly title = signal('');
@@ -36,7 +33,7 @@ export class IdeasPage {
   protected readonly importResult = signal<string | null>(null);
   protected readonly sourceLabel = (s: string) => IDEA_SOURCE_LABEL[s] ?? s;
 
-  protected readonly counts = computed(() => Object.fromEntries(FILTERS.map(f => [f.id, this.ideas.ideas().filter(i => i.status === f.id).length])));
+  protected readonly counts = computed(() => Object.fromEntries(IDEA_STATUS.map(f => [f.id, this.ideas.ideas().filter(i => i.status === f.id).length])) as Record<IdeaStatus, number>);
   protected readonly list = computed(() => {
     const q = this.query().trim().toLowerCase();
     return this.ideas.ideas().filter(i =>
@@ -58,6 +55,11 @@ export class IdeasPage {
 
   protected promote(i: Idea): void {
     if (i.projectSlug) this.ideas.promote(i.id, i.projectSlug);
+  }
+
+  protected async approve(i: Idea): Promise<void> {
+    try { await this.ideas.approve(i.id); this.error.set(null); }
+    catch (e) { this.error.set((e as Error).message); }
   }
 
   protected async importPending(): Promise<void> {

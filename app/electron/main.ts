@@ -18,7 +18,7 @@ import { closeSession, createSession, listSessions, updateSession } from './sess
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
-import { pulseStatus, runPulse, watchPulse } from './pulse';
+import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -153,8 +153,10 @@ function registerIpc(): void {
   handle('update:build', publish => buildUpdate(publish, line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
 
   handle('routines:list', () => listRoutines());
-  handle('pulse:status', () => pulseStatus());
-  handle('pulse:run', slug => runPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, true, slug ?? null));
+  handle('direction:get', slug => getDirection(slug));
+  handle('direction:history', slug => directionHistory(slug));
+  handle('direction:set', (slug, text, note) => { const d = setDirection(slug, text, 'gustavo', note); changed(); return d; });
+  handle('backlog:plan', (slug, request) => planBacklog(slug, request, emitRun));
   handle('routines:create', input => { const r = createRoutine(input); routinesChanged(); return r; });
   handle('routines:update', (id, patch) => { updateRoutine(id, patch); routinesChanged(); });
   handle('routines:delete', id => { deleteRoutine(id); routinesChanged(); });
@@ -250,10 +252,6 @@ app.whenReady().then(() => {
   if (!CAPTURE) setupTray(() => win, navigate);
   watchTurns(emitRun);
   watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
-  if (!CAPTURE) watchPulse({ ...emitRun, changed: () => { emitRun.changed(); backlogChanged(); } }, s => {
-    const started = s.last?.items.filter(i => i.action === 'started') ?? [];
-    if (started.length) toast('Piloto automático', `${started.map(i => i.name).join(', ')}: agente trabalhando até o PR.`, '/');
-  });
   // índice de código: um processo à parte indexa os projetos e acompanha as mudanças
   startContext(slug => contextChanged(slug));
   setTimeout(() => {
@@ -267,7 +265,7 @@ app.whenReady().then(() => {
   const watchGithub = () => Promise.all([syncPullRequests(), syncCiFailures()])
     .then(([prs, ci]) => {
       if (prs) backlogChanged();
-      if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/decisoes'); }
+      if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/triagem'); }
     });
   // depois da varredura dos repositórios, o índice pega os que acabaram de aparecer (incremental: barato)
   syncProjects(null, changed).then(() => { indexAll(); return watchGithub(); });

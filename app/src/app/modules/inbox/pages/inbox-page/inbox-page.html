@@ -1,20 +1,20 @@
-<div class="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,640px)_1fr] gap-14 px-10 pt-9 pb-16">
-  <section aria-labelledby="dec-title">
-    <h1 id="dec-title" class="font-display text-[34px] font-bold leading-tight tracking-tight" aria-live="polite">
-      @switch (proposals.inbox().length) {
-        @case (0) { Nada esperando você. }
-        @case (1) { Uma decisão esperando você. }
-        @default { {{ proposals.inbox().length }} decisões esperando você. }
+<div class="mx-auto grid max-w-[1180px] grid-cols-1 gap-12 px-8 pt-9 pb-16 xl:grid-cols-[minmax(0,640px)_1fr] xl:gap-14 xl:px-10">
+  <section aria-labelledby="tri-title">
+    <h1 id="tri-title" class="font-display text-[34px] font-bold leading-tight tracking-tight" aria-live="polite">
+      @switch (queue().length) {
+        @case (0) { Triagem limpa. }
+        @case (1) { Uma coisa para triar. }
+        @default { {{ queue().length }} coisas para triar. }
       }
     </h1>
-    <p class="mt-2 text-mute">Uma de cada vez. Atalhos: A aprova, D deixa para depois, N recusa.</p>
+    <p class="mt-2 text-mute">Decisões primeiro, depois ideias novas. Atalhos: A aprova, D deixa para depois, N recusa/descarta.</p>
 
-    @if (proposals.error()) {
-      <p role="alert" class="mt-6 rounded-2xl bg-no/10 px-5 py-4 text-no">{{ proposals.error() }}</p>
+    @if (proposals.error() || error()) {
+      <p role="alert" class="mt-6 rounded-2xl bg-no/10 px-5 py-4 text-no">{{ error() ?? proposals.error() }}</p>
     }
 
     <div class="relative mt-8">
-      @if (current(); as p) {
+      @if (current(); as item) {
         @for (i of [1, 2]; track i) {
           @if (i <= behind()) {
             <div aria-hidden="true" class="absolute inset-x-0 top-0 h-full origin-bottom rounded-[28px] border border-edge bg-panel"
@@ -24,39 +24,53 @@
         }
 
         <article class="card-leave relative z-10 rounded-[28px] border border-edge bg-raise p-8 shadow-[0_24px_60px_-30px_rgb(0_0_0/0.8)]"
-                 [class.leave-approve]="leaving() === 'approve'" [class.leave-reject]="leaving() === 'reject'"
-                 [class.leave-defer]="leaving() === 'defer'">
-          @if (project(p.projectSlug); as pr) {
-            <p class="flex items-center gap-2 font-semibold" [style.color]="pr.color">
-              <span class="size-2.5 rounded-[4px]" [style.background]="pr.color"></span>{{ pr.name }}
+                 [class.leave-approve]="leaving() === 'approve'" [class.leave-reject]="leaving() === 'reject'" [class.leave-defer]="leaving() === 'defer'">
+          @if (item.kind === 'decision') {
+            @let p = item.p;
+            <p class="flex items-center gap-2 text-[13px] font-semibold">
+              <span class="rounded-full bg-later/15 px-2.5 py-0.5 text-later">Decisão</span>
+              @if (project(p.projectSlug); as pr) { <span [style.color]="pr.color">{{ pr.name }}</span> }
             </p>
-          }
-          <h2 class="mt-2 font-display text-[26px] font-semibold leading-tight selectable">{{ p.title }}</h2>
-          @if (p.body) { <p class="mt-4 text-[15.5px] leading-relaxed text-text/85 whitespace-pre-line selectable">{{ p.body }}</p> }
-          @if (p.nextAction) {
-            <p class="mt-5 rounded-2xl bg-night px-4 py-3 leading-relaxed"><span class="font-semibold text-yes">Se aprovar:</span> {{ p.nextAction }}</p>
-          }
-
-          <ul class="mt-5 flex flex-wrap gap-2 text-[13px] text-mute" aria-label="Detalhes">
-            @if (p.tier !== null) {
-              <li class="rounded-full border px-3 py-1" [class]="p.tier === 2 ? 'border-no text-no' : 'border-edge'">{{ risk[p.tier] }}</li>
+            <h2 class="mt-3 font-display text-[26px] font-semibold leading-tight selectable">{{ p.title }}</h2>
+            @if (p.body) { <p class="mt-4 text-[15.5px] leading-relaxed text-text/85 whitespace-pre-line selectable">{{ p.body }}</p> }
+            @if (p.nextAction) {
+              <p class="mt-5 rounded-2xl bg-night px-4 py-3 leading-relaxed"><span class="font-semibold text-yes">Se aprovar:</span> {{ p.nextAction }}</p>
             }
-            @if (p.attentionMin) { <li class="rounded-full border border-edge px-3 py-1">~{{ p.attentionMin }} min seus</li> }
-            <li class="rounded-full border border-edge px-3 py-1">{{ source(p.source) }}</li>
-          </ul>
+            <ul class="mt-5 flex flex-wrap gap-2 text-[13px] text-mute" aria-label="Detalhes">
+              @if (p.tier !== null) { <li class="rounded-full border px-3 py-1" [class]="p.tier === 2 ? 'border-no text-no' : 'border-edge'">{{ risk[p.tier] }}</li> }
+              <li class="rounded-full border border-edge px-3 py-1">{{ source(p.source) }}</li>
+            </ul>
+          } @else {
+            @let i = item.i;
+            <p class="flex items-center gap-2 text-[13px] font-semibold">
+              <span class="rounded-full bg-frost/15 px-2.5 py-0.5 text-frost">Ideia</span>
+              <span class="text-mute">{{ i.author === 'gustavo' ? 'sua' : 'sugerida por um agente' }}, {{ i.createdAt | ago }}</span>
+            </p>
+            <h2 class="mt-3 font-display text-[26px] font-semibold leading-tight selectable">{{ i.title }}</h2>
+            @if (i.body) { <p class="mt-4 max-h-64 overflow-y-auto text-[15.5px] leading-relaxed text-text/85 whitespace-pre-line selectable">{{ i.body }}</p> }
+            <div class="mt-5 flex items-center gap-3">
+              @if (project(i.projectSlug); as pr) {
+                <span class="flex items-center gap-2 font-semibold" [style.color]="pr.color"><app-project-avatar [project]="pr" [size]="20" />{{ pr.name }}</span>
+              } @else {
+                <app-project-select class="w-72" [value]="pickSlug()" (valueChange)="pickSlug.set($event)" noneLabel="Escolha o projeto…" />
+              }
+            </div>
+            <p class="mt-4 rounded-2xl bg-night px-4 py-3 text-[14px] leading-relaxed text-mute">
+              <span class="font-semibold text-yes">Se aprovar:</span> vira insumo do backlog do projeto. Quando você pedir, o gestor do projeto quebra em tarefas.</p>
+          }
 
           <div class="mt-8 flex gap-2">
             <button type="button" (click)="decide('reject')" class="flex-1 rounded-full border-2 border-edge py-3.5 font-semibold text-no hover:border-no">
-              Não <kbd class="ml-1 text-xs opacity-60">N</kbd></button>
+              {{ item.kind === 'idea' ? 'Descartar' : 'Não' }} <kbd class="ml-1 text-xs opacity-60">N</kbd></button>
             <button type="button" (click)="decide('defer')" class="flex-1 rounded-full border-2 border-edge py-3.5 font-semibold text-later hover:border-later">
               Depois <kbd class="ml-1 text-xs opacity-60">D</kbd></button>
             <button type="button" (click)="decide('approve')" class="flex-[1.6] rounded-full bg-yes py-3.5 font-semibold text-night hover:brightness-110">
               Aprovar <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
           </div>
         </article>
-      } @else if (proposals.loaded()) {
+      } @else if (proposals.loaded() && ideas.loaded()) {
         <div class="rounded-[28px] border-2 border-dashed border-edge px-6 py-14 text-center text-mute">
-          Inbox limpa. Anote a próxima ideia ao lado.
+          Nada para triar. Anote uma ideia ao lado ou peça ao gestor de um projeto para planejar.
         </div>
       }
     </div>
@@ -74,31 +88,37 @@
           <app-project-select class="min-w-0 flex-1" [value]="projectSlug()" (valueChange)="projectSlug.set($event)" noneLabel="Sem projeto" />
           <button class="btn btn-primary" [disabled]="!title().trim()">Anotar</button>
         </div>
-        @if (captureError()) { <p role="alert" class="text-[13px] text-no">{{ captureError() }}</p> }
+        <p class="px-1 text-[12px] text-faint">Entra na triagem. Ideias suas também passam por aqui: aprovar é dizer "isso entra no rumo".</p>
       </div>
     </form>
 
-    <section aria-labelledby="aprovadas">
+    <section aria-labelledby="gestor">
       <div class="mb-3 flex items-baseline justify-between">
-        <h2 id="aprovadas" class="font-display text-xl font-semibold">Viraram tarefas</h2>
-        <a routerLink="/backlog" class="text-[13px] text-frost hover:underline">Abrir quadro</a>
+        <h2 id="gestor" class="font-display text-xl font-semibold">Aprovadas, esperando o gestor</h2>
+        <a routerLink="/ideias" class="text-[13px] text-frost hover:underline">Todas as ideias</a>
       </div>
-      @for (t of approvedTasks(); track t.id) {
-        <div class="mb-2 rounded-2xl border border-edge bg-panel px-4 py-3">
-          @if (project(t.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
-          <p class="leading-snug">{{ t.title }}</p>
-          <div class="mt-2.5">
-            @if (t.column === 'doing') {
-              <span class="flex items-center gap-1.5 text-[13px] text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>Agente trabalhando</span>
-            } @else if (t.column === 'review') {
-              <span class="text-[13px] text-frost">Em revisão{{ t.prUrl ? ', PR aberto' : '' }}</span>
-            } @else {
-              <button type="button" class="btn btn-sm" (click)="toAgent(t)"><app-icon name="agent" [size]="15" />Mandar para um agente</button>
-            }
+      @for (g of waiting(); track g.slug) {
+        @if (project(g.slug); as pr) {
+          <div class="mb-2 rounded-2xl border border-edge bg-panel px-4 py-3">
+            <div class="flex items-center gap-2">
+              <app-project-avatar [project]="pr" [size]="20" />
+              <span class="flex-1 font-semibold">{{ pr.name }}</span>
+              @if (planned()[g.slug]) {
+                <a routerLink="/execucoes" [queryParams]="{ run: planned()[g.slug] }" class="text-[13px] text-yes hover:underline">Gestor trabalhando</a>
+              } @else {
+                <button type="button" class="btn btn-sm" (click)="plan(g.slug)" [disabled]="direction.planning()[g.slug]"
+                        title="O gestor lê o rumo e as ideias aprovadas e organiza o backlog (não executa tarefas)">
+                  <app-icon name="kanban" [size]="14" />Planejar backlog</button>
+              }
+            </div>
+            <ul class="mt-2 space-y-0.5 text-[13px] text-mute">
+              @for (i of g.list.slice(0, 4); track i.id) { <li class="truncate">· {{ i.title }}</li> }
+              @if (g.list.length > 4) { <li>e mais {{ g.list.length - 4 }}</li> }
+            </ul>
           </div>
-        </div>
+        }
       } @empty {
-        <p class="text-mute">Aprovar uma decisão cria uma tarefa em "A fazer", pronta para um agente.</p>
+        <p class="text-mute">Nenhuma ideia aprovada esperando. Aprove na triagem e peça ao gestor para planejar.</p>
       }
     </section>
   </aside>

@@ -14,12 +14,6 @@
               {{ statusLabel[s] }}</button>
           }
         </div>
-        <button type="button" [attr.aria-pressed]="p.autopilot" (click)="dialogs.autopilot.set(p.slug)"
-                class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold transition"
-                [class]="p.autopilot ? 'border-[#B48CFF]/50 bg-[#B48CFF]/15 text-[#C6A6FF]' : 'border-edge text-faint hover:text-mute'"
-                [title]="p.autopilot ? 'Direção: ' + p.autopilotBrief : 'Ligar o piloto automático: diga para onde levar o projeto'">
-          <app-icon name="night" [size]="13" [fill]="p.autopilot" />Piloto automático {{ p.autopilot ? 'ligado' : 'desligado' }}
-        </button>
         </div>
       </div>
       <div class="flex shrink-0 flex-wrap justify-end gap-2">
@@ -50,7 +44,7 @@
   </header>
 
   <div class="relative min-h-0 flex-1">
-    @if (tab() === 'resumo') { <app-summary [project]="p" /> }
+    @if (tab() === 'rumo') { <app-summary [project]="p" /> }
     @if (tab() === 'contexto') { <app-context-view class="absolute inset-0" [slug]="p.slug" (openFile)="openFile($event)" /> }
     @if (tab() === 'backlog') {
       <div class="flex h-full flex-col px-8 pt-5 pb-5">

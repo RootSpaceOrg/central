@@ -9,12 +9,14 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 // dentro do app: o require de web-tree-sitter acha o node_modules
 const dir = mkdtempSync(join(root, '.ctx-check-'));
 await build({
-  entryPoints: { extract: join(root, 'electron/context/extract.ts'), rank: join(root, 'electron/context/rank.ts') },
+  entryPoints: { extract: join(root, 'electron/context/extract.ts'), rank: join(root, 'electron/context/rank.ts'),
+    view: join(root, 'src/app/modules/project/pages/project-page/components/context/code-view.ts') },
   outdir: dir, bundle: true, platform: 'node', format: 'cjs', external: ['web-tree-sitter'], logLevel: 'error',
 });
 const require = createRequire(join(root, 'package.json'));
 const x = require(join(dir, 'extract.js'));
 const r = require(join(dir, 'rank.js'));
+const v = require(join(dir, 'view.js'));
 rmSync(dir, { recursive: true, force: true });
 
 const ok = (cond, msg) => { if (!cond) throw new Error(msg); };
@@ -83,4 +85,15 @@ const pr = r.ppr(5, [[0, 1, 1], [1, 2, 1], [3, 4, 1], [2, 0, 1]], new Map([[3, 1
 ok(pr[4] > pr[2], 'ppr segue a semente');
 ok(Math.abs(pr.reduce((a, b) => a + b, 0) - 1) < 1e-6, 'ppr soma 1');
 ok(x.normalizeRoute('https://api.x.com/v1/:id?x=1') === '/v1/{}', 'rota normalizada');
+// mapa por pastas: raiz mostra repositórios; dentro de uma pasta, subpastas viram caixas e o resto do projeto só aparece se ligado
+const node = (repo, path, lang = 'ts') => ({ key: `p/${repo}:${path}`, kind: 'file', label: path.split('/').pop(), repo, path, lang, rank: 1, defs: 1, facts: 0, touches: 0 });
+const g = { nodes: [node('web', 'src/a.ts'), node('web', 'src/x/b.ts'), node('web', 'src/x/c.ts'), node('api', 'h.py', 'py'), node('api', 'z.py', 'py')],
+  edges: [{ source: 'p/web:src/a.ts', target: 'p/web:src/x/b.ts', kinds: ['imports'], weight: 1 }, { source: 'p/web:src/x/c.ts', target: 'p/api:h.py', kinds: ['http_calls'], weight: 1 }] };
+const top = v.buildView(g, []);
+ok(top.nodes.map(n => n.id).sort().join() === 'dir:api,dir:web', `raiz = repositórios: ${top.nodes.map(n => n.id)}`);
+const src = v.buildView(g, ['web', 'src']);
+ok(src.nodes.some(n => n.id === 'p/web:src/a.ts') && src.nodes.some(n => n.id === 'dir:web/src/x' && n.label.includes('2')), `pasta: ${src.nodes.map(n => n.id)}`);
+ok(src.edges.some(e => e.source === 'p/web:src/a.ts' && e.target === 'dir:web/src/x'), 'ligação até a subpasta');
+ok(src.nodes.some(n => n.id === 'dir:api' && n.label.startsWith('↗')) && src.edges.some(e => e.target === 'dir:api' && e.color === '#B48CFF'), 'área de fora ligada (rota/stack)');
+ok(!v.buildView({ nodes: g.nodes, edges: [] }, ['web', 'src']).nodes.some(n => n.id === 'dir:api'), 'área de fora sem ligação some');
 console.log('ok');

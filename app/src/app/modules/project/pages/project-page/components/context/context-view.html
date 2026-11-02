@@ -46,41 +46,30 @@
     </div>
 
     @if (pane() === 'grafo') {
-      <div>
-        <p class="mb-1.5 text-[12px] font-semibold text-faint">Detalhe</p>
-        <div class="flex rounded-lg border border-edge p-0.5" role="radiogroup" aria-label="Nível de detalhe">
-          @for (d of [{ v: 0, l: 'Arquivos' }, { v: 1, l: 'Pastas' }, { v: 2, l: 'Pastas 2' }, { v: 3, l: '3' }]; track d.v) {
-            <button type="button" role="radio" [attr.aria-checked]="depth() === d.v" (click)="depth.set(d.v); selected.set(null)"
-                    class="flex-1 rounded-md py-1 text-[12px]" [class]="depth() === d.v ? 'bg-raise font-semibold text-text' : 'text-mute hover:text-text'">{{ d.l }}</button>
-          }
-        </div>
+      <div class="rounded-xl bg-night/60 px-3 py-2.5 text-[12.5px] leading-relaxed text-mute">
+        Clique numa <b class="text-text">pasta</b> para entrar nela; num <b class="text-text">arquivo</b> para ver o que ele usa e quem usa ele.
+        Áreas com <b class="text-text">↗</b> ficam fora da pasta atual e aparecem só quando se ligam a ela.
       </div>
       <div>
         <p class="mb-1.5 text-[12px] font-semibold text-faint">Camada</p>
         <div class="grid gap-1" role="radiogroup" aria-label="Camada">
-          @for (l of [{ v: 'code', l: 'Código', h: 'cor por ' + (colorBy() === 'repo' ? 'repositório' : 'comunidade') }, { v: 'memory', l: 'Memória', h: 'arquivos com fatos ligados' }, { v: 'agent', l: 'Agentes', h: 'o que leram e editaram (30 dias)' }]; track l.v) {
+          @for (l of [{ v: 'code', l: 'Código', h: 'pastas por área, arquivos por linguagem' }, { v: 'memory', l: 'Memória', h: 'arquivos com fatos ligados' }, { v: 'agent', l: 'Agentes', h: 'o que leram e editaram (30 dias)' }]; track l.v) {
             <button type="button" role="radio" [attr.aria-checked]="layer() === l.v" (click)="layer.set($any(l.v))"
                     class="flex items-baseline gap-2 rounded-lg border px-3 py-1.5 text-left text-[13px]"
                     [class]="layer() === l.v ? 'border-frost bg-frost/10' : 'border-edge hover:border-faint'">
               <span class="font-semibold">{{ l.l }}</span><span class="text-[11.5px] text-faint">{{ l.h }}</span></button>
           }
         </div>
-        @if (layer() === 'code') {
-          <button type="button" class="mt-1.5 text-[12px] text-frost hover:underline" (click)="colorBy.set(colorBy() === 'repo' ? 'community' : 'repo')">
-            Colorir por {{ colorBy() === 'repo' ? 'comunidade (módulos que conversam entre si)' : 'repositório' }}</button>
-        }
+
       </div>
-      @if (layer() === 'code' && colorBy() === 'repo') {
-        <div>
-          <p class="mb-1.5 text-[12px] font-semibold text-faint">Repositórios</p>
-          <ul class="space-y-1">
-            @for (r of repos(); track r.name) {
-              <li class="flex items-center gap-2 text-[12.5px]"><span class="size-2.5 shrink-0 rounded-full" [style.background]="r.color"></span>
-                <span class="min-w-0 flex-1 truncate">{{ r.name }}</span><span class="text-faint">{{ r.files }}</span></li>
-            }
-          </ul>
-        </div>
-      }
+      <div>
+        <p class="mb-1.5 text-[12px] font-semibold text-faint">Arquivos</p>
+        <ul class="grid grid-cols-2 gap-1 text-[12px] text-mute">
+          @for (l of [{ c: '#5B8DEF', l: 'TypeScript' }, { c: '#3FBF8A', l: 'Python' }, { c: '#B48CFF', l: 'Terraform / rota' }, { c: '#F58C84', l: 'HTML' }]; track l.l) {
+            <li class="flex items-center gap-1.5"><span class="size-2.5 rounded-full" [style.background]="l.c"></span>{{ l.l }}</li>
+          }
+        </ul>
+      </div>
       <div>
         <p class="mb-1.5 text-[12px] font-semibold text-faint">Ligações</p>
         <ul class="space-y-1">
@@ -100,7 +89,7 @@
       <div class="grid-bg absolute inset-0"></div>
       @if (data(); as d) {
         @if (d.nodes.length) {
-          <app-graph-canvas class="absolute inset-0" [data]="d" [depth]="depth()" [colorBy]="colorBy()" [layer]="layer()" [selected]="selected()" (picked)="pick($event)" />
+          <app-code-map class="absolute inset-0" [data]="d" [scope]="scope()" [layer]="layer()" [selected]="selected()" (picked)="pick($event)" (enter)="open_($event)" />
         } @else {
           <div class="absolute inset-0 grid place-items-center text-center text-mute">
             <div><p class="font-display text-lg text-text">Nada indexado ainda</p>
@@ -109,32 +98,27 @@
           </div>
         }
       }
+      <nav class="absolute top-3 left-3 flex max-w-[60%] flex-wrap items-center gap-1 rounded-xl border border-edge bg-panel/90 px-2 py-1.5 text-[13px] backdrop-blur" aria-label="Pasta atual">
+        <button type="button" class="rounded-md px-1.5 py-0.5 hover:bg-raise" [class]="crumbs().length ? 'text-mute' : 'font-semibold text-text'" (click)="open_([])">Projeto</button>
+        @for (c of crumbs(); track $index; let last = $last) {
+          <span class="text-faint">/</span>
+          <button type="button" class="truncate rounded-md px-1.5 py-0.5 hover:bg-raise" [class]="last ? 'font-semibold text-text' : 'text-mute'" (click)="open_(c.scope)">{{ c.name }}</button>
+        }
+        <span class="ml-2 text-[11.5px] text-faint">{{ here().folders }} pastas · {{ here().files }} arquivos</span>
+        @if (crumbs().length) {
+          <button type="button" class="ml-1 rounded-md px-1.5 py-0.5 text-[12px] text-frost hover:bg-raise" (click)="open_(scope().slice(0, -1))">↑ subir</button>
+        }
+      </nav>
       <div class="absolute bottom-4 left-4 flex gap-1 rounded-xl border border-edge bg-panel/90 p-1 backdrop-blur">
         <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="zoom(1.5)" aria-label="Aproximar"><app-icon name="plus" [size]="14" /></button>
         <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="zoom(1 / 1.5)" aria-label="Afastar"><span class="text-[16px] leading-none">−</span></button>
-        <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="resetView(); selected.set(null)" aria-label="Ver tudo"><app-icon name="focus" [size]="13" /></button>
+        <button type="button" class="grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" (click)="resetView()" aria-label="Enquadrar"><app-icon name="focus" [size]="13" /></button>
       </div>
 
       <!-- painel do nó -->
       @if (selected(); as sel) {
         <section class="absolute top-3 right-3 bottom-3 flex w-[min(400px,44%)] flex-col overflow-hidden rounded-2xl border border-edge bg-panel/95 shadow-2xl backdrop-blur" aria-label="Detalhes">
-          @if (sel.startsWith('dir:')) {
-            <header class="flex items-start gap-2 border-b border-edge p-4">
-              <app-icon name="folder" [size]="18" class="mt-0.5 text-later" />
-              <div class="min-w-0 flex-1"><p class="truncate font-semibold">{{ sel.split(':').slice(1).join(':') }}/</p>
-                <p class="text-[12px] text-mute">{{ groupFiles().length }} arquivos. Clique para ver um.</p></div>
-              <button type="button" class="rounded-md p-1 text-faint hover:bg-raise hover:text-text" (click)="selected.set(null)" aria-label="Fechar"><app-icon name="close" [size]="14" /></button>
-            </header>
-            <ul class="min-h-0 flex-1 overflow-y-auto p-2">
-              @for (f of groupFiles(); track f.key) {
-                <li><button type="button" (click)="depth.set(0); selected.set(f.key)" class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-raise">
-                  <span class="min-w-0 flex-1 truncate">{{ f.path }}</span>
-                  @if (f.facts) { <span class="text-[11px] text-later">◆ {{ f.facts }}</span> }
-                  <span class="text-[11px] text-faint">{{ f.defs }}</span></button></li>
-              }
-            </ul>
-          } @else {
-            @if (detail(); as d) {
+          @if (detail(); as d) {
               <header class="border-b border-edge p-4">
                 <div class="flex items-start gap-2">
                   <span class="mt-0.5 rounded-md bg-raise px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-mute">{{ d.kind }}</span>
@@ -157,9 +141,9 @@
                         <p class="mb-1 text-[11.5px] font-semibold text-faint">{{ side.l }} ({{ side.items.length }})</p>
                         <ul class="space-y-0.5">
                           @for (n of side.items.slice(0, 40); track n.key) {
-                            <li><button type="button" (click)="selected.set(n.key)" [title]="n.kinds.join(', ') + (n.confidence < 0.8 ? ' · heurística' : '')"
+                            <li><button type="button" (click)="select(n.key)" [title]="n.kinds.join(', ') + (n.confidence < 0.8 ? ' · heurística' : '')"
                                         class="block w-full truncate rounded px-1.5 py-0.5 text-left text-[12px] hover:bg-raise" [class.text-mute]="n.confidence < 0.8">
-                              {{ n.label.split('/').pop() }}</button></li>
+                              {{ n.key.includes('/route:') ? n.label : n.label.split('/').pop() }}</button></li>
                           }
                         </ul>
                       </div>
@@ -206,9 +190,8 @@
                   </div>
                 }
               </div>
-            } @else {
-              <p class="p-6 text-mute">Carregando…</p>
-            }
+          } @else {
+            <p class="p-6 text-mute">Carregando…</p>
           }
         </section>
       }
@@ -247,7 +230,7 @@
                 <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-faint">
                   <span>{{ f.author }} · {{ f.source === 'claude_auto_memory' ? 'memória do Claude' : f.source }} · {{ f.createdAt | ago }}</span>
                   @for (l of f.links.slice(0, 3); track l) {
-                    <button type="button" class="font-mono text-frost/80 hover:underline" (click)="pane.set('grafo'); depth.set(0); selected.set(l.split('#')[0])">{{ short(l) }}</button>
+                    <button type="button" class="font-mono text-frost/80 hover:underline" (click)="select(l)">{{ short(l) }}</button>
                   }
                   <span class="flex-1"></span>
                   @if (!f.retired) {

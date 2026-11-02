@@ -4,15 +4,22 @@ Pesquisa de base: `reports/Central orquestradora para dev solo.md`.
 
 ## Princípio
 
-**A Central trabalha, você julga.** Sem perguntar o humor do dia:
-- **Com gás**: abre o projeto e cria sessões (conversa com o Claude, Claude Code, PowerShell, CMD, Git Bash), como no Orca.
-- **Sem gás**: o Início já mostra o que espera você (PRs para revisar, decisões, falhas). Aprovar é o trabalho.
-- **Inquietação = piloto automático**: de madrugada, cada projeto ligado pega a tarefa do topo de "A fazer" e um agente
-  leva até um PR rascunho. Entrega trabalho pronto, não mais propostas.
-  Travas: só tarefas que você escreveu ou aprovou; nada novo enquanto houver uma em revisão; pula com a cota alta.
+**Você é o gestor: aponta o caminho e aprova. Os agentes fazem quando você pede.**
 
-Cada tipo de projeto tem seu gatilho: **evoluir** (Ativo + piloto) é proativo, **suporte** (Manutenção) só reage
-a sinais (CI, Sentry, issues), **automações** (rotinas de agentes) aparecem no Início com a saúde de cada uma.
+```
+Você (gestor) ── aponta o rumo, faz a triagem, pede
+├─ Agente Central ── braço direito: conversa, mantém rumos, triagem junto, delega
+└─ Projeto
+   ├─ Rumo ........ para onde vamos (objetivo, foco agora, não fazer); você escreve, agentes propõem ajuste; com histórico
+   ├─ Ideias ...... insumo (suas ou de agentes) → triagem → aprovadas = issues
+   ├─ Tarefas ..... pedaços executáveis, nascem das ideias aprovadas (o gestor do projeto quebra)
+   ├─ Conhecimento  memória + índice de código: como as coisas são
+   └─ Agentes ..... gestor do projeto (planeja a pedido), executores (tarefa → PR), suporte/Sentry (rotinas)
+```
+
+- **Com gás**: abre o projeto e cria sessões; ou a Grade com várias sessões de projetos diferentes.
+- **Gestão**: Triagem (decisões + ideias novas, A/D/N) → rumo de cada projeto → "Planejar backlog" (gestor) → turno ou agentes.
+- Nada roda sozinho sem pedido além das rotinas que você ligou (Sentry, radar…) e dos turnos que você marcou.
 
 ## Arquitetura
 
@@ -126,6 +133,19 @@ a sinais (CI, Sentry, issues), **automações** (rotinas de agentes) aparecem no
 - **Grade**: várias sessões de uma vez, "+" no painel, minimapa com prévia ao arrastar, animação e fundo quadriculado.
 - **Piloto automático com direção**: para onde levar o projeto + autonomia (só aprovadas, propor, planejar e fazer).
 - Ícone novo; correção ao editar projeto com imagem.
+
+## Feito (v0.11)
+
+- **Rumo do projeto** (aba Rumo, no lugar do Resumo): texto curto com objetivo/foco/não fazer, histórico de quem mudou e por quê;
+  vai em todo prompt de agente do projeto; aparece nos cartões do Início.
+- **Gestor do projeto sob demanda** ("Planejar backlog", no Início, no projeto e na triagem; ou pelo chat via `plan_backlog`): lê rumo,
+  ideias aprovadas, backlog, memória e código; quebra ideias em tarefas ligadas a elas e reordena pelo rumo. Não executa.
+- **Ideias com ciclo de vida**: para triar → aprovadas → em andamento (com progresso das tarefas) → feitas; ou descartadas.
+- **Triagem** (no lugar de Decisões): decisões e ideias novas numa fila só, uma de cada vez.
+- **Piloto automático removido**: agentes agem quando você pede (botão, chat, turno, rotina).
+- **Mapa do código** (aba Contexto) com Cytoscape e navegação por pastas: cada nível mostra só o conteúdo de uma pasta, áreas de fora
+  só quando se ligam; grade de cartões nos níveis só de pastas.
+- MCP: `get_direction`, `update_direction`, `plan_backlog`; ideias com status e `create_task` com `idea_id`.
 
 ## Próximos marcos
 

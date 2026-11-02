@@ -90,7 +90,7 @@ export class CommandPalette {
       { section: 'Ações', label: 'Preferências', icon: 'settings', run: () => this.dialogs.settings.set(true) },
       { section: 'Ações', label: 'Atualizar a Central', icon: 'download', run: () => this.dialogs.update.set(true) },
       ...[
-        ['Início', '/', 'home'], ['Visão geral', '/visao-geral', 'overview'], ['Decisões', '/decisoes', 'inbox'], ['Ideias', '/ideias', 'ideas'],
+        ['Início', '/', 'home'], ['Visão geral', '/visao-geral', 'overview'], ['Triagem', '/triagem', 'inbox'], ['Ideias', '/ideias', 'ideas'],
         ['Backlog', '/backlog', 'kanban'], ['Agentes', '/agentes', 'agent'], ['Execuções', '/execucoes', 'activity'], ['Rotinas', '/rotinas', 'routine'],
       ].map(([label, url, icon]) => ({ section: 'Telas', label, icon: icon as IconName, run: go(url) })),
       ...this.projects.living().map(p => ({ section: 'Projetos', label: p.name, avatar: p, hint: p.lastCommitSubject ?? undefined, run: go(`/projetos/${p.slug}`) })),

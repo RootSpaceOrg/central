@@ -20,9 +20,9 @@ import { EditorService } from '../../services/editor/editor.service';
 import { CODE_TAB } from '../../../../shared/services/sessions/sessions.service';
 import { Summary } from './components/summary/summary';
 
-type Tab = 'sessoes' | 'resumo' | 'backlog' | 'contexto' | 'agentes';
+type Tab = 'sessoes' | 'rumo' | 'backlog' | 'contexto' | 'agentes';
 const TABS = [
-  { id: 'sessoes', label: 'Sessões', icon: 'terminal' }, { id: 'resumo', label: 'Resumo', icon: 'summary' },
+  { id: 'sessoes', label: 'Sessões', icon: 'terminal' }, { id: 'rumo', label: 'Rumo', icon: 'flag' },
   { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'contexto', label: 'Contexto', icon: 'graph' }, { id: 'agentes', label: 'Agentes', icon: 'agent' },
 ] as const;
 
@@ -63,7 +63,7 @@ export class ProjectPage {
       const q = this.query();
       const slug = this.slug();
       untracked(() => {
-        const aba = q?.get('aba') as Tab | null;
+        const aba = (q?.get('aba') === 'resumo' ? 'rumo' : q?.get('aba')) as Tab | null;
         const nova = q?.get('nova') as SessionKind | null;
         this.tab.set(nova ? 'sessoes' : TABS.some(t => t.id === aba) ? aba! : 'sessoes');
         if (nova) {

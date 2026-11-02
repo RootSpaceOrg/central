@@ -112,7 +112,7 @@ db.exec(`
     project_slug text references projects on delete set null,
     title        text not null,
     body         text,
-    status       text not null default 'new' check (status in ('new','promoted','archived')),
+    status       text not null default 'new' check (status in ('new','approved','doing','done','archived')),
     source       text not null,
     source_ref   text not null,
     task_id      integer,
@@ -210,6 +210,17 @@ db.exec(`
     created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
   );
 
+  -- rumo do projeto: para onde vamos (objetivo, foco do momento, o que não fazer). Cada versão fica guardada.
+  create table if not exists directions (
+    id           integer primary key autoincrement,
+    project_slug text not null references projects on delete cascade,
+    text         text not null,
+    author       text not null,
+    note         text,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+  create index if not exists directions_by_project on directions(project_slug, id);
+
   -- memória do projeto: fatos duráveis (decisão, convenção, armadilha…) com proveniência, ligados a nós do índice de código
   create table if not exists facts (
     id             integer primary key autoincrement,
@@ -259,6 +270,7 @@ for (const [table, column, type] of [
   ['runs', 'agent_id', 'integer'], ['runs', 'session_id', 'text'], ['routines', 'agent_id', 'integer'],
   ['chats', 'agent_id', 'integer'], ['chats', 'cwd', 'text'], ['chats', 'project_slug', 'text'],
   ['projects', 'autopilot', 'integer not null default 0'],
+  ['ideas', 'author', "text not null default 'gustavo'"], ['ideas', 'approved_at', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
@@ -288,6 +300,31 @@ for (const table of ['runs', 'routines']) {
     throw e;
   } finally {
     db.exec('pragma foreign_keys = on');
+  }
+}
+
+// v0.11: ideias ganham ciclo de vida (nova → aprovada → em andamento → feita; ou descartada). O CHECK antigo só
+// aceitava new/promoted/archived: recria a tabela com o novo CHECK; "promoted" (já virou tarefa) vira "doing".
+{
+  const ddl = (db.prepare(`select sql from sqlite_master where type = 'table' and name = 'ideas'`).get() as { sql: string }).sql;
+  if (ddl.includes("'promoted'")) {
+    const next = ddl.replace(/check \(status in \([^)]*\)\)/i, "check (status in ('new','approved','doing','done','archived'))")
+      .replace(/^CREATE TABLE\s+"?\w+"?/i, 'CREATE TABLE ideas_new');
+    db.exec('pragma foreign_keys = off');
+    db.exec('begin');
+    try {
+      db.exec(next);
+      db.exec(`insert into ideas_new select * from ideas`);
+      db.exec(`update ideas_new set status = 'doing' where status = 'promoted'`);
+      db.exec('drop table ideas');
+      db.exec('alter table ideas_new rename to ideas');
+      db.exec('commit');
+    } catch (e) {
+      db.exec('rollback');
+      throw e;
+    } finally {
+      db.exec('pragma foreign_keys = on');
+    }
   }
 }
 

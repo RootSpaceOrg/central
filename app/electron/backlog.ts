@@ -67,23 +67,43 @@ ${p.next_action ?? ''}`.toLowerCase();
 
 // ---------- ideias ----------
 
-export const listIdeas = () => all<IdeaDto>(`select id, project_slug, title, body, status, source, source_ref, task_id, created_at
-  from ideas order by case status when 'new' then 0 when 'promoted' then 1 else 2 end, created_at desc, id desc`);
+export const listIdeas = () => all<IdeaDto>(`select i.id, i.project_slug, i.title, i.body, i.status, i.source, i.source_ref, i.task_id, i.created_at,
+    i.author, i.approved_at,
+    (select count(*) from tasks t where t.idea_id = i.id) tasks,
+    (select count(*) from tasks t where t.idea_id = i.id and t."column" = 'done') tasks_done
+  from ideas i order by case i.status when 'new' then 0 when 'approved' then 1 when 'doing' then 2 when 'done' then 3 else 4 end,
+    i.created_at desc, i.id desc`);
 
-export function createIdea(input: NewIdeaInput & { source?: string }): IdeaDto {
+const IDEA_STATUS = ['new', 'approved', 'doing', 'done', 'archived'];
+
+/** Ideia nova vai para a triagem. author = 'gustavo' ou o nome do agente que sugeriu. */
+export function createIdea(input: NewIdeaInput & { source?: string; author?: string }): IdeaDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Escreva a ideia.');
-  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref) values (?,?,?,?,?)`,
-    input.project_slug || null, title, input.body?.trim() || null, input.source ?? 'manual', `${Date.now()}-${Math.random()}`);
-  return get<IdeaDto>('select * from ideas where id = ?', Number(lastInsertRowid))!;
+  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref, author) values (?,?,?,?,?,?)`,
+    input.project_slug || null, title, input.body?.trim() || null, input.source ?? 'manual', `${Date.now()}-${Math.random()}`, input.author ?? 'gustavo');
+  return listIdeas().find(i => i.id === Number(lastInsertRowid))!;
 }
 
 export function updateIdea(id: number, patch: IdeaPatch): void {
   const allowed = ['title', 'body', 'project_slug', 'status'] as const;
-  const fields = allowed.filter(k => k in patch);
-  if (patch.status && !['new', 'promoted', 'archived'].includes(patch.status)) throw new Error('Status inválido.');
+  const fields = allowed.filter(k => k in patch && patch[k] !== undefined);
+  if (patch.status && !IDEA_STATUS.includes(patch.status)) throw new Error('Status inválido.');
+  if (patch.status === 'approved') {
+    const slug = patch.project_slug ?? get<{ p: string | null }>('select project_slug p from ideas where id = ?', id)?.p;
+    if (!slug) throw new Error('Diga de qual projeto é a ideia antes de aprovar.');
+  }
   if (!fields.length) return;
   run(`update ideas set ${fields.map(k => `${k} = ?`).join(', ')} where id = ?`, ...fields.map(k => (patch[k] ?? null) as string | null), id);
+  if (patch.status === 'approved') run('update ideas set approved_at = coalesce(approved_at, ?) where id = ?', now(), id);
+}
+
+/** Ideia em andamento termina sozinha quando todas as tarefas ligadas a ela chegam em Feito. */
+export function syncIdeaProgress(ideaId: number | null): void {
+  if (!ideaId) return;
+  const c = get<{ n: number; done: number }>(`select count(*) n, sum("column" = 'done') done from tasks where idea_id = ?`, ideaId)!;
+  if (c.n && c.n === c.done) run(`update ideas set status = 'done' where id = ? and status in ('approved','doing')`, ideaId);
+  else if (c.n) run(`update ideas set status = 'doing' where id = ? and status in ('approved','done')`, ideaId);
 }
 
 export function promoteIdea(id: number, projectSlug: string): TaskDto {
@@ -92,7 +112,7 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
   if (idea.task_id) throw new Error('Essa ideia já virou tarefa.');
   const task = createTask({ project_slug: projectSlug, repo_path: null, title: idea.title, body: idea.body, column: 'backlog', priority: 2 });
   run('update tasks set idea_id = ? where id = ?', id, task.id);
-  run(`update ideas set status = 'promoted', task_id = ?, project_slug = ? where id = ?`, task.id, projectSlug, id);
+  run(`update ideas set status = 'doing', task_id = ?, project_slug = ?, approved_at = coalesce(approved_at, ?) where id = ?`, task.id, projectSlug, now(), id);
   return getTask(task.id);
 }
 
@@ -112,7 +132,7 @@ export const listTasks = (slug: string | null) => all<TaskDto>(`${TASK_SELECT}
   where (? is null and p.status <> 'dead' or t.project_slug = ?)
   order by t.position, t.priority, t.created_at desc`, slug, slug);
 
-export function createTask(input: NewTaskInput & { proposal_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
+export function createTask(input: NewTaskInput & { proposal_id?: number | null; idea_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Dê um título à tarefa.');
   if (!get('select 1 from projects where slug = ?', input.project_slug)) throw new Error('Escolha um projeto.');
@@ -123,7 +143,13 @@ export function createTask(input: NewTaskInput & { proposal_id?: number | null; 
     input.project_slug, input.repo_path || null, title, input.body?.trim() || null, column,
     Math.min(Math.max(Number(input.priority) || 0, 0), 3), top - 1,
     input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
-  return getTask(Number(lastInsertRowid));
+  const id = Number(lastInsertRowid);
+  if (input.idea_id) {
+    if (!get('select 1 from ideas where id = ?', input.idea_id)) throw new Error('Ideia não encontrada.');
+    run('update tasks set idea_id = ? where id = ?', input.idea_id, id);
+    syncIdeaProgress(input.idea_id);
+  }
+  return getTask(id);
 }
 
 export function updateTask(id: number, patch: TaskPatch): void {
@@ -149,16 +175,19 @@ export function updateTask(id: number, patch: TaskPatch): void {
       run('commit');
     } catch (e) { run('rollback'); throw e; }
   }
+  syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', id)?.i ?? null);
 }
 
 export function deleteTask(id: number): void {
-  run(`update ideas set status = 'new', task_id = null where task_id = ?`, id);
+  // a ideia continua aprovada: a tarefa apagada não era a ideia
+  run(`update ideas set status = 'approved', task_id = null where task_id = ?`, id);
   run('delete from tasks where id = ?', id);
 }
 
 /** Chamado pelos agentes: a tarefa anda no quadro conforme a execução. */
 export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string | null = null): void {
   run(`update tasks set "column" = ?, pr_url = coalesce(?, pr_url), updated_at = ? where id = ?`, column, prUrl, now(), taskId);
+  syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', taskId)?.i ?? null);
 }
 
 /** Tarefas em Revisão cujo PR foi mergeado vão para Feito. Devolve quantas andaram. */
