@@ -2,6 +2,9 @@ import { Component, ElementRef, computed, effect, inject, input, signal, untrack
 
 import { ChatService, ChatSession } from '../../services/chat/chat.service';
 import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
+import { CHAT_MODELS, EFFORTS } from '../../services/agents/agents.service';
+import { ContextMenuService } from '../../services/context-menu/context-menu.service';
+import { LiveService, elapsed } from '../../services/live/live.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
 import { MarkdownPipe } from '../../ui/markdown';
@@ -45,6 +48,15 @@ export class ChatView {
   readonly compact = input(false);
 
   protected readonly prefs = inject(ChatPrefsService);
+  protected readonly live = inject(LiveService);
+  protected readonly showSubs = signal(true);
+  protected readonly since = elapsed;
+  private readonly menu = inject(ContextMenuService);
+  protected readonly modelLabel = computed(() => CHAT_MODELS.find(m => m.value === this.s().model())?.label ?? this.s().model());
+  protected readonly effortLabel = computed(() => {
+    const e = EFFORTS.find(x => x.value === this.s().effort());
+    return e?.value ? e.label : 'Raciocínio';
+  });
   protected readonly text = signal('');
   /** janela: só os últimos itens são desenhados; rolar até o topo traz mais */
   private readonly limit = signal(PAGE);
@@ -109,6 +121,33 @@ export class ChatView {
   }
 
   focus(): void { this.input()?.nativeElement.focus(); }
+
+  /** Menus de modelo e raciocínio abrem acima do botão; a escolha vale para esta conversa e vira o padrão das próximas. */
+  private openAbove(e: MouseEvent, n: number) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return new MouseEvent('click', { clientX: r.left, clientY: Math.max(8, r.top - 8 - n * 34) });
+  }
+
+  protected pickModel(e: MouseEvent): void {
+    const s = this.s();
+    this.menu.open(this.openAbove(e, CHAT_MODELS.length), CHAT_MODELS.map(m => ({
+      label: m.label, hint: s.model() === m.value ? '✓' : m.hint, run: () => this.choose(m.value, s.effort()),
+    })));
+  }
+
+  protected pickEffort(e: MouseEvent): void {
+    const s = this.s();
+    this.menu.open(this.openAbove(e, EFFORTS.length), EFFORTS.map(x => ({
+      label: x.label, hint: s.effort() === x.value ? '✓' : undefined, run: () => this.choose(s.model(), x.value),
+    })));
+  }
+
+  private choose(model: string, effort: string): void {
+    this.s().model.set(model);
+    this.s().effort.set(effort);
+    this.prefs.set({ chatDefaults: { model, effort } });
+    this.input()?.nativeElement.focus();
+  }
 
   protected setText(value: string): void {
     this.text.set(value);

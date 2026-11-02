@@ -78,20 +78,58 @@
   </div>
 </div>
 
+@if (live.chat(chat.current()); as a) {
+  <!-- trabalhando agora: tempo, passo atual e subagentes (como no Orca) -->
+  <section class="border-t border-edge bg-panel/60" [class]="compact() ? 'px-3 py-2' : 'px-6 py-2.5'" aria-live="polite" aria-label="Trabalhando agora">
+    <div class="mx-auto" [style.max-width.px]="compact() ? null : prefs.maxWidth()">
+      <button type="button" class="flex w-full items-center gap-2 text-left text-[12.5px]" (click)="showSubs.set(!showSubs())" [attr.aria-expanded]="showSubs()">
+        <span class="pulse size-2 shrink-0 rounded-full bg-frost"></span>
+        <span class="tabular-nums text-frost">{{ live.since(a.startedAt) }}</span>
+        <span class="min-w-0 flex-1 truncate text-mute">{{ a.step ?? 'Pensando…' }}</span>
+        @if (a.subagents.length) {
+          <span class="shrink-0 text-[#C6A6FF]">{{ live.running(a) }}/{{ a.subagents.length }} subagentes</span>
+          <app-icon name="chevron" [size]="12" class="shrink-0 text-faint transition-transform" [class.rotate-90]="showSubs()" />
+        }
+      </button>
+      @if (showSubs() && a.subagents.length) {
+        <ul class="mt-2 space-y-1">
+          @for (sa of a.subagents; track sa.id) {
+            <li class="flex items-center gap-2 rounded-lg bg-night/70 px-2.5 py-1.5 text-[12px]">
+              @if (sa.finishedAt) { <app-icon name="check" [size]="13" class="shrink-0 text-yes" /> }
+              @else { <span class="size-3 shrink-0 animate-spin rounded-full border-2 border-[#B48CFF] border-t-transparent"></span> }
+              <span class="shrink-0 rounded bg-[#B48CFF]/15 px-1.5 text-[11px] text-[#C6A6FF]">{{ sa.type }}</span>
+              <span class="min-w-0 flex-1 truncate" [title]="sa.description">{{ sa.description }}@if (sa.step) { <span class="text-faint"> · {{ sa.step }}</span> }</span>
+              <span class="shrink-0 tabular-nums text-faint">{{ sa.finishedAt ? since(sa.startedAt, sa.finishedAt) : live.since(sa.startedAt) }} · {{ sa.steps }} passo{{ sa.steps === 1 ? '' : 's' }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </section>
+}
+
 <form class="border-t border-edge" [class]="compact() ? 'p-3' : 'px-6 py-3'" (submit)="$event.preventDefault(); send()">
   <div class="mx-auto" [style.max-width.px]="compact() ? null : prefs.maxWidth()" [style.font-size.px]="prefs.prefs().fontSize">
     @if (chat.error()) { <p role="alert" class="mb-2 px-1 text-[13px] text-no">{{ chat.error() }}</p> }
-    <div class="flex items-end gap-2 rounded-2xl border border-edge bg-night p-2 transition-colors focus-within:border-frost">
-      <textarea #input rows="1" class="max-h-48 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 outline-none placeholder:text-faint"
+    <div class="rounded-2xl border border-edge bg-night p-2 transition-colors focus-within:border-frost">
+      <textarea #input rows="1" class="max-h-48 min-h-9 w-full resize-none bg-transparent px-2 py-1.5 outline-none placeholder:text-faint"
                 [placeholder]="agent ? 'Mensagem para ' + agent.name + '…' : 'Mensagem…'" aria-label="Mensagem" [value]="text()"
                 (input)="setText($any($event.target).value)" (keydown)="onKey($event)" style="field-sizing: content"></textarea>
-      @if (chat.currentBusy()) {
-        <button type="button" class="grid size-9 place-items-center rounded-xl bg-raise text-no transition hover:bg-no/15" (click)="chat.stop()" aria-label="Interromper">
-          <app-icon name="stop" [size]="17" /></button>
-      } @else {
-        <button class="grid size-9 place-items-center rounded-xl bg-frost text-night transition hover:brightness-110 disabled:opacity-40" [disabled]="!text().trim()" aria-label="Enviar">
-          <app-icon name="send" [size]="16" /></button>
-      }
+      <div class="mt-1 flex items-center gap-1">
+        <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-mute hover:bg-raise hover:text-text" (click)="pickModel($event)"
+                [title]="'Modelo desta conversa: ' + modelLabel()" aria-label="Modelo">{{ modelLabel() }}<app-icon name="chevron" [size]="11" class="rotate-90" /></button>
+        <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-mute hover:bg-raise hover:text-text" (click)="pickEffort($event)"
+                title="Nível de raciocínio (quanto o Claude pensa antes de agir)" aria-label="Nível de raciocínio">{{ effortLabel() }}<app-icon name="chevron" [size]="11" class="rotate-90" /></button>
+        <span class="flex-1"></span>
+        @if (chat.currentBusy()) {
+          <span class="size-5 animate-spin rounded-full border-2 border-faint border-t-transparent" aria-hidden="true"></span>
+          <button type="button" class="ml-1 grid size-8 place-items-center rounded-lg bg-text text-night transition hover:brightness-90" (click)="chat.stop()" aria-label="Parar" title="Parar">
+            <span class="size-3 rounded-[3px] bg-night"></span></button>
+        } @else {
+          <button class="grid size-8 place-items-center rounded-lg bg-frost text-night transition hover:brightness-110 disabled:opacity-40" [disabled]="!text().trim()" aria-label="Enviar">
+            <app-icon name="send" [size]="15" /></button>
+        }
+      </div>
     </div>
     <p class="mt-1.5 px-1 text-[11.5px] text-faint">Enter envia, Shift+Enter quebra linha. Usa a cota do seu plano do Claude.</p>
   </div>

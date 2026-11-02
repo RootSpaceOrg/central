@@ -171,15 +171,31 @@
           <button type="button" class="mt-2 text-[13px] text-no hover:underline" (click)="turns.stop(t.id)">Parar turno</button>
         </div>
       }
-      @for (r of runs.active(); track r.id) {
-        <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="mt-2 flex items-center gap-2.5 rounded-xl px-1 py-1.5 hover:bg-raise/50">
-          <span class="pulse size-1.5 rounded-full bg-yes"></span>
-          <span class="min-w-0 flex-1 truncate text-[13.5px]">{{ r.title }}</span>
-          <span class="text-[12px] text-faint">{{ runLabel[r.status] }}</span>
+      <!-- sessões (conversas e Claude Code no terminal) trabalhando, com tempo e subagentes -->
+      @for (w of sessionsWorking(); track w.key) {
+        <a [routerLink]="['/projetos', w.slug]" class="mt-2 block rounded-xl px-1 py-1.5 hover:bg-raise/50">
+          <span class="flex items-center gap-2.5">
+            <img [src]="w.img" alt="" class="size-3.5 shrink-0" />
+            <span class="min-w-0 flex-1 truncate text-[13.5px]">{{ w.title }}</span>
+            <span class="tabular-nums text-[12px] text-frost">{{ live.since(w.since) }}</span>
+          </span>
+          <span class="block truncate pl-6 text-[12px] text-faint">{{ w.project }}@if (w.step) { · {{ w.step }} }@if (w.subs) { · <span class="text-[#C6A6FF]">{{ w.subs }} subagente{{ w.subs > 1 ? 's' : '' }}</span> }</span>
         </a>
-      } @empty {
-        @if (!turns.running().length) { <p class="mt-2 text-[13.5px] text-mute">Nenhum agente trabalhando.</p> }
       }
+      @for (r of runs.active(); track r.id) {
+        @let a = live.run(r.id);
+        <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="mt-2 block rounded-xl px-1 py-1.5 hover:bg-raise/50">
+          <span class="flex items-center gap-2.5">
+            <span class="pulse size-1.5 shrink-0 rounded-full bg-yes"></span>
+            <span class="min-w-0 flex-1 truncate text-[13.5px]">{{ r.title }}</span>
+            <span class="tabular-nums text-[12px] text-faint">{{ a ? live.since(a.startedAt) : runLabel[r.status] }}</span>
+          </span>
+          @if (a && (a.step || live.running(a))) {
+            <span class="block truncate pl-4 text-[12px] text-faint">{{ a.step }}@if (live.running(a); as n) { · <span class="text-[#C6A6FF]">{{ n }} subagente{{ n > 1 ? 's' : '' }}</span> }</span>
+          }
+        </a>
+      }
+      @if (!turns.running().length && !runs.active().length && !sessionsWorking().length) { <p class="mt-2 text-[13.5px] text-mute">Nada trabalhando agora.</p> }
     </section>
 
     <section aria-labelledby="conversar">

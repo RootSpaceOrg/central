@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 
-import { ChatMessageDto } from '../../contract';
+import { ChatMessageDto, ChatOptions } from '../../contract';
 import { IpcService } from '../ipc/ipc.service';
 
 @Injectable({ providedIn: 'root' })
@@ -9,7 +9,9 @@ export class ChatApiService {
 
   list(agentId: number | null) { return this.ipc.invoke('chat:list', agentId); }
   messages(chatId: number) { return this.ipc.invoke('chat:messages', chatId); }
-  send(chatId: number | null, agentId: number, text: string, projectSlug: string | null = null) { return this.ipc.invoke('chat:send', chatId, agentId, text, projectSlug); }
+  send(chatId: number | null, agentId: number, text: string, projectSlug: string | null = null, options: ChatOptions | null = null) {
+    return this.ipc.invoke('chat:send', chatId, agentId, text, projectSlug, options);
+  }
   fromRun(runId: number) { return this.ipc.invoke('chat:fromRun', runId); }
   rename(chatId: number, title: string) { return this.ipc.invoke('chat:rename', chatId, title); }
   stop(chatId: number) { return this.ipc.invoke('chat:stop', chatId); }

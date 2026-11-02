@@ -37,6 +37,20 @@ export const TOOL_SUGGESTIONS: { value: string; label: string }[] = [
 
 export const MODELS = [
   { value: '', label: 'Padrão' }, { value: 'opus', label: 'Opus' }, { value: 'sonnet', label: 'Sonnet' }, { value: 'haiku', label: 'Haiku' },
+  { value: 'fable', label: 'Fable' },
+];
+
+/** Na conversa: apelido → nome com versão (o apelido pega sempre o modelo mais recente da família). */
+export const CHAT_MODELS = [
+  { value: '', label: 'Padrão', hint: 'do agente ou do plano' },
+  { value: 'opus', label: 'Opus 5.5', hint: 'o mais capaz' },
+  { value: 'sonnet', label: 'Sonnet 5.5', hint: 'equilíbrio' },
+  { value: 'haiku', label: 'Haiku 5.5', hint: 'rápido e barato' },
+  { value: 'fable', label: 'Fable 5.1', hint: '' },
+];
+export const EFFORTS = [
+  { value: '', label: 'Padrão' }, { value: 'low', label: 'Baixo' }, { value: 'medium', label: 'Médio' },
+  { value: 'high', label: 'Alto' }, { value: 'xhigh', label: 'Muito alto' }, { value: 'max', label: 'Máximo' },
 ];
 
 const toModel = (d: AgentDto): Agent => ({

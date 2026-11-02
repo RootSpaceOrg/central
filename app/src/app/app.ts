@@ -33,6 +33,8 @@ import { AgentsService } from './shared/services/agents/agents.service';
 import { Router } from '@angular/router';
 import { STATUS_LABEL } from './shared/services/projects/projects.model';
 import { LayoutService } from './shared/services/layout/layout.service';
+import { LiveService } from './shared/services/live/live.service';
+import { SessionsService } from './shared/services/sessions/sessions.service';
 
 const GROUPS: { status: ProjectStatus; label: string }[] = [
   { status: 'active', label: 'Ativos' },
@@ -59,6 +61,8 @@ export class App {
   private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
   protected readonly layout = inject(LayoutService);
+  private readonly live = inject(LiveService);
+  private readonly sessionsService = inject(SessionsService);
 
   protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
     { path: '/', label: 'Início', icon: 'home', exact: true },
@@ -119,7 +123,9 @@ export class App {
   }
 
   protected runningIn(p: Project): boolean {
-    return this.runs.active().some(r => r.projectSlug === p.slug);
+    return this.runs.active().some(r => r.projectSlug === p.slug)
+      || this.live.chats().some(a => this.chat.chats().find(c => c.id === a.ref)?.projectSlug === p.slug)
+      || [...this.live.terminalsBusy().keys()].some(id => this.sessionsService.byId().get(id)?.projectSlug === p.slug);
   }
 
   /** F11: modo foco, a partir da Grade (em outra tela, leva para ela) */

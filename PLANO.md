@@ -157,6 +157,15 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   pintados, mensagens ficam em cache por conversa (trocar de aba não recarrega), rascunho por conversa.
 - **Preferências → Chat das sessões**: tamanho do texto (11–18 px, Ctrl +/−/0) e largura (estreita → toda a área).
 
+## Feito (v0.13)
+
+- **Atividade ao vivo** (como no Orca): cada conversa e execução mostra há quanto tempo está trabalhando, o passo atual e os
+  **subagentes** (tipo, descrição, o que fazem agora, tempo); nas abas, na Grade, no Início ("Trabalhando agora") e na barra lateral.
+  Claude Code no terminal também ("esc to interrupt" na saída). No histórico, passos de subagente ficam recuados e cada um registra
+  quanto durou. Sessões e agentes agora podem usar subagentes (antes a ferramenta não era liberada).
+- **Modelo e raciocínio por conversa** na caixa de mensagem (Opus/Sonnet/Haiku/Fable; Baixo → Máximo, `--effort`), salvos na
+  conversa; a última escolha vira o padrão das novas. Botão de parar no mesmo lugar.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

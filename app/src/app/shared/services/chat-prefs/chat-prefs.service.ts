@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { SettingsApiService } from '../settings/settings-api.service';
 
 export type ChatWidth = 'narrow' | 'medium' | 'wide' | 'full';
-export interface ChatPrefs { fontSize: number; width: ChatWidth }
+export interface ChatPrefs { fontSize: number; width: ChatWidth; chatDefaults?: { model: string; effort: string } }
 
 export const CHAT_WIDTHS: { id: ChatWidth; label: string; px: number | null }[] = [
   { id: 'narrow', label: 'Estreita', px: 760 },

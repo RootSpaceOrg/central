@@ -16,6 +16,7 @@ import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray }
 import { chatFromRun, deleteChat, listChats, listMessages, renameChat, sendChat, stopChat } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
+import { listActivity, onActivity } from './activity';
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
@@ -171,12 +172,13 @@ function registerIpc(): void {
 
   handle('chat:list', agentId => listChats(agentId));
   handle('chat:messages', id => listMessages(id));
-  handle('chat:send', (id, agentId, text, slug) => sendChat(id, agentId, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); agentsChanged(); }, slug ?? null));
+  handle('chat:send', (id, agentId, text, slug, options) => sendChat(id, agentId, text, chatNotify, () => { changed(); backlogChanged(); routinesChanged(); agentsChanged(); }, slug ?? null, options ?? null));
   handle('sessions:list', slug => listSessions(slug));
   handle('sessions:create', (slug, kind, chatId) => createSession(slug, kind, chatId ?? null));
   handle('sessions:update', (id, patch) => updateSession(id, patch));
   handle('sessions:close', id => closeSession(id));
   handle('claude:sessions', () => listClaudeSessions());
+  handle('activity:list', () => listActivity());
   handle('context:status', () => contextStatus());
   handle('context:reindex', (slug, force) => { indexProject(slug, force); importClaudeMemory(slug); });
   handle('context:graph', slug => graphData(slug));
@@ -255,6 +257,7 @@ app.whenReady().then(() => {
   watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
   // índice de código: um processo à parte indexa os projetos e acompanha as mudanças
   startContext(slug => contextChanged(slug));
+  onActivity((scope, ref, activity) => send('activity', { scope, ref, activity: activity as never }));
   setTimeout(() => {
     indexAll();
     for (const p of all<{ slug: string }>(`select slug from projects where status <> 'dead'`)) importClaudeMemory(p.slug);

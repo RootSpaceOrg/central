@@ -8,6 +8,7 @@ import { ContextMenuService } from '../../../../../../shared/services/context-me
 import { ProjectsService } from '../../../../../../shared/services/projects/projects.service';
 import { SESSION_IMG, SESSION_KINDS, Session, SessionsService } from '../../../../../../shared/services/sessions/sessions.service';
 import { TerminalsService } from '../../../../../../shared/services/terminals/terminals.service';
+import { LiveService } from '../../../../../../shared/services/live/live.service';
 import { Icon } from '../../../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
 import { DropEdge, GridLeaf, assign, leaf, move, rects, remove, split } from '../../../../services/grids/grid-tree';
@@ -39,7 +40,12 @@ const ZONE: Record<DropEdge, string> = {
           <span class="shrink-0 text-[12px] font-semibold" [style.color]="p.color">{{ p.name }}</span>
         }
         <span class="min-w-0 truncate text-[12.5px] text-mute" [title]="s.title">{{ s.title }}</span>
-        @if (s.chatId && chat.busy().has(s.chatId)) { <span class="pulse size-1.5 shrink-0 rounded-full bg-frost" aria-label="trabalhando"></span> }
+        @if (live.chat(s.chatId); as a) {
+          <span class="flex shrink-0 items-center gap-1 rounded-full bg-frost/15 px-1.5 text-[11px] tabular-nums text-frost" [title]="a.step ?? 'Trabalhando'">
+            <span class="pulse size-1.5 rounded-full bg-frost"></span>{{ live.since(a.startedAt) }}@if (live.running(a); as n) { <span class="text-[#C6A6FF]">· {{ n }} sub</span> }</span>
+        } @else if (s.kind === 'claude' && terminals.busy().get(s.id); as t) {
+          <span class="flex shrink-0 items-center gap-1 rounded-full bg-frost/15 px-1.5 text-[11px] tabular-nums text-frost"><span class="pulse size-1.5 rounded-full bg-frost"></span>{{ live.since(t) }}</span>
+        }
       } @else {
         <span class="text-[12.5px] text-faint">Painel vazio</span>
       }
@@ -106,7 +112,8 @@ export class GridTile {
   protected readonly projects = inject(ProjectsService);
   protected readonly sessions = inject(SessionsService);
   protected readonly chat = inject(ChatService);
-  private readonly terminals = inject(TerminalsService);
+  protected readonly terminals = inject(TerminalsService);
+  protected readonly live = inject(LiveService);
   private readonly menu = inject(ContextMenuService);
   private readonly router = inject(Router);
 

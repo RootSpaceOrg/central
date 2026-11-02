@@ -6,12 +6,13 @@ import { ChildProcess, execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
-import type { ChatDto, ChatMessageDto, ChatRole } from '../src/app/shared/contract';
+import type { ChatDto, ChatMessageDto, ChatOptions, ChatRole } from '../src/app/shared/contract';
 import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, sessionPromptFile } from './agentdefs';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
 import { recordTouch } from './context/context';
+import { track, untrack } from './activity';
 
 type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) => void;
 
@@ -20,7 +21,7 @@ export const INTERNAL = new Set(['ToolSearch', 'TodoWrite']);
 const procs = new Map<number, ChildProcess>();
 
 export const listChats = (agentId: number | null) => all<ChatDto>(
-  `select id, agent_id, project_slug, title, created_at, updated_at from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
+  `select id, agent_id, project_slug, title, created_at, updated_at, model, effort from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
 export const listMessages = (chatId: number) => all<ChatMessageDto>('select * from chat_messages where chat_id = ? order by id', chatId);
 export const deleteChat = (chatId: number) => { stopChat(chatId); run('delete from chats where id = ?', chatId); };
 export function renameChat(chatId: number, title: string): void {
@@ -54,7 +55,12 @@ export function chatFromRun(runId: number): number {
     agentId, `Execução #${r.id}: ${r.prompt.split('\n')[0].slice(0, 80)}`, r.session_id, cwd).lastInsertRowid);
 }
 
-export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void, projectSlug: string | null = null): number {
+const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void, projectSlug: string | null = null,
+  options: ChatOptions | null = null): number {
+  // modelo: apelido (opus, sonnet…) ou nome completo; nada que vire outra opção na linha de comando
+  if (options && (!/^[\w.\-\[\]]*$/.test(options.model) || !EFFORTS.includes(options.effort))) throw new Error('Modelo ou nível de raciocínio inválido.');
   const msg = text.trim();
   if (!msg) throw new Error('Escreva uma mensagem.');
   if (chatId && procs.has(chatId)) throw new Error('O agente ainda está respondendo a mensagem anterior.');
@@ -73,13 +79,17 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
       agent.id, msg.replace(/\s+/g, ' ').slice(0, 70), cwd, slug).lastInsertRowid);
   }
   const id = chatId;
+  if (options) run('update chats set model = ?, effort = ? where id = ?', options.model, options.effort, id);
+  const chosen = get<{ model: string; effort: string }>('select model, effort from chats where id = ?', id)!;
   save(id, 'user', msg, notify);
 
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
   if (slug) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${SESSION_TOOLS.join(',')}"`);
   else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
   else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
-  if (agent.model) args.push('--model', agent.model);
+  const model = chosen.model || agent.model;
+  if (model) args.push('--model', model);
+  if (chosen.effort) args.push('--effort', chosen.effort);
   const mcp = mcpConfigPath();
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
   if (chat?.session_id) args.push('--resume', chat.session_id);
@@ -89,16 +99,20 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   child.stdin.end(msg);
 
   let answered = false;
+  const tracker = track('chat', id, describe, text => save(id, 'tool', text, notify));
   createInterface({ input: child.stdout }).on('line', line => {
     let m: any;
     try { m = JSON.parse(line); } catch { return; }
     if (m.session_id && m.session_id !== chat?.session_id) run('update chats set session_id = ? where id = ?', m.session_id, id);
+    tracker.handle(m);
+    // passos de subagente ficam recuados no histórico; o texto deles não é a resposta da conversa
+    const sub = tracker.isSubagentStep(m);
     if (m.type === 'assistant') {
       for (const b of m.message?.content ?? []) {
-        if (b.type === 'text' && b.text.trim()) { answered = true; save(id, 'assistant', b.text.trim(), notify); }
+        if (b.type === 'text' && b.text.trim() && !sub) { answered = true; save(id, 'assistant', b.text.trim(), notify); }
         if (b.type === 'tool_use' && !INTERNAL.has(b.name)) {
           recordTouch(b.name, b.input, { chatId: id });
-          save(id, 'tool', describe(b.name, b.input), notify);
+          save(id, 'tool', `${sub ? '↳ ' : ''}${describe(b.name, b.input)}`, notify);
           if (String(b.name).startsWith('mcp__central__')) setTimeout(onCentralChange, 800);
         }
       }
@@ -110,6 +124,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   child.stderr.on('data', d => { stderr = (stderr + d).slice(-2000); });
   child.on('close', code => {
     procs.delete(id);
+    untrack('chat', id, tracker);
     if (code !== 0 && !answered) save(id, 'error', stderr.trim() || 'Resposta interrompida.', notify);
     notify(id, null, false);
   });
@@ -139,6 +154,7 @@ export function describe(name: string, input: any): string {
     memory_recall: 'Consultou a memória do projeto', memory_remember: `Guardou na memória: "${String(input?.text ?? '').slice(0, 60)}"`,
     memory_supersede: `Atualizou o fato #${input?.id ?? ''}`,
     Read: `Leu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-2).join('/')}`, Grep: `Buscou "${input?.pattern ?? ''}"`, Glob: `Listou ${input?.pattern ?? ''}`,
+    Agent: `Subagente: ${input?.description ?? ''}`, Task: `Subagente: ${input?.description ?? ''}`,
     WebSearch: `Pesquisou "${input?.query ?? ''}"`, WebFetch: 'Leu uma página', Bash: `Rodou ${String(input?.command ?? '').slice(0, 60)}`,
     Write: `Escreveu ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`, Edit: `Editou ${String(input?.file_path ?? '').split(/[\\/]/).slice(-1)[0]}`,
   };

@@ -5,6 +5,7 @@ import { DialogsService } from '../../../../../../shared/services/dialogs/dialog
 import { SessionView } from '../../../../../../shared/components/session-view/session-view';
 import { SessionKind } from '../../../../../../shared/contract';
 import { ChatService } from '../../../../../../shared/services/chat/chat.service';
+import { LiveService } from '../../../../../../shared/services/live/live.service';
 import { ContextMenuService, MenuEntry } from '../../../../../../shared/services/context-menu/context-menu.service';
 import { CODE_TAB, SESSION_IMG, SESSION_KINDS, Session, SessionsService } from '../../../../../../shared/services/sessions/sessions.service';
 import { TerminalsService } from '../../../../../../shared/services/terminals/terminals.service';
@@ -31,7 +32,10 @@ import { CodeWorkspace } from '../code-workspace/code-workspace';
                   (dblclick)="rename(s)" class="flex min-w-0 items-center gap-1.5" [title]="s.title">
             <img [src]="img[s.kind]" alt="" class="size-3.5 shrink-0" />
             <span class="truncate" [class.text-faint]="dead(s)">{{ s.title }}</span>
-            @if (s.chatId && chat.busy().has(s.chatId)) { <span class="pulse size-1.5 shrink-0 rounded-full bg-frost" aria-label="trabalhando"></span> }
+            @if (working(s); as w) {
+              <span class="flex shrink-0 items-center gap-1 rounded-full bg-frost/15 px-1.5 text-[11px] tabular-nums text-frost" [title]="w.title">
+                <span class="pulse size-1.5 rounded-full bg-frost"></span>{{ w.time }}@if (w.subs) { <span class="text-[#C6A6FF]">· {{ w.subs }} sub</span> }</span>
+            }
           </button>
           <button type="button" (click)="sessions.close(s)" [attr.aria-label]="'Fechar ' + s.title"
                   class="grid size-5 shrink-0 place-items-center rounded opacity-0 hover:bg-edge group-hover:opacity-100 focus:opacity-100">
@@ -54,6 +58,7 @@ export class ProjectSessions {
   protected readonly sessions = inject(SessionsService);
   protected readonly terminals = inject(TerminalsService);
   protected readonly chat = inject(ChatService);
+  protected readonly live = inject(LiveService);
   private readonly menu = inject(ContextMenuService);
   private readonly router = inject(Router);
   private readonly dialogs = inject(DialogsService);
@@ -67,6 +72,17 @@ export class ProjectSessions {
   /** sem escolha ainda: a última sessão aberta, ou o código */
   protected readonly activeId = computed(() => this.sessions.active()[this.slug()] ?? this.list().at(-1)?.id ?? CODE_TAB);
   protected readonly active = computed(() => this.list().find(s => s.id === this.activeId()) ?? null);
+
+  /** trabalhando agora: há quanto tempo e quantos subagentes (conversa) ou Claude Code no terminal */
+  protected working(s: Session): { time: string; subs: number; title: string } | null {
+    const a = this.live.chat(s.chatId);
+    if (a) {
+      const subs = this.live.running(a);
+      return { time: this.live.since(a.startedAt), subs, title: `${a.step ?? 'Trabalhando'}${subs ? ` · ${subs} subagente(s)` : ''}` };
+    }
+    const t = s.kind === 'claude' ? this.terminals.busy().get(s.id) : undefined;
+    return t ? { time: this.live.since(t), subs: 0, title: 'Claude Code trabalhando' } : null;
+  }
 
   protected dead(s: Session): boolean { return s.kind !== 'chat' && this.terminals.terms().get(s.id)?.alive === false; }
 

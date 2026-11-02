@@ -504,6 +504,32 @@ export interface NewFactInput {
   pinned?: boolean;
 }
 
+// ---------- atividade ao vivo (sessões e execuções trabalhando, subagentes) ----------
+
+export interface SubagentDto {
+  /** id da chamada da ferramenta Agent */
+  id: string;
+  /** subagent_type (general-purpose, Explore…) */
+  type: string;
+  description: string;
+  started_at: string;
+  finished_at: string | null;
+  /** o que está fazendo agora */
+  step: string | null;
+  steps: number;
+}
+
+export interface ActivityDto {
+  /** trabalhando desde */
+  started_at: string;
+  /** passo atual da sessão principal */
+  step: string | null;
+  subagents: SubagentDto[];
+}
+
+/** chat = conversa (ref = id da conversa); run = execução de agente (ref = id da execução) */
+export interface LiveActivityDto extends ActivityDto { scope: 'chat' | 'run'; ref: number }
+
 // ---------- agente Central (chat) ----------
 
 export interface ChatDto {
@@ -514,7 +540,14 @@ export interface ChatDto {
   title: string;
   created_at: string;
   updated_at: string;
+  /** modelo escolhido na conversa ('' = o do agente / padrão do plano) */
+  model: string;
+  /** nível de raciocínio (--effort): '' = padrão, low, medium, high, xhigh, max */
+  effort: string;
 }
+
+/** Escolhas da conversa enviadas junto com cada mensagem (ficam salvas na conversa). */
+export interface ChatOptions { model: string; effort: string }
 
 export type ChatRole = 'user' | 'assistant' | 'tool' | 'error';
 
@@ -623,6 +656,7 @@ export interface Api {
   'sessions:update': (id: number, patch: { title?: string; chat_id?: number }) => void;
   'sessions:close': (id: number) => void;
   'claude:sessions': () => ClaudeSessionDto[];
+  'activity:list': () => LiveActivityDto[];
   'context:status': () => ContextStatusDto[];
   'context:reindex': (projectSlug: string, force: boolean) => void;
   'context:graph': (projectSlug: string) => GraphDto;
@@ -680,7 +714,7 @@ export interface Api {
   'chat:list': (agentId: number | null) => ChatDto[];
   'chat:messages': (chatId: number) => ChatMessageDto[];
   /** manda mensagem; chatId null cria conversa nova com o agente. Devolve o id da conversa */
-  'chat:send': (chatId: number | null, agentId: number, text: string, projectSlug?: string | null) => number;
+  'chat:send': (chatId: number | null, agentId: number, text: string, projectSlug?: string | null, options?: ChatOptions | null) => number;
   /** abre uma conversa que continua a sessão de uma execução já terminada */
   'chat:fromRun': (runId: number) => number;
   'chat:rename': (chatId: number, title: string) => void;
@@ -706,6 +740,8 @@ export interface Events {
   'update:log': { line: string };
   /** mensagem nova do agente Central (texto, ferramenta usada, erro) ou fim da resposta */
   'chat:event': { chat_id: number; message: ChatMessageDto | null; busy: boolean };
+  /** atividade de uma conversa/execução mudou (null = parou) */
+  'activity': { scope: 'chat' | 'run'; ref: number; activity: LiveActivityDto | null };
   'routines:changed': null;
   'agents:changed': null;
   /** pedido do main (bandeja, notificação) para abrir uma tela */

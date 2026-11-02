@@ -4,8 +4,9 @@ import { ChatDto, ChatMessageDto, ChatRole } from '../../contract';
 import { AgentsService } from '../agents/agents.service';
 import { errorMessage } from '../ipc/ipc.service';
 import { ChatApiService } from './chat-api.service';
+import { ChatPrefsService } from '../chat-prefs/chat-prefs.service';
 
-export interface Chat { id: number; agentId: number; projectSlug: string | null; title: string; updatedAt: Date }
+export interface Chat { id: number; agentId: number; projectSlug: string | null; title: string; updatedAt: Date; model: string; effort: string }
 export interface ChatMessage { id: number; role: ChatRole; text: string; at: Date }
 
 /** Mensagens agrupadas para a tela: falas, e os passos (ferramentas) entre elas viram um bloco recolhível. */
@@ -13,7 +14,9 @@ export type ChatItem =
   | { kind: 'message'; message: ChatMessage }
   | { kind: 'steps'; id: number; steps: ChatMessage[] };
 
-const toChat = (d: ChatDto): Chat => ({ id: d.id, agentId: d.agent_id, projectSlug: d.project_slug, title: d.title, updatedAt: new Date(d.updated_at) });
+const toChat = (d: ChatDto): Chat => ({
+  id: d.id, agentId: d.agent_id, projectSlug: d.project_slug, title: d.title, updatedAt: new Date(d.updated_at), model: d.model ?? '', effort: d.effort ?? '',
+});
 const toMessage = (d: ChatMessageDto): ChatMessage => ({ id: d.id, role: d.role, text: d.text, at: new Date(d.at) });
 
 /** Uma conversa aberta na tela: a do painel/tela Agentes (o próprio ChatService) ou a de uma aba de sessão do projeto. */
@@ -23,6 +26,12 @@ export class ChatSession {
   readonly current = signal<number | null>(null);
   readonly messages = signal<ChatMessage[]>([]);
   readonly error = signal<string | null>(null);
+  /** modelo e nível de raciocínio desta conversa (vão com cada mensagem; '' = padrão) */
+  readonly model = signal('');
+  readonly effort = signal('');
+  /** onde achar a conversa salva (para trazer o modelo e o raciocínio dela) e o padrão para conversas novas */
+  lookup: (id: number) => Chat | undefined = () => undefined;
+  defaults: () => { model: string; effort: string } = () => ({ model: '', effort: '' });
   /** avisado quando uma conversa nova ganha id (a aba da sessão guarda o id) */
   onCreated: (chatId: number) => void = () => {};
   reload: () => void = () => {};
@@ -57,6 +66,10 @@ export class ChatSession {
   select(chatId: number | null): void {
     this.current.set(chatId);
     this.error.set(null);
+    const saved = chatId ? this.lookup(chatId) : undefined;
+    const d = saved ?? this.defaults();
+    this.model.set(d.model);
+    this.effort.set(d.effort);
     const cached = chatId ? this.cache.get(chatId) : null;
     this.messages.set(cached ?? []);
     if (chatId && !cached) this.fetch(chatId);
@@ -86,7 +99,7 @@ export class ChatSession {
     if (!agent) return;
     this.error.set(null);
     try {
-      const id = await this.api.send(this.current(), agent.id, text, this.projectSlug);
+      const id = await this.api.send(this.current(), agent.id, text, this.projectSlug, { model: this.model(), effort: this.effort() });
       if (this.current() !== id) {
         this.current.set(id);
         this.onCreated(id);
@@ -115,6 +128,7 @@ export class ChatService extends ChatSession {
   /** texto para pré-preencher a caixa de mensagem (ex.: contexto de uma tarefa) */
   readonly draft = signal<string | null>(null);
   private readonly live = new Set<ChatSession>([this]);
+  private readonly prefs = inject(ChatPrefsService);
 
   readonly agentChats = computed(() => this.chats().filter(c => c.agentId === this.agent()?.id && !c.projectSlug));
   projectChats(slug: string) { return this.chats().filter(c => c.projectSlug === slug); }
@@ -122,6 +136,7 @@ export class ChatService extends ChatSession {
   constructor() {
     super(inject(ChatApiService), inject(AgentsService), signal(new Set<number>()), new Map());
     this.reload = () => this.loadChats();
+    this.wire(this);
     this.api.onEvent(({ chat_id, message, busy }) => {
       this.busy.update(s => { const n = new Set(s); if (busy) n.add(chat_id); else n.delete(chat_id); return n; });
       // uma vez no cache (novo array: quem mostra percebe a mudança), depois cada conversa aberta atualiza
@@ -139,11 +154,18 @@ export class ChatService extends ChatSession {
   spawn(projectSlug: string): ChatSession {
     const s = new ChatSession(this.api, this.agents, this.busy, this.cache, projectSlug);
     s.reload = () => this.loadChats();
+    this.wire(s);
     this.live.add(s);
     return s;
   }
 
   release(s: ChatSession): void { this.live.delete(s); }
+
+  /** a conversa acha o modelo/raciocínio salvos e usa o último escolhido como padrão das novas */
+  private wire(s: ChatSession): void {
+    s.lookup = id => this.chats().find(c => c.id === id);
+    s.defaults = () => this.prefs.prefs().chatDefaults ?? { model: '', effort: '' };
+  }
 
   toggle(): void { this.open.update(o => !o); }
 

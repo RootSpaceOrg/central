@@ -14,14 +14,15 @@ import { git, gitOr } from './git';
 import { slugify } from './projects';
 import { childEnv } from './workspace';
 import { contextBlock, recordTouch } from './context/context';
+import { track, untrack } from './activity';
 
 const MAX_PARALLEL = 4;
 const MAX_BUDGET = 50;
 // Modo "edits": edita arquivos sem perguntar e só roda os comandos desta lista.
-const SAFE_TOOLS = ['Bash(git:*)', 'Bash(gh pr:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)', 'Bash(python:*)',
+const SAFE_TOOLS = ['Agent', 'Task', 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)', 'Bash(python:*)',
   'Bash(pytest:*)', 'Bash(uv:*)', 'Bash(ls:*)', 'Bash(cat:*)', 'Bash(grep:*)', 'Bash(find:*)', 'mcp__central'];
 // Projeto inteiro em modo seguro: só lê e organiza (backlog, ideias, decisões pela Central).
-const READ_TOOLS = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Bash(git log:*)', 'Bash(git status:*)',
+const READ_TOOLS = ['Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Agent', 'Task', 'Bash(git log:*)', 'Bash(git status:*)',
   'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(git branch:*)', 'Bash(gh pr list:*)', 'Bash(gh pr view:*)', 'Bash(gh issue list:*)',
   'Bash(gh issue view:*)', 'Bash(gh run list:*)', 'Bash(ls:*)', 'mcp__central'];
 
@@ -242,17 +243,20 @@ async function execute(id: number, emit: Emit): Promise<void> {
   child.stdin.end(frame);
 
   let result: string | null = null, cost: number | null = null, isError = false, sessionSaved = false;
+  const tracker = track('run', id, describe, text => event(id, 'tool', text, emit));
   createInterface({ input: child.stdout }).on('line', line => {
     let msg: any;
     try { msg = JSON.parse(line); } catch { return; }
+    tracker.handle(msg);
+    const sub = tracker.isSubagentStep(msg);
     if (msg.type === 'system' && msg.session_id && !sessionSaved) { sessionSaved = true; set(id, { session_id: msg.session_id }, emit); }
     if (msg.type === 'assistant') {
       for (const block of msg.message?.content ?? []) {
-        if (block.type === 'text' && block.text.trim()) event(id, 'text', block.text.trim(), emit);
+        if (block.type === 'text' && block.text.trim() && !sub) event(id, 'text', block.text.trim(), emit);
         if (block.type === 'tool_use' && !INTERNAL.has(block.name)) {
           recordTouch(block.name, block.input, { runId: id });
           const central = String(block.name).startsWith('mcp__central__');
-          event(id, 'tool', central ? `Central: ${describe(block.name, block.input)}` : describeTool(block.name, block.input), emit);
+          event(id, 'tool', `${sub ? '↳ ' : ''}${central ? `Central: ${describe(block.name, block.input)}` : describeTool(block.name, block.input)}`, emit);
           // a sessão mexeu no backlog pela Central: atualiza a tela
           if (central) setTimeout(() => emit.changed(), 1500);
         }
@@ -268,6 +272,7 @@ async function execute(id: number, emit: Emit): Promise<void> {
   child.stderr.on('data', d => { stderr = (stderr + d).slice(-4000); });
 
   await new Promise<void>(done => child.on('close', code => {
+    untrack('run', id, tracker);
     if (dto(id).status === 'killed') return done();
     if (code !== 0 && !result) event(id, 'error', stderr.trim() || `claude saiu com código ${code}.`, emit);
     finish(id, code === 0 && !isError ? 'succeeded' : 'failed', result ?? (stderr.trim() || null), cost, emit);

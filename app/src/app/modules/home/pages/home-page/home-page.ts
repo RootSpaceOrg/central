@@ -10,6 +10,8 @@ import { ProjectsService } from '../../../../shared/services/projects/projects.s
 import { Proposal, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { DirectionService } from '../../../../shared/services/direction/direction.service';
+import { LiveService } from '../../../../shared/services/live/live.service';
+import { SessionsService } from '../../../../shared/services/sessions/sessions.service';
 import { RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 import { RUN_STATUS_LABEL } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
@@ -42,6 +44,24 @@ export class HomePage {
   protected readonly dialogs = inject(DialogsService);
   protected readonly agents = inject(AgentsService);
   protected readonly direction = inject(DirectionService);
+  protected readonly live = inject(LiveService);
+  private readonly sessions = inject(SessionsService);
+
+  /** conversas de sessão e Claude Code no terminal trabalhando agora */
+  protected readonly sessionsWorking = computed(() => {
+    const out: { key: string; slug: string; title: string; project: string; since: number; step: string | null; subs: number; img: string }[] = [];
+    for (const a of this.live.chats()) {
+      const c = this.chat.chats().find(x => x.id === a.ref);
+      const slug = c?.projectSlug ?? '';
+      out.push({ key: `c${a.ref}`, slug, title: c?.title ?? 'Conversa', project: this.project(slug)?.name ?? 'Central', since: a.startedAt,
+        step: a.step, subs: this.live.running(a), img: 'file-icons/claude.svg' });
+    }
+    for (const [id, since] of this.live.terminalsBusy()) {
+      const s = this.sessions.byId().get(id);
+      if (s) out.push({ key: `t${id}`, slug: s.projectSlug, title: s.title, project: this.project(s.projectSlug)?.name ?? '', since, step: null, subs: 0, img: 'file-icons/claude.svg' });
+    }
+    return out.sort((a, b) => a.since - b.since);
+  });
   protected readonly routines = inject(RoutinesService);
   private readonly chat = inject(ChatService);
   private readonly settings = inject(SettingsApiService);

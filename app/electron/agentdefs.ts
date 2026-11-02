@@ -15,7 +15,7 @@ import { contextBlock } from './context/context';
 export const CENTRAL_SLUG = 'central';
 
 /** Sempre liberado: a Central (MCP) e leitura. */
-export const BASE_TOOLS = ['mcp__central', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Bash(git log:*)',
+export const BASE_TOOLS = ['mcp__central', 'Read', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'TodoWrite', 'Agent', 'Task', 'Bash(git log:*)',
   'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(gh pr list:*)', 'Bash(gh pr view:*)', 'Bash(gh issue list:*)',
   'Bash(gh issue view:*)', 'Bash(gh run list:*)', 'Bash(gh run view:*)', 'Bash(ls:*)'];
 

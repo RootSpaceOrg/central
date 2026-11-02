@@ -271,6 +271,7 @@ for (const [table, column, type] of [
   ['chats', 'agent_id', 'integer'], ['chats', 'cwd', 'text'], ['chats', 'project_slug', 'text'],
   ['projects', 'autopilot', 'integer not null default 0'],
   ['ideas', 'author', "text not null default 'gustavo'"], ['ideas', 'approved_at', 'text'],
+  ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
   ['projects', 'parent_slug', 'text'], ['projects', 'position', 'integer not null default 0'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
