@@ -17,6 +17,7 @@ import { AgentDialog, AgentDialogState } from '../../components/agent-dialog/age
 import { MemoryPanel, MemoryView } from '../../components/memory-panel/memory-panel';
 import { MemoriesService } from '../../../../shared/services/memories/memories.service';
 
+import { AskService } from '../../../../shared/services/ask/ask.service';
 type Pane = 'conversas' | 'execucoes' | 'memoria';
 
 /** Agentes: escolhe um agente, vê as sessões dele (conversas e execuções) e conversa. */
@@ -27,6 +28,7 @@ type Pane = 'conversas' | 'execucoes' | 'memoria';
   host: { class: 'grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)]' },
 })
 export class AgentsPage {
+  private readonly ask = inject(AskService);
   protected readonly agents = inject(AgentsService);
   protected readonly chat = inject(ChatService);
   protected readonly projects = inject(ProjectsService);
@@ -86,8 +88,8 @@ export class AgentsPage {
     if (savedId) this.chat.selectAgent(savedId);
   }
 
-  protected rename(id: number, current: string): void {
-    const title = prompt('Nome da conversa', current);
+  protected async rename(id: number, current: string): Promise<void> {
+    const title = await this.ask.text('Nome da conversa', current);
     if (title?.trim()) this.chat.rename(id, title);
   }
 

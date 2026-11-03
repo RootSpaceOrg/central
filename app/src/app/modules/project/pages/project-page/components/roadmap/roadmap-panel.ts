@@ -7,6 +7,7 @@ import { IdeasService } from '../../../../../../shared/services/ideas/ideas.serv
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
 
+import { AskService } from '../../../../../../shared/services/ask/ask.service';
 /**
  * Roadmap do projeto em Agora / Próximo / Depois: marcos (resultados, não tarefas) com o progresso das tarefas ligadas.
  * Arrastar muda a ordem e o horizonte; o gestor do projeto liga tarefas aos marcos e mantém isso vivo.
@@ -108,6 +109,7 @@ import { Icon } from '../../../../../../shared/ui/icon';
     </section>`,
 })
 export class RoadmapPanel {
+  private readonly ask = inject(AskService);
   protected readonly roadmap = inject(RoadmapService);
   protected readonly ideas = inject(IdeasService);
 
@@ -152,7 +154,7 @@ export class RoadmapPanel {
 
   protected done(m: Milestone): void { this.roadmap.update(m.id, { horizon: 'done' }); }
 
-  protected remove(m: Milestone): void {
-    if (confirm(`Excluir o marco "${m.title}"? As tarefas e ideias ligadas continuam, só perdem o vínculo.`)) this.roadmap.remove(m.id);
+  protected async remove(m: Milestone): Promise<void> {
+    if (await this.ask.confirm(`Excluir o marco "${m.title}"?`, { message: 'As tarefas e ideias ligadas continuam, só perdem o vínculo.', confirmLabel: 'Excluir marco', danger: true })) this.roadmap.remove(m.id);
   }
 }

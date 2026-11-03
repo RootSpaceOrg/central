@@ -7,6 +7,7 @@ import { Icon } from '../../../../../../shared/ui/icon';
 import { CodeHit, ContextService, FACT_LABEL, Fact, FactKind } from '../../../../services/context/context.service';
 import { CodeMap, Layer, Scope, placeOf } from './code-map';
 
+import { AskService } from '../../../../../../shared/services/ask/ask.service';
 type Pane = 'grafo' | 'memoria' | 'prompt';
 const KINDS = Object.keys(FACT_LABEL) as FactKind[];
 const EDGE_LEGEND = [
@@ -26,6 +27,7 @@ const EDGE_LEGEND = [
   host: { class: 'grid h-full min-h-0 grid-cols-[290px_minmax(0,1fr)]' },
 })
 export class ContextView {
+  private readonly dialog = inject(AskService);
   protected readonly ctx = inject(ContextService);
   private readonly sessions = inject(SessionsService);
   private readonly canvas = viewChild(CodeMap);
@@ -172,22 +174,23 @@ export class ContextView {
   }
 
   protected async retire(f: Fact): Promise<void> {
-    const reason = prompt('Por que este fato deixou de valer? (opcional: na próxima pergunta, escreva o fato novo)', '');
+    const reason = await this.dialog.text('Retirar este fato?', '', { message: 'Por que deixou de valer? (opcional)', confirmLabel: 'Continuar' });
     if (reason === null) return;
-    const replacement = prompt('Fato que substitui (deixe vazio se não houver)', f.text);
+    const replacement = await this.dialog.text('Fato que substitui', f.text, { message: 'Deixe como está ou vazio se não houver.', multiline: true, confirmLabel: 'Retirar' });
+    if (replacement === null) return;
     await this.ctx.retire(f.id, reason, replacement?.trim() && replacement.trim() !== f.text ? replacement.trim() : null);
     this.facts.set(await this.ctx.facts(this.slug()));
   }
 
   protected async edit(f: Fact): Promise<void> {
-    const text = prompt('Fato', f.text);
+    const text = await this.dialog.text('Fato', f.text, { multiline: true });
     if (!text?.trim() || text.trim() === f.text) return;
     await this.ctx.updateFact(f.id, { text });
     this.facts.set(await this.ctx.facts(this.slug()));
   }
 
   protected async remove(f: Fact): Promise<void> {
-    if (!confirm('Apagar o fato de vez? (Retirar mantém o histórico.)')) return;
+    if (!(await this.dialog.confirm('Apagar o fato de vez?', { message: 'Retirar mantém o histórico; apagar não.', confirmLabel: 'Apagar', danger: true }))) return;
     await this.ctx.deleteFact(f.id);
     this.facts.set(await this.ctx.facts(this.slug()));
   }

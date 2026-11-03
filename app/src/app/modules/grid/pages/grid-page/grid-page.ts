@@ -12,6 +12,7 @@ import { AddSessions } from './components/add-sessions/add-sessions';
 import { GridMinimap } from './components/grid-minimap/grid-minimap';
 import { GridNodeView } from './components/grid-node/grid-node';
 
+import { AskService } from '../../../../shared/services/ask/ask.service';
 /**
  * Grade: várias sessões (de projetos diferentes) lado a lado, em painéis que dividem, redimensionam e trocam de lugar.
  * Cada grade é um preset salvo (ex.: "KultivAi + suporte"). F11 = modo foco.
@@ -48,6 +49,7 @@ import { GridNodeView } from './components/grid-node/grid-node';
     <app-add-sessions [(open)]="grids.addOpen" />`,
 })
 export class GridPage implements OnDestroy {
+  private readonly ask = inject(AskService);
   protected readonly grids = inject(GridsService);
   protected readonly layout = inject(LayoutService);
   private readonly sessions = inject(SessionsService);
@@ -85,14 +87,14 @@ export class GridPage implements OnDestroy {
   protected newGrid(e: MouseEvent): void {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     this.menu.open(new MouseEvent('click', { clientX: r.left, clientY: r.bottom + 4 }), [
-      ...TEMPLATES.map(t => ({ label: t.label, icon: 'grid' as const, run: () => this.grids.create(prompt('Nome da grade', t.label) ?? t.label, t.id) })),
+      ...TEMPLATES.map(t => ({ label: t.label, icon: 'grid' as const, run: async () => { const name = await this.ask.text('Nome da grade', t.label, { confirmLabel: 'Criar' }); if (name !== null) this.grids.create(name.trim() || t.label, t.id); } })),
       null,
       { label: 'Duplicar a atual', icon: 'plus', run: () => this.grids.duplicate() },
     ]);
   }
 
-  protected rename(p: GridPreset): void {
-    const name = prompt('Nome da grade', p.name);
+  protected async rename(p: GridPreset): Promise<void> {
+    const name = (await this.ask.text('Nome da grade', p.name))?.trim();
     if (name) this.grids.rename(p.id, name);
   }
 
@@ -101,7 +103,7 @@ export class GridPage implements OnDestroy {
       { label: 'Renomear', icon: 'edit', run: () => this.rename(p) },
       { label: 'Duplicar', icon: 'plus', run: () => { this.grids.select(p.id); this.grids.duplicate(); } },
       null,
-      { label: 'Excluir grade', icon: 'delete', danger: true, run: () => { if (confirm(`Excluir a grade "${p.name}"? As sessões continuam nos projetos.`)) this.grids.remove(p.id); } },
+      { label: 'Excluir grade', icon: 'delete', danger: true, run: async () => { if (await this.ask.confirm(`Excluir a grade "${p.name}"?`, { message: 'As sessões continuam nos projetos.', confirmLabel: 'Excluir grade', danger: true })) this.grids.remove(p.id); } },
     ]);
   }
 

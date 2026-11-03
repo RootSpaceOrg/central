@@ -15,6 +15,7 @@ import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { BoardOverview } from './components/board-overview/board-overview';
 
+import { AskService } from '../../../../shared/services/ask/ask.service';
 /**
  * Um quadro (workflow): colunas com o agente de cada uma. As tarefas aqui também estão no backlog principal do projeto
  * delas (o selo mostra em que estado); pedidos podem nascer aqui, até sem projeto. "+ coluna" no fim; o botão de agente
@@ -27,6 +28,7 @@ import { BoardOverview } from './components/board-overview/board-overview';
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
 export class BoardPage {
+  private readonly ask = inject(AskService);
   protected readonly boards = inject(BoardService);
   protected readonly tasks = inject(TasksService);
   protected readonly projects = inject(ProjectsService);
@@ -98,20 +100,26 @@ export class BoardPage {
     if (name) this.save([...this.board()!.columns, blankColumn(name)]);
   }
 
-  protected removeColumn(c: BoardColumn): void {
+  protected async removeColumn(c: BoardColumn): Promise<void> {
     const n = this.byColumn()[c.key]?.length ?? 0;
     if (this.board()!.columns.length < 2) { this.error.set('O quadro precisa de pelo menos uma coluna.'); return; }
-    if (n && !confirm(`"${c.label}" tem ${n} tarefa(s): elas vão para a primeira coluna. Remover?`)) return;
+    const ok = await this.ask.confirm(`Excluir a coluna "${c.label}"?`, {
+      message: n ? `${n === 1 ? 'A tarefa dela vai' : `As ${n} tarefas dela vão`} para a primeira coluna do quadro. Nenhuma tarefa é apagada.`
+        : 'A coluna está vazia.' + (c.agentId ? ' O agente dela deixa de cuidar desta etapa.' : ''),
+      confirmLabel: 'Excluir coluna', danger: true,
+    });
+    if (!ok) return;
     this.save(this.board()!.columns.filter(x => x.key !== c.key).map(x => (x.nextKey === c.key ? { ...x, nextKey: null } : x)));
   }
 
-  protected rename(c: BoardColumn): void {
-    const label = prompt('Nome da coluna', c.label)?.trim();
+  protected async rename(c: BoardColumn): Promise<void> {
+    const label = (await this.ask.text('Nome da coluna', c.label))?.trim();
     if (label && label !== c.label) this.patchColumn(c.key, { label });
   }
 
-  protected describe(c: BoardColumn): void {
-    const d = prompt('Para que serve esta coluna (os agentes leem)', c.description ?? '');
+  protected async describe(c: BoardColumn): Promise<void> {
+    const d = await this.ask.text(`Descrição de "${c.label}"`, c.description ?? '', {
+      message: 'Para que serve esta coluna. Os agentes do quadro leem.', multiline: true, placeholder: 'Ex.: roteiro aprovado, esperando a arte' });
     if (d !== null) this.patchColumn(c.key, { description: d.trim() || null });
   }
 

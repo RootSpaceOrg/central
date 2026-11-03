@@ -5,6 +5,7 @@ import { MEMORY_KINDS, Memory, MemoriesService, MemoryKind } from '../../../../s
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 
+import { AskService } from '../../../../shared/services/ask/ask.service';
 export type MemoryView = 'dele' | 'todos' | 'esquecidas';
 
 /**
@@ -90,6 +91,7 @@ export type MemoryView = 'dele' | 'todos' | 'esquecidas';
   `,
 })
 export class MemoryPanel {
+  private readonly ask = inject(AskService);
   protected readonly memories = inject(MemoriesService);
 
   readonly agent = input.required<Agent>();
@@ -130,8 +132,8 @@ export class MemoryPanel {
 
   protected move(m: Memory): void { this.memories.update(m.id, { agentId: m.agentId ? null : this.agent().id }); }
 
-  protected forget(m: Memory): void {
-    const reason = prompt('Por que esquecer? (fica registrado)', 'não vale mais');
+  protected async forget(m: Memory): Promise<void> {
+    const reason = await this.ask.text('Esquecer esta memória?', 'não vale mais', { message: 'Por quê? Fica registrado.', confirmLabel: 'Esquecer' });
     if (reason !== null) this.memories.forget(m.id, reason);
   }
 }

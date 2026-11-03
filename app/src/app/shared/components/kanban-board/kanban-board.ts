@@ -12,6 +12,7 @@ import { ProposalsService } from '../../services/proposals/proposals.service';
 import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
 
+import { AskService } from '../../services/ask/ask.service';
 /** Quadro Kanban das tarefas. Sem projectSlug mostra todos os projetos vivos. */
 /** Coluna do backlog principal na tela. */
 interface ViewColumn { id: string; label: string; kind: TaskColumn; hint: string }
@@ -23,6 +24,7 @@ interface ViewColumn { id: string; label: string; kind: TaskColumn; hint: string
   host: { class: 'block h-full min-h-0' },
 })
 export class KanbanBoard {
+  private readonly ask = inject(AskService);
   protected readonly tasks = inject(TasksService);
   protected readonly projects = inject(ProjectsService);
   protected readonly dialogs = inject(DialogsService);
@@ -86,7 +88,7 @@ export class KanbanBoard {
       null,
       ...this.columns().filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.kind, 0) })),
       null,
-      { label: 'Excluir', icon: 'delete', danger: true, run: () => { if (confirm(`Excluir "${t.title}"?`)) this.tasks.remove(t.id); } },
+      { label: 'Excluir', icon: 'delete', danger: true, run: async () => { if (await this.ask.confirm(`Excluir a tarefa "${t.title}"?`, { confirmLabel: 'Excluir tarefa', danger: true })) this.tasks.remove(t.id); } },
     ]);
   }
 

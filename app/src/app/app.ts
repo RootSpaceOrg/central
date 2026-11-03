@@ -27,6 +27,7 @@ import { Icon, IconName } from './shared/ui/icon';
 import { ContextMenu } from './shared/ui/context-menu';
 import { SettingsDialog } from './shared/components/settings-dialog/settings-dialog';
 import { CommandPalette } from './shared/components/command-palette/command-palette';
+import { AskDialog } from './shared/components/ask-dialog/ask-dialog';
 import { ImportSessionDialog } from './shared/components/import-session-dialog/import-session-dialog';
 import { PrefsApiService } from './shared/services/prefs/prefs-api.service';
 import { ContextMenuService, MenuEntry } from './shared/services/context-menu/context-menu.service';
@@ -46,7 +47,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 @Component({
   selector: 'app-root',
   host: { '(document:keydown.f11)': 'toggleFocus($event)' },
-  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog, QuickBar],
+  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog, QuickBar, AskDialog],
   templateUrl: './app.html',
 })
 export class App {

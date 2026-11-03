@@ -12,6 +12,7 @@ import { TerminalsService } from '../../../../../../shared/services/terminals/te
 import { Icon } from '../../../../../../shared/ui/icon';
 import { CodeWorkspace } from '../code-workspace/code-workspace';
 
+import { AskService } from '../../../../../../shared/services/ask/ask.service';
 /** Sessões do projeto, como no Orca: aba de código fixa + conversas com o Claude e terminais, salvas entre aberturas. */
 @Component({
   selector: 'app-project-sessions',
@@ -55,6 +56,7 @@ import { CodeWorkspace } from '../code-workspace/code-workspace';
     </div>`,
 })
 export class ProjectSessions {
+  private readonly ask = inject(AskService);
   protected readonly sessions = inject(SessionsService);
   protected readonly terminals = inject(TerminalsService);
   protected readonly chat = inject(ChatService);
@@ -107,8 +109,8 @@ export class ProjectSessions {
     ]);
   }
 
-  protected rename(s: Session): void {
-    const title = prompt('Nome da sessão', s.title);
+  protected async rename(s: Session): Promise<void> {
+    const title = await this.ask.text('Nome da sessão', s.title);
     if (title?.trim()) this.sessions.rename(s, title);
   }
 }

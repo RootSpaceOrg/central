@@ -13,12 +13,14 @@ import { Icon } from '../../ui/icon';
 import { AgentsService } from '../../services/agents/agents.service';
 import { ChatService } from '../../services/chat/chat.service';
 
+import { AskService } from '../../services/ask/ask.service';
 @Component({
   selector: 'app-task-dialog',
   imports: [Icon, ProjectSelect, RouterLink],
   templateUrl: './task-dialog.html',
 })
 export class TaskDialog {
+  private readonly ask = inject(AskService);
   private readonly dialogs = inject(DialogsService);
   private readonly tasks = inject(TasksService);
   private readonly agents = inject(AgentsService);
@@ -106,9 +108,9 @@ export class TaskDialog {
     if (b?.columns.length) this.boards.place(taskId, b.id, b.columns[0].key);
   }
 
-  protected remove(): void {
+  protected async remove(): Promise<void> {
     const t = this.editing();
-    if (t && confirm(`Excluir "${t.title}"?`)) { this.tasks.remove(t.id); this.close(); }
+    if (t && (await this.ask.confirm(`Excluir a tarefa "${t.title}"?`, { confirmLabel: 'Excluir tarefa', danger: true }))) { this.tasks.remove(t.id); this.close(); }
   }
 
   protected talk(): void {

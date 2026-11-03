@@ -9,6 +9,7 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { RoutineDialog, RoutineDialogState } from '../../components/routine-dialog/routine-dialog';
 import { Routine, RoutineDraft, RoutinesService, describeSchedule } from '../../../../shared/services/routines/routines.service';
 
+import { AskService } from '../../../../shared/services/ask/ask.service';
 /** Modelos para começar sem escrever do zero (todos no projeto inteiro, modo seguro: só leem e organizam). */
 const TEMPLATES: { title: string; hint: string; draft: Partial<RoutineDraft> }[] = [
   {
@@ -48,6 +49,7 @@ const TEMPLATES: { title: string; hint: string; draft: Partial<RoutineDraft> }[]
   host: { class: 'block h-full overflow-y-auto' },
 })
 export class RoutinesPage {
+  private readonly ask = inject(AskService);
   protected readonly routines = inject(RoutinesService);
   protected readonly projects = inject(ProjectsService);
   private readonly router = inject(Router);
@@ -87,7 +89,7 @@ export class RoutinesPage {
     if (run) this.router.navigate(['/execucoes'], { queryParams: { run } });
   }
 
-  protected remove(r: Routine): void {
-    if (confirm(`Excluir a rotina "${r.name}"?`)) this.routines.remove(r);
+  protected async remove(r: Routine): Promise<void> {
+    if (await this.ask.confirm(`Excluir a rotina "${r.name}"?`, { confirmLabel: 'Excluir rotina', danger: true })) this.routines.remove(r);
   }
 }
