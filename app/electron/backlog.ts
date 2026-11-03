@@ -80,7 +80,7 @@ ${p.next_action ?? ''}`.toLowerCase();
 // ---------- ideias ----------
 
 export const listIdeas = () => all<IdeaDto>(`select i.id, i.project_slug, i.title, i.body, i.status, i.source, i.source_ref, i.task_id, i.created_at,
-    i.author, i.approved_at, i.milestone_id,
+    i.author, i.approved_at, i.milestone_id, i.triaged_at, i.triage,
     (select count(*) from tasks t where t.idea_id = i.id) tasks,
     (select count(*) from tasks t where t.idea_id = i.id and t."column" = 'done') tasks_done
   from ideas i order by case i.status when 'new' then 0 when 'approved' then 1 when 'doing' then 2 when 'done' then 3 else 4 end,
@@ -99,7 +99,7 @@ export function createIdea(input: NewIdeaInput & { source?: string; author?: str
 }
 
 export function updateIdea(id: number, patch: IdeaPatch): void {
-  const allowed = ['title', 'body', 'project_slug', 'status', 'milestone_id'] as const;
+  const allowed = ['title', 'body', 'project_slug', 'status', 'milestone_id', 'triage'] as const;
   const fields = allowed.filter(k => k in patch && patch[k] !== undefined);
   if (patch.status && !IDEA_STATUS.includes(patch.status)) throw new Error('Status inválido.');
   if (patch.status === 'approved') {

@@ -19,7 +19,7 @@ import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
-import { dispatchTodo } from './dispatch';
+import { dispatchTodo, dispatchTriage } from './dispatch';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -60,10 +60,16 @@ const backlogChanged = () => {
 };
 const dispatchNow = () => {
   if (CAPTURE && !process.argv.includes('--dispatch')) return; // testes não disparam agentes sozinhos (a não ser que peçam)
+  const quota = () => getUsage(false).then(u => u.limits.find(l => l.kind === 'session')?.percent ?? null, () => null);
   dispatchTodo({
-    quota: () => getUsage(false).then(u => u.limits.find(l => l.kind === 'session')?.percent ?? null, () => null),
+    quota,
     start: input => startRun({ ...input, budget_usd: SIZE_BUDGET.large, proposal_id: null }, emitRun),
   }).catch(() => {});
+  // agente de triagem: lê as ideias novas e deixa uma recomendação (gatilho em Triagem)
+  dispatchTriage({
+    quota, setting: getSetting,
+    start: input => startRun({ ...input, project_slug: null, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun),
+  }).then(n => { if (n) send('backlog:changed', null); }, () => {});
 };
 const contextChanged = (project: string) => send('context:changed', { project });
 const factProject = (id: number) => get<{ p: string }>('select project_slug p from facts where id = ?', id)?.p ?? '';
@@ -253,7 +259,7 @@ function registerIpc(): void {
   handle('chat:delete', id => deleteChat(id));
 
   handle('settings:get', key => getSetting(key));
-  handle('settings:set', (key, value) => { setSetting(key, value); });
+  handle('settings:set', (key, value) => { setSetting(key, value); if (key.startsWith('triage:')) backlogChanged(); });
 
   handle('dialog:folder', async defaultPath => {
     const r = await dialog.showOpenDialog(win!, { defaultPath, properties: ['openDirectory', 'createDirectory'] });

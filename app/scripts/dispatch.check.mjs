@@ -12,8 +12,8 @@ writeFileSync(stub, `
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(':memory:');
 db.exec(\`
-  create table agents (id integer primary key, permission text, name text);
-  insert into agents values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
+  create table agents (id integer primary key, permission text, name text, builtin integer default 0);
+  insert into agents (id, permission, name) values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
   create table projects (slug text primary key, status text, todo_agent_id integer, todo_parallel integer, todo_hours text);
   insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, ''), ('conteudo', 'active', null, 1, '');
   create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text, board_id integer);
@@ -28,6 +28,11 @@ db.exec(\`
   create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, color text, primary key (board_id, key));
   create table task_boards (task_id integer, board_id integer, stage text, position integer default 0, updated_at text, primary key (task_id, board_id));
   create table deliveries (pr_url text, title text, task_id integer);
+  insert into agents values (1, 'edits', 'Central', 1);
+  create table ideas (id integer primary key, title text, body text, project_slug text, status text, author text, triaged_at text);
+  insert into ideas (id, title, body, project_slug, status, author) values (1, 'Solta', 'texto', null, 'new', 'gustavo'),
+    (2, 'Com projeto', null, 'kultivai', 'new', 'gustavo'), (3, 'De agente', null, null, 'new', 'agente'), (4, 'Velha', null, null, 'approved', 'gustavo');
+  alter table runs add column prompt text;
 \`);
 module.exports = { db, now: () => '2026-11-02T12:00:00.000Z', all: (s, ...a) => db.prepare(s).all(...a), get: (s, ...a) => db.prepare(s).get(...a), run: (s, ...a) => db.prepare(s).run(...a) };`);
 const opts = { bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', plugins: [{ name: 'db', setup: b => b.onResolve({ filter: /^\.\/db$/ }, () => ({ path: stub, external: true })) }] };
@@ -130,6 +135,19 @@ bd.saveColumns(solto.id, [{ key: 'ideias', label: 'Ideias' }, { key: 'publicado'
 ok(bd.stagesOf().find(x => x.task_id === 10 && x.board_id === solto.id).stage === 'ideias', 'coluna removida: tarefa vai para a primeira');
 bd.deleteBoard(solto.id);
 ok(!bd.stagesOf().some(x => x.board_id === solto.id) && db.prepare('select count(*) n from tasks where id = 10').get().n === 1, 'apagar quadro mantém a tarefa');
+
+// agente de triagem
+const tStarted = [];
+const tdeps = (mode, quota = 10) => ({ quota: async () => quota, setting: k => (k === 'triage:mode' ? mode : null),
+  start: i => { tStarted.push(i); db.prepare("insert into runs (agent_id, status, prompt) values (?, 'queued', ?)").run(i.agent_id, i.prompt); } });
+ok(await d.dispatchTriage(tdeps('off')) === 0, 'triagem desligada não roda');
+ok(await d.dispatchTriage(tdeps('no_project', 90)) === 0 && !db.prepare('select triaged_at t from ideas where id = 1').get().t, 'cota alta: triagem espera sem marcar');
+ok(await d.dispatchTriage(tdeps('no_project')) === 1 && tStarted[0].agent_id === 1 && tStarted[0].prompt.includes('#1') && !tStarted[0].prompt.includes('Com projeto'), 'sem projeto: só a solta, com a Central');
+ok(await d.dispatchTriage(tdeps('all')) === 0, 'uma triagem por vez');
+db.exec("update runs set status = 'succeeded' where prompt like 'Triagem%'");
+ok(await d.dispatchTriage(tdeps('all')) === 1 && tStarted[1].prompt.includes('Com projeto'), 'todas: pega a com projeto; ideia de agente e já vista ficam de fora');
+db.exec("update runs set status = 'succeeded' where prompt like 'Triagem%'");
+ok(await d.dispatchTriage(tdeps('all')) === 0, 'nada novo: não roda');
 
 rmSync(dir, { recursive: true, force: true });
 console.log('dispatch ok');

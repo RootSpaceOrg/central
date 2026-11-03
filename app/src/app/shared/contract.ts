@@ -216,6 +216,10 @@ export interface IdeaDto {
   /** tarefas ligadas e quantas já estão feitas */
   tasks: number;
   tasks_done: number;
+  /** agente de triagem pegou a ideia (null = ainda não) */
+  triaged_at: string | null;
+  /** recomendação do agente de triagem: "aprovar e planejar — motivo" */
+  triage: string | null;
 }
 
 /** Rumo do projeto: versão atual (e quem mexeu por último). */
@@ -240,6 +244,7 @@ export interface IdeaPatch {
   project_slug?: string | null;
   status?: IdeaStatus;
   milestone_id?: number | null;
+  triage?: string | null;
 }
 
 export interface TaskDto {

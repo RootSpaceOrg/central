@@ -23,6 +23,10 @@ export interface Idea {
   milestoneId: number | null;
   tasks: number;
   tasksDone: number;
+  /** quando o agente de triagem pegou a ideia */
+  triagedAt: Date | null;
+  /** recomendação dele: "aprovar e planejar — motivo" */
+  triage: string | null;
 }
 
 /** Ciclo de vida: nova (triagem) → aprovada (insumo do backlog) → em andamento (tem tarefas) → feita; ou descartada. */
@@ -43,6 +47,7 @@ const toModel = (d: IdeaDto): Idea => ({
   source: d.source, sourceRef: d.source_ref, taskId: d.task_id, createdAt: new Date(d.created_at),
   // ideias antigas criadas por agentes (pela Central) não guardavam o autor
   author: d.author && !(d.author === 'gustavo' && d.source === 'central') ? d.author : d.source === 'central' ? 'agente' : 'gustavo', approvedAt: d.approved_at ? new Date(d.approved_at) : null, milestoneId: d.milestone_id ?? null, tasks: d.tasks ?? 0, tasksDone: d.tasks_done ?? 0,
+  triagedAt: d.triaged_at ? new Date(d.triaged_at) : null, triage: d.triage ?? null,
 });
 
 @Injectable({ providedIn: 'root' })

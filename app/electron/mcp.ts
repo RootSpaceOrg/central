@@ -17,7 +17,7 @@ import { Emit, killRun, listEvents, listRuns, listTurns, startRun, startTurn } f
 import { createAgent, deleteAgent, listAgents, updateAgent } from './agentdefs';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
-  updateIdea, updateTask,
+  getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
 import { createBoard, listBoards, resolveBoard, resolveStage, setStage, stagesOf } from './board';
@@ -158,7 +158,16 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('update_idea', 'Edita uma ideia ou muda o status. Aprovar (approved) ou descartar (archived) só quando o Gustavo pedir.', {
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), project_slug: z.string().optional(), status: ideaStatus.optional(),
     milestone_id: z.number().int().optional().describe('liga a ideia a um marco do roadmap'),
+    triage: z.string().optional().describe('recomendação da triagem, aparece no cartão: "<aprovar e planejar | aprovar | descartar | precisa de você> — motivo"'),
   }, ({ id, ...patch }) => updateIdea(id, patch), h.backlog);
+
+  tool('triage_agent', 'Gatilho do agente de triagem (lê as ideias novas do Gustavo, acha o projeto, organiza e recomenda). Sem argumentos: mostra a configuração. mode: off | no_project | all. agent_id: quem faz (padrão: a Central).', {
+    mode: z.enum(['off', 'no_project', 'all']).optional(), agent_id: z.number().int().optional(),
+  }, a => {
+    if (a.mode) setSetting('triage:mode', a.mode);
+    if (a.agent_id !== undefined) setSetting('triage:agent', String(a.agent_id));
+    return { mode: getSetting('triage:mode') ?? 'no_project', agent_id: Number(getSetting('triage:agent')) || null };
+  }, h.backlog);
 
   // ---------- rumo do projeto e gestor ----------
   tool('get_direction', 'Rumo atual do projeto (para onde vamos: objetivo, foco do momento, o que não fazer), definido pelo Gustavo.', { project_slug: z.string() }, a =>

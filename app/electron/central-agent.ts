@@ -171,7 +171,7 @@ export function describe(name: string, input: any): string {
     create_project: `Criou o projeto ${input?.name ?? ''}`, update_project: `Editou o projeto ${input?.slug ?? ''}`, delete_project: `Excluiu o projeto ${input?.slug ?? ''}`,
     list_tasks: 'Consultou o backlog', create_task: `Criou a tarefa "${input?.title ?? ''}"`, update_task: `Atualizou a tarefa #${input?.id ?? ''}`,
     delete_task: `Excluiu a tarefa #${input?.id ?? ''}`, list_ideas: 'Consultou as ideias', create_idea: `Guardou a ideia "${input?.title ?? ''}"`,
-    update_idea: `Atualizou a ideia #${input?.id ?? ''}`, promote_idea: `Transformou a ideia #${input?.id ?? ''} em tarefa`,
+    update_idea: `Atualizou a ideia #${input?.id ?? ''}`, promote_idea: `Transformou a ideia #${input?.id ?? ''} em tarefa`, triage_agent: 'Viu o agente de triagem',
     list_decisions: 'Consultou as decisões', create_decision: `Criou a decisão "${input?.title ?? ''}"`, decide: `Registrou decisão #${input?.id ?? ''}`,
     list_agent_runs: 'Consultou as execuções', get_agent_run: `Leu o log da execução #${input?.id ?? ''}`, start_agent: 'Colocou um agente para trabalhar',
     stop_agent: `Interrompeu a execução #${input?.id ?? ''}`, start_turn: 'Começou um turno', list_turns: 'Consultou os turnos',

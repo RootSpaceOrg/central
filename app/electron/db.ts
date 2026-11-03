@@ -375,11 +375,18 @@ for (const [table, column, type] of [
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
   ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['runs', 'board_id', 'integer'], ['board_cols', 'color', 'text'], ['tasks', 'color', 'text'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
+  ['ideas', 'triaged_at', 'text'], ['ideas', 'triage', 'text'],
   ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
   const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
   if (!cols.some(c => c.name === column)) db.exec(`alter table ${table} add column ${column} ${type}`);
+}
+
+// v0.26: o agente de triagem só pega ideias novas daqui em diante (as antigas contam como já vistas)
+if (!db.prepare(`select 1 from settings where key = 'triage:backfill'`).get()) {
+  db.exec(`update ideas set triaged_at = created_at where triaged_at is null`);
+  db.exec(`insert into settings (key, value) values ('triage:backfill', '1')`);
 }
 
 // v0.6: execuções e rotinas podem não ter projeto (agente sem projeto). O SQLite não muda NOT NULL de coluna

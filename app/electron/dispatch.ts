@@ -4,7 +4,7 @@
  * Travas: no máximo N do responsável por vez no projeto, só no horário escolhido, não dispara com a cota da sessão acima
  * de 80% e não insiste numa tarefa que não terminou nas últimas 12 h (volta para A fazer e ficaria em laço).
  */
-import { all, get } from './db';
+import { all, get, run } from './db';
 
 const QUOTA_CEILING = 80;
 const RETRY_AFTER_H = 12;
@@ -81,3 +81,48 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
   }
   return started;
 }
+
+// ---------- agente de triagem ----------
+
+export type TriageMode = 'off' | 'no_project' | 'all';
+export const TRIAGE_HEAD = 'Triagem automática';
+const TRIAGE_BATCH = 5;
+
+/**
+ * Ideias que você anota entram na triagem; com o gatilho ligado, um agente (padrão: a Central) lê, organiza e deixa uma
+ * recomendação no cartão. Nunca aprova nem descarta: quem decide é o Gustavo. Uma execução por vez, até 5 ideias por lote.
+ * Só ideias do Gustavo: as que os agentes sugerem (inclusive as divisões da própria triagem) não voltam para a fila.
+ */
+export async function dispatchTriage(deps: Pick<DispatchDeps, 'quota' | 'now'> & {
+  setting: (key: string) => string | null;
+  start: (input: { agent_id: number; prompt: string }) => void;
+}): Promise<number> {
+  const mode = (deps.setting('triage:mode') ?? 'no_project') as TriageMode;
+  if (mode === 'off') return 0;
+  const agent = Number(deps.setting('triage:agent')) || get<{ id: number }>('select id from agents where builtin = 1')?.id;
+  if (!agent || !get('select 1 from agents where id = ?', agent)) return 0;
+  if (get(`select 1 from runs where prompt like ? and status in ('queued','preparing','running')`, `${TRIAGE_HEAD}%`)) return 0;
+  const ideas = all<{ id: number; title: string; body: string | null; project_slug: string | null }>(
+    `select id, title, body, project_slug from ideas where status = 'new' and triaged_at is null and author = 'gustavo'
+       ${mode === 'no_project' ? 'and project_slug is null' : ''} order by id limit ?`, TRIAGE_BATCH);
+  if (!ideas.length) return 0;
+  const used = await deps.quota();
+  if (used !== null && used >= QUOTA_CEILING) return 0;
+  const at = (deps.now?.() ?? new Date()).toISOString();
+  for (const i of ideas) run('update ideas set triaged_at = ? where id = ?', at, i.id);
+  deps.start({ agent_id: agent, prompt: triagePrompt(ideas) });
+  return ideas.length;
+}
+
+export const triagePrompt = (ideas: { id: number; title: string; body: string | null; project_slug: string | null }[]) => `${TRIAGE_HEAD}: ${ideas.length === 1 ? `ideia #${ideas[0].id}` : `${ideas.length} ideias`}
+
+O Gustavo anotou ${ideas.length === 1 ? 'esta ideia' : 'estas ideias'} na triagem. Leia e deixe cada uma pronta para ele decidir em segundos.
+Para cada ideia:
+1. Descubra de qual projeto é (list_projects, get_direction, roadmap, backlog, código se precisar) e grave com update_idea project_slug. Se não for de nenhum, deixe sem.
+2. Se o texto estiver confuso, reescreva título (curto, verbo no infinitivo) e descrição em markdown com update_idea, sem perder nada do que ele escreveu.
+3. Se forem várias coisas, divida: create_idea para cada parte (mesmo projeto) e deixe a original com a principal. Ligue ao marco do roadmap (milestone_id) se servir a um.
+4. Se depender de uma escolha dele, crie uma decisão (create_decision) com as opções.
+5. Por fim, update_idea com triage = "<aprovar e planejar | aprovar | descartar | precisa de você> — <motivo em uma frase>".
+Nunca aprove nem descarte (status): quem decide é ele. Não crie tarefas.
+
+${ideas.map(i => `## Ideia #${i.id}${i.project_slug ? ` (projeto ${i.project_slug})` : ' (sem projeto)'}\n${i.title}${i.body ? `\n\n${i.body}` : ''}`).join('\n\n')}`;
