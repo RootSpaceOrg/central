@@ -21,7 +21,8 @@ import {
 } from './backlog';
 import { get, run } from './db';
 import { createBoard, listBoards, resolveBoard, resolveStage, setStage, stagesOf } from './board';
-import { reportDelivery } from './deliveries';
+import { digest, listDeliveries, reportDelivery } from './deliveries';
+import { releaseStatus } from './release';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
 import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
 import { setStatus } from './activity';
@@ -166,6 +167,26 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     project_slug: z.string(), text: z.string().describe('rumo completo em markdown curto: Objetivo, Foco agora, Não fazer, Próximos marcos'), note: z.string().describe('por que mudou'),
   }, a => setDirection(a.project_slug, a.text, 'agente', a.note), h.projects);
   const horizon = z.enum(['now', 'next', 'later', 'done']).describe('now = Agora, next = Próximo, later = Depois, done = Feito');
+  // ---------- entregas, o que aconteceu, produção ----------
+  tool('list_deliveries', 'Notas de entrega das execuções (o que mudou, por quê, como testar, riscos, PR). status: review = esperando a revisão do Gustavo.', {
+    status: z.enum(['review', 'info', 'accepted', 'adjusting', 'discarded', 'paused']).optional(), since: z.string().optional().describe('ISO; padrão: últimos 7 dias'),
+    project_slug: z.string().optional(),
+  }, a => listDeliveries(a.since ?? new Date(Date.now() - 7 * 86_400_000).toISOString(), a.status ?? null)
+    .filter(d => !a.project_slug || d.project_slug === a.project_slug)
+    .map(d => ({ id: d.id, run: d.run_id, project: d.project_slug, agent: d.agent_name, task: d.task_id, title: d.title, what: d.what.slice(0, 400),
+      how_to_test: d.how_to_test, risks: d.risks, pr: d.pr_url, files: d.files, status: d.status, explained: d.explained, at: d.created_at })));
+  tool('what_happened', 'Resumo do que aconteceu desde um momento: entregas, tarefas concluídas, roadmap, ideias, decisões, memórias, execuções e tempo de agente.', {
+    since: z.string().describe('ISO (ex.: ontem 18h)'),
+  }, a => {
+    const d = digest(a.since);
+    return { ...d, deliveries: d.deliveries.map(x => ({ project: x.project_slug, agent: x.agent_name, title: x.title, status: x.status, failed: x.outcome === 'failed' })) };
+  });
+  tool('production_status', 'O que está em develop e ainda não está em main (esperando produção), por repositório do projeto, com PRs e há quanto tempo.', {
+    project_slug: z.string(), refresh: z.boolean().optional().describe('buscar o remoto agora (git fetch)'),
+  }, async a => (await releaseStatus(a.project_slug, !!a.refresh)).filter(r => r.items.length || r.error)
+    .map(r => ({ repo: r.name, from: r.dev, to: r.prod, commits: r.commits, oldest: r.oldest_at, error: r.error,
+      prs: r.items.map(i => ({ pr: i.pr, title: i.title, author: i.author, at: i.at, delivery: i.delivery, task: i.task_id })) })));
+
   tool('list_milestones', 'Roadmap do projeto: marcos em Agora / Próximo / Depois / Feito, com progresso das tarefas ligadas.', { project_slug: z.string() }, a =>
     listMilestones(a.project_slug).map(m => ({ id: m.id, title: m.title, horizon: m.horizon, target: m.target, tasks: `${m.tasks_done}/${m.tasks}`, description: m.description, ideas: m.ideas, author: m.author, note: m.note })));
   const why = z.string().describe('de onde veio / por quê, curto (ex.: "reunião 02/11: cliente pediu exportação"). Aparece no histórico do roadmap.');
