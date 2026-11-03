@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import type { NewRunInput, NewTurnInput, RunDto, RunEventDto, RunEventKind, TurnDto } from '../src/app/shared/contract';
 import { agentCwd, agentPromptFile, agentTools, getAgent } from './agentdefs';
 import { moveTaskForRun } from './backlog';
+import { listBoard, setStage } from './board';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { closeDelivery } from './deliveries';
@@ -38,14 +39,14 @@ export function listRuns(slug: string | null): RunDto[] {
 
 export const listEvents = (id: number) => all<RunEventDto>('select run_id, at, kind, text from run_events where run_id = ? order by id', id);
 
-export function startRun(input: NewRunInput, emit: Emit, routineId: number | null = null): RunDto {
+export function startRun(input: NewRunInput & { stage?: string | null }, emit: Emit, routineId: number | null = null): RunDto {
   const id = queueRun(input, null, routineId);
   emit.changed();
   pump(emit);
   return dto(id);
 }
 
-function queueRun(input: NewRunInput, turnId: number | null, routineId: number | null = null): number {
+function queueRun(input: NewRunInput & { stage?: string | null }, turnId: number | null, routineId: number | null = null): number {
   const prompt = input.prompt?.trim();
   if (!prompt) throw new Error('Descreva o que o agente deve fazer.');
   const agent = input.agent_id ? getAgent(input.agent_id) : null;
@@ -66,8 +67,9 @@ function queueRun(input: NewRunInput, turnId: number | null, routineId: number |
     `insert into runs (project_slug, agent_id, proposal_id, task_id, turn_id, routine_id, scope, repo_path, prompt, permission, budget_usd)
      values (?,?,?,?,?,?,?,?,?,?,?)`,
     slug, agent?.id ?? null, input.proposal_id ?? null, input.task_id ?? null, turnId, routineId, scope, where, prompt, permission, budget);
+  if (input.stage) run('update runs set stage = ? where id = ?', input.stage, Number(lastInsertRowid));
   if (input.proposal_id) run(`update proposals set status = 'running', updated_at = ? where id = ?`, now(), input.proposal_id);
-  if (input.task_id) {
+  if (input.task_id && !input.stage) {
     moveTaskForRun(input.task_id, 'doing');
     if (input.repo_path) run('update tasks set repo_path = coalesce(repo_path, ?) where id = ?', input.repo_path, input.task_id);
   }
@@ -174,7 +176,16 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
   // concluída vai para Revisão (alguém precisa olhar o PR); falha volta para A fazer
   const waiting = !!get<{ w: string | null }>('select waiting w from runs where id = ?', id)?.w;
   const asking = task ? !!get(`select 1 from proposals where task_id = ? and status = 'proposed'`, task) : false;
-  if (task && !waiting && !asking) moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
+  const stage = get<{ s: string | null }>('select stage s from runs where id = ?', id)?.s ?? null;
+  if (task && !waiting && !asking) {
+    if (stage) {
+      // etapa do quadro: terminou bem → próxima coluna da etapa (ou Revisão); não terminou → fica na etapa
+      const col = listBoard(dto(id).project_slug ?? '').find(c => c.key === stage);
+      if (status === 'succeeded' && col?.next_key) setStage(task, col.next_key, pr);
+      else if (status === 'succeeded') moveTaskForRun(task, 'review', pr);
+      else if (pr) run('update tasks set pr_url = coalesce(?, pr_url) where id = ?', pr, task);
+    } else moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
+  }
   procs.delete(id);
   // nota de entrega: garante, mede o diff e decide se vai para a revisão
   closeDelivery(id).catch(() => {}).finally(() => emit.changed());

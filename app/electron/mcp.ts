@@ -101,7 +101,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
 
   // ---------- tarefas ----------
   tool('list_tasks', 'Lista tarefas do backlog. Filtros opcionais por projeto e coluna.', { project_slug: z.string().optional(), column: column.optional() }, a =>
-    listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status })));
+    listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, stage: t.stage, priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status })));
   tool('create_task', 'Cria tarefa no backlog de um projeto. priority: 0 urgente, 1 alta, 2 normal, 3 baixa.', {
     project_slug: z.string(), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     repo_path: z.string().optional().describe('caminho do repositório, se já souber onde o trabalho acontece'),
@@ -111,7 +111,8 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('update_task', 'Edita ou move uma tarefa (coluna, prioridade, título, descrição, projeto, repositório).', {
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     project_slug: z.string().optional(), repo_path: z.string().optional(), milestone_id: z.number().int().optional(),
-  }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column ? 0 : undefined }), h.backlog);
+    stage: z.string().optional().describe('coluna do quadro do projeto (nome ou key), quando o projeto tem quadro próprio'),
+  }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column || patch.stage ? 0 : undefined }), h.backlog);
   tool('delete_task', 'Exclui uma tarefa. Só use se o Gustavo pediu.', { id: z.number().int() }, ({ id }) => deleteTask(id), h.backlog);
 
   // ---------- ideias ----------

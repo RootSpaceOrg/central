@@ -290,6 +290,16 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   merge em develop não fecha a tarefa. Visão geral avisa tarefa em dev há 7+ dias.
 - Migração da tabela de tarefas (CHECK das colunas) testada numa cópia do banco: 18 tarefas preservadas, FKs íntegras.
 
+## Feito (v0.24)
+
+- **Workflow por projeto/frente** (Backlog → Workflow): colunas livres (nome, descrição, tipo) e, em cada uma, o agente que
+  pega o que entra nela, com instrução da etapa, até N por vez, horário e "quando terminar bem, vai para". Pipelines de
+  vários agentes (ex.: Pesquisa → Roteiro → Arte → sua revisão → Publicado). Modelos: Desenvolvimento, Desenvolvimento com
+  revisor, Conteúdo. Cada coluna tem um tipo (fila, a fazer, fazendo, revisão, em dev, feito): o que já existia (PR →
+  Em dev/Feito, saúde, resumo, Visão geral) segue lendo o tipo. Os agentes do projeto recebem o quadro no contexto e
+  movem com update_task stage=<coluna>. Etapa com decisão aberta ou agente esperando não dispara; etapa que não terminou
+  não insiste por 12 h. Projeto sem workflow = quadro padrão (com o "Responsável pelo A fazer").
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

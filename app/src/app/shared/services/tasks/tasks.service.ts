@@ -13,6 +13,8 @@ export interface Task {
   title: string;
   body: string | null;
   column: TaskColumn;
+  /** coluna do quadro do projeto (null = quadro padrão) */
+  stage: string | null;
   priority: TaskPriority;
   position: number;
   prUrl: string | null;
@@ -49,7 +51,7 @@ export const PRIORITY: Record<TaskPriority, { label: string; tone: string }> = {
 };
 
 const toModel = (d: TaskDto): Task => ({
-  id: d.id, projectSlug: d.project_slug, repoPath: d.repo_path, title: d.title, body: d.body, column: d.column,
+  id: d.id, projectSlug: d.project_slug, repoPath: d.repo_path, title: d.title, body: d.body, column: d.column, stage: d.stage ?? null,
   priority: d.priority, position: d.position, prUrl: d.pr_url, proposalId: d.proposal_id, ideaId: d.idea_id,
   runId: d.run_id, runStatus: d.run_status, updatedAt: new Date(d.updated_at),
 });
@@ -97,6 +99,12 @@ export class TasksService {
       return [...rest.filter(t => t.column !== column), ...inCol];
     });
     this.api.update(id, { column, position }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
+  }
+
+  /** Quadro próprio: move para uma coluna do workflow (o tipo vem junto, do quadro). */
+  moveStage(id: number, stage: string, kind: TaskColumn, position: number): void {
+    this.tasks.update(list => list.map(t => (t.id === id ? { ...t, stage, column: kind, position } : t)));
+    this.api.update(id, { stage, position }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   remove(id: number): void {

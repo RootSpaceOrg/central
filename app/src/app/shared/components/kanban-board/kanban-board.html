@@ -1,13 +1,17 @@
-<div cdkDropListGroup class="grid h-full min-h-0 grid-cols-5 gap-3">
+<div cdkDropListGroup class="grid h-full min-h-0 auto-cols-[minmax(230px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-1">
   @for (col of columns(); track col.id) {
     @let items = byColumn()[col.id];
     <section class="flex min-h-0 flex-col rounded-2xl bg-panel/70" [attr.aria-label]="col.label">
       <header class="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
-        <h3 class="font-display text-[15px] font-semibold">{{ col.label }}</h3>
+        <h3 class="font-display text-[15px] font-semibold" [title]="col.hint">{{ col.label }}</h3>
         <span class="rounded-full bg-raise px-2 text-[12px] tabular-nums text-mute">{{ items.length }}</span>
-        @if (col.id !== 'done' && col.id !== 'doing') {
-          <button type="button" class="ml-auto grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text"
-                  (click)="dialogs.newTask({ projectSlug: projectSlug(), column: col.id })" [attr.aria-label]="'Nova tarefa em ' + col.label">
+        @if (col.agent; as a) {
+          <span class="flex min-w-0 items-center gap-1 rounded-full bg-frost/10 px-1.5 py-0.5 text-[11px] text-frost" [title]="a.name + ' pega o que entra aqui'">
+            <app-icon name="agent" [size]="11" /><span class="truncate">{{ a.name }}</span></span>
+        }
+        @if (col.kind !== 'done' && col.kind !== 'doing') {
+          <button type="button" class="ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text"
+                  (click)="dialogs.newTask({ projectSlug: projectSlug(), column: col.kind })" [attr.aria-label]="'Nova tarefa em ' + col.label">
             <app-icon name="plus" [size]="18" />
           </button>
         }

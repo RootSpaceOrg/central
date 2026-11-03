@@ -260,6 +260,22 @@ db.exec(`
     reviewed_at text
   );
 
+  -- quadro (workflow) por projeto: colunas livres com tipo, descrição e agente que pega o que entra nela
+  create table if not exists board_columns (
+    project_slug text not null references projects on delete cascade,
+    key          text not null,
+    label        text not null,
+    description  text,
+    kind         text not null,
+    position     integer not null default 0,
+    agent_id     integer references agents on delete set null,
+    instruction  text,
+    parallel     integer not null default 1,
+    hours        text not null default '',
+    next_key     text,
+    primary key (project_slug, key)
+  );
+
   -- memória dos agentes: do agente (agent_id) ou de todos (agent_id null); esquecer retira com o motivo
   create table if not exists memories (
     id             integer primary key autoincrement,
@@ -340,7 +356,7 @@ for (const [table, column, type] of [
   ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
   ['projects', 'parent_slug', 'text'],
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
-  ['agents', 'room', "text not null default ''"], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
+  ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],

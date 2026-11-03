@@ -1,5 +1,5 @@
 import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, effect, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { ContextMenuService } from '../../services/context-menu/context-menu.service';
@@ -7,11 +7,16 @@ import { AgentsService } from '../../services/agents/agents.service';
 import { ChatService } from '../../services/chat/chat.service';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
+import { Agent } from '../../services/agents/agents.service';
+import { BoardService, KIND_LABEL } from '../../services/board/board.service';
 import { ProposalsService } from '../../services/proposals/proposals.service';
 import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
 
 /** Quadro Kanban das tarefas. Sem projectSlug mostra todos os projetos vivos. */
+/** Coluna na tela: do workflow do projeto (custom) ou padrão (o tipo). */
+interface ViewColumn { id: string; label: string; kind: TaskColumn; hint: string; agent: Agent | null; custom: boolean }
+
 @Component({
   selector: 'app-kanban-board',
   imports: [CdkDropListGroup, CdkDropList, CdkDrag, CdkDragPlaceholder, Icon, RouterLink],
@@ -26,14 +31,29 @@ export class KanbanBoard {
   private readonly agents = inject(AgentsService);
   private readonly chat = inject(ChatService);
   private readonly proposals = inject(ProposalsService);
+  private readonly boards = inject(BoardService);
 
   readonly projectSlug = input<string | null>(null);
 
-  /** "Em dev" só aparece em projeto onde pronto é produção (ou no quadro geral, se algum for) */
-  protected readonly columns = computed(() => {
+  constructor() {
+    effect(() => { const slug = this.projectSlug(); if (slug) this.boards.ensure(slug); });
+  }
+
+  /** quadro próprio do projeto (workflow), se houver */
+  private readonly board = computed(() => { const slug = this.projectSlug(); return slug ? this.boards.bySlug()[slug] ?? [] : []; });
+  /**
+   * Colunas na tela: as do workflow do projeto, ou as padrão (com "Em dev" só onde pronto é produção).
+   * id = key da coluna (workflow) ou o tipo (padrão).
+   */
+  protected readonly columns = computed<ViewColumn[]>(() => {
+    const board = this.board();
+    if (board.length) {
+      return board.map(c => ({ id: c.key, label: c.label, kind: c.kind, hint: c.description ?? KIND_LABEL[c.kind],
+        agent: c.agentId ? this.agents.byId().get(c.agentId) ?? null : null, custom: true }));
+    }
     const slug = this.projectSlug();
     const prod = slug ? this.projects.bySlug().get(slug)?.doneWhen === 'prod' : this.projects.living().some(p => p.doneWhen === 'prod');
-    return COLUMNS.filter(c => c.id !== 'dev' || prod);
+    return COLUMNS.filter(c => c.id !== 'dev' || prod).map(c => ({ id: c.id, label: c.label, kind: c.id, hint: c.hint, agent: null, custom: false }));
   });
   /** decisão esperando você sobre a tarefa (o agente parou nela) */
   protected readonly asking = computed(() => new Map(this.proposals.inbox().filter(p => p.taskId).map(p => [p.taskId!, p])));
@@ -43,12 +63,19 @@ export class KanbanBoard {
     const living = new Set(this.projects.living().map(p => p.slug));
     const visible = this.tasks.tasks().filter(t => (slug ? t.projectSlug === slug : living.has(t.projectSlug)));
     const sorted = [...visible].sort((a, b) => a.position - b.position || a.priority - b.priority);
-    return Object.fromEntries(COLUMNS.map(c => [c.id, sorted.filter(t => t.column === c.id)])) as Record<TaskColumn, Task[]>;
+    const board = this.board();
+    if (!board.length) return Object.fromEntries(COLUMNS.map(c => [c.id, sorted.filter(t => t.column === c.id)])) as Record<string, Task[]>;
+    // workflow: pela coluna da tarefa; tarefa sem coluna (antiga) cai na primeira do tipo dela
+    const keys = new Set(board.map(c => c.key));
+    const where = (t: Task) => (t.stage && keys.has(t.stage) ? t.stage : board.find(c => c.kind === t.column)?.key ?? board[0].key);
+    return Object.fromEntries(board.map(c => [c.key, sorted.filter(t => where(t) === c.key)])) as Record<string, Task[]>;
   });
 
-  protected drop(e: CdkDragDrop<TaskColumn, TaskColumn, Task>): void {
+  protected drop(e: CdkDragDrop<string, string, Task>): void {
     if (e.previousContainer === e.container && e.previousIndex === e.currentIndex) return;
-    this.tasks.move(e.item.data.id, e.container.data, e.currentIndex);
+    const col = this.columns().find(c => c.id === e.container.data)!;
+    if (col.custom) this.tasks.moveStage(e.item.data.id, col.id, col.kind, e.currentIndex);
+    else this.tasks.move(e.item.data.id, col.kind, e.currentIndex);
   }
 
   protected project(slug: string) { return this.projects.bySlug().get(slug) ?? null; }
@@ -76,7 +103,8 @@ export class KanbanBoard {
       { label: 'Conversar sobre esta tarefa', icon: 'central', run: () => this.talk(t) },
       ...(t.prUrl ? [{ label: 'Abrir PR', icon: 'pr' as const, run: () => this.projects.openExternal(t.prUrl!) }] : []),
       null,
-      ...this.columns().filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.id, 0) })),
+      ...this.columns().filter(c => c.id !== (c.custom ? t.stage : t.column)).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const,
+        run: () => (c.custom ? this.tasks.moveStage(t.id, c.id, c.kind, 0) : this.tasks.move(t.id, c.kind, 0)) })),
       null,
       { label: 'Excluir', icon: 'delete', danger: true, run: () => { if (confirm(`Excluir "${t.title}"?`)) this.tasks.remove(t.id); } },
     ]);

@@ -17,6 +17,7 @@ import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameC
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
+import { listBoard, saveBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo } from './dispatch';
 import { releaseStatus, releaseSummary } from './release';
@@ -208,6 +209,8 @@ function registerIpc(): void {
   handle('context:node', key => nodeDetail(key));
   handle('context:search', (slug, q) => searchHits(slug, q));
   handle('context:block', (slug, focus, budget) => contextBlock(slug, focus ? [focus] : [], budget));
+  handle('board:get', slug => listBoard(slug));
+  handle('board:save', (slug, cols) => { const b = saveBoard(slug, cols); backlogChanged(); return b; });
   handle('deliveries:list', (since, status) => listDeliveries(since, status));
   handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); backlogChanged(); });
   handle('digest:get', since => digest(since));

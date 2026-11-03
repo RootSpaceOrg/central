@@ -10,6 +10,7 @@ import type {
   IdeaDto, IdeaPatch, ImportResultDto, NewIdeaInput, NewProposalInput, NewTaskInput, ProposalDto, ProposalStatus, TaskColumn, TaskDto,
   TaskPatch, Verdict,
 } from '../src/app/shared/contract';
+import { hasBoard, listBoard, resolveStage, setStage, stageFor } from './board';
 import { all, get, now, run } from './db';
 import { pool } from './git';
 
@@ -131,7 +132,7 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
 // ---------- tarefas ----------
 
 const TASK_SELECT = `
-  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.priority, t.position, t.pr_url,
+  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.stage, t.priority, t.position, t.pr_url,
          t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at,
          r.id run_id, r.status run_status
   from tasks t
@@ -156,6 +157,9 @@ export function createTask(input: NewTaskInput & { proposal_id?: number | null; 
     Math.min(Math.max(Number(input.priority) || 0, 0), 3), top - 1,
     input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
   const id = Number(lastInsertRowid);
+  // projeto com quadro próprio: a tarefa entra na primeira coluna do tipo pedido
+  const first = stageFor(input.project_slug, column);
+  if (first) run('update tasks set stage = ? where id = ?', first, id);
   if (input.milestone_id && get('select 1 from milestones where id = ?', input.milestone_id)) run('update tasks set milestone_id = ? where id = ?', input.milestone_id, id);
   if (input.idea_id) {
     if (!get('select 1 from ideas where id = ?', input.idea_id)) throw new Error('Ideia não encontrada.');
@@ -165,10 +169,19 @@ export function createTask(input: NewTaskInput & { proposal_id?: number | null; 
   return getTask(id);
 }
 
-export function updateTask(id: number, patch: TaskPatch): void {
+export function updateTask(id: number, input: TaskPatch): void {
+  let patch = input;
   const task = get<TaskDto>('select * from tasks where id = ?', id);
   if (!task) throw new Error('Tarefa não encontrada.');
   if (patch.column && !COLUMNS.includes(patch.column)) throw new Error('Coluna inválida.');
+  // quadro próprio: mover pela coluna (stage) leva o tipo junto; mover só pelo tipo cai na primeira coluna dele
+  const slug = patch.project_slug ?? task.project_slug;
+  if (patch.stage !== undefined || (patch.column && hasBoard(slug))) {
+    const key = patch.stage !== undefined ? resolveStage(slug, patch.stage) : stageFor(slug, patch.column!);
+    if (!key) throw new Error(`Coluna "${patch.stage ?? patch.column}" não existe no quadro deste projeto.`);
+    setStage(id, key);
+    patch = { ...patch, column: listBoard(slug).find(c => c.key === key)!.kind };
+  }
 
   const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id'] as const).filter(k => k in patch && patch[k] !== undefined);
   if (simple.length) {
@@ -200,6 +213,12 @@ export function deleteTask(id: number): void {
 /** Chamado pelos agentes: a tarefa anda no quadro conforme a execução. */
 export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string | null = null): void {
   run(`update tasks set "column" = ?, pr_url = coalesce(?, pr_url), updated_at = ? where id = ?`, column, prUrl, now(), taskId);
+  // quadro próprio: se a coluna atual não é desse tipo, vai para a primeira que é
+  const t = get<{ project_slug: string; stage: string | null }>('select project_slug, stage from tasks where id = ?', taskId);
+  if (t && hasBoard(t.project_slug) && listBoard(t.project_slug).find(c => c.key === t.stage)?.kind !== column) {
+    const key = stageFor(t.project_slug, column);
+    if (key) run('update tasks set stage = ? where id = ?', key, taskId);
+  }
   syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', taskId)?.i ?? null);
 }
 

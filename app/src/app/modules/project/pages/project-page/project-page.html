@@ -67,12 +67,18 @@
     @if (tab() === 'backlog') {
       <div class="flex h-full flex-col px-8 pt-5 pb-5">
         <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <app-todo-owner class="mr-auto" [project]="p" />
+          @if (hasBoard(p.slug)) {
+            <span class="mr-auto text-[13px] text-mute">Workflow próprio: os agentes ficam nas colunas.</span>
+          } @else {
+            <app-todo-owner class="mr-auto" [project]="p" />
+          }
+          <button type="button" class="btn btn-sm" (click)="workflow.set(true)" title="Colunas do quadro e o agente de cada uma"><app-icon name="kanban" [size]="16" />Workflow</button>
           <button type="button" class="btn btn-sm" (click)="dialogs.newTurn({ projectSlug: p.slug })"><app-icon name="night" [size]="16" />Deixar evoluindo</button>
           <button type="button" class="btn btn-sm btn-primary" (click)="dialogs.newTask({ projectSlug: p.slug })"><app-icon name="plus" [size]="16" />Nova tarefa</button>
         </div>
         <app-kanban-board class="min-h-0 flex-1" [projectSlug]="p.slug" />
       </div>
+      @if (workflow()) { <app-board-editor [project]="p" (closed)="workflow.set(false)" /> }
     }
 
     @if (sessionsMounted()) {

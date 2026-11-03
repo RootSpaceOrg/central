@@ -261,6 +261,25 @@ export interface TaskDto {
   created_at: string;
   updated_at: string;
   milestone_id: number | null;
+  /** coluna do quadro do projeto (null = quadro padrão) */
+  stage: string | null;
+}
+
+/** Uma coluna do quadro de um projeto (workflow). */
+export interface BoardColumnDto {
+  key: string;
+  label: string;
+  description: string | null;
+  /** o que ela significa para a Central (gatilhos, PR → Em dev/Feito, saúde) */
+  kind: TaskColumn;
+  /** agente que pega o que entra nesta coluna (null = ninguém) */
+  agent_id: number | null;
+  /** o que o agente faz nesta etapa */
+  instruction: string | null;
+  parallel: number;
+  hours: string;
+  /** para onde a tarefa vai quando o agente termina bem (null = Revisão) */
+  next_key: string | null;
 }
 
 export interface NewTaskInput {
@@ -282,6 +301,8 @@ export interface TaskPatch {
   /** posição dentro da coluna (0 = topo) */
   position?: number;
   milestone_id?: number | null;
+  /** coluna do quadro do projeto (workflow); o tipo acompanha */
+  stage?: string;
 }
 
 export interface ImportResultDto {
@@ -854,6 +875,9 @@ export interface Api {
   'context:block': (projectSlug: string, focus: string, budget: number) => string;
   /** memória de um agente, a compartilhada ('shared') ou tudo ('all'); retired inclui as esquecidas */
   /** entregas desde (ISO) e/ou num status */
+  /** quadro (workflow) do projeto; [] = quadro padrão */
+  'board:get': (projectSlug: string) => BoardColumnDto[];
+  'board:save': (projectSlug: string, columns: BoardColumnDto[]) => BoardColumnDto[];
   'deliveries:list': (since: string | null, status: DeliveryStatus | null) => DeliveryDto[];
   'deliveries:review': (id: number, action: 'accepted' | 'adjusting' | 'discarded', note: string | null) => void;
   /** tudo o que aconteceu desde (ISO) */

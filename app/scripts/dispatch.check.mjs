@@ -12,21 +12,25 @@ writeFileSync(stub, `
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(':memory:');
 db.exec(\`
-  create table agents (id integer primary key, permission text);
-  insert into agents values (6, 'full');
+  create table agents (id integer primary key, permission text, name text);
+  insert into agents values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
   create table projects (slug text primary key, status text, todo_agent_id integer, todo_parallel integer, todo_hours text);
-  insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, '');
-  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text);
-  create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, repo_path text, priority integer, position integer);
-  insert into tasks values (1, 'kultivai', 'todo', 'Exportar PDF', 'detalhe', 'C:/r/front', 2, 0),
-    (2, 'kultivai', 'todo', 'Corrigir login', null, null, 0, 1), (3, 'kultivai', 'todo', 'Terceira', null, null, 2, 2),
-    (4, 'kultivai', 'backlog', 'Não é A fazer', null, null, 0, 0), (5, 'outro', 'todo', 'Sem responsável', null, null, 0, 0);
+  insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, ''), ('conteudo', 'active', null, 1, '');
+  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text);
+  create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, repo_path text, priority integer, position integer, stage text, pr_url text, updated_at text);
+  insert into tasks values (1, 'kultivai', 'todo', 'Exportar PDF', 'detalhe', 'C:/r/front', 2, 0, null, null, null),
+    (2, 'kultivai', 'todo', 'Corrigir login', null, null, 0, 1, null, null, null), (3, 'kultivai', 'todo', 'Terceira', null, null, 2, 2, null, null, null),
+    (4, 'kultivai', 'backlog', 'Não é A fazer', null, null, 0, 0, null, null, null), (5, 'outro', 'todo', 'Sem responsável', null, null, 0, 0, null, null, null),
+    (9, 'conteudo', 'backlog', 'Post sobre a Central', null, null, 2, 0, null, null, null);
+  create table proposals (id integer primary key, task_id integer, status text);
+  create table board_columns (project_slug text, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, primary key (project_slug, key));
   create table deliveries (pr_url text, title text, task_id integer);
 \`);
-module.exports = { db, all: (s, ...a) => db.prepare(s).all(...a), get: (s, ...a) => db.prepare(s).get(...a), run: (s, ...a) => db.prepare(s).run(...a) };`);
+module.exports = { db, now: () => '2026-11-02T12:00:00.000Z', all: (s, ...a) => db.prepare(s).all(...a), get: (s, ...a) => db.prepare(s).get(...a), run: (s, ...a) => db.prepare(s).run(...a) };`);
 const opts = { bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', plugins: [{ name: 'db', setup: b => b.onResolve({ filter: /^\.\/db$/ }, () => ({ path: stub, external: true })) }] };
 await build({ ...opts, entryPoints: [join(root, 'electron/dispatch.ts')], outfile: join(dir, 'd.js') });
 await build({ ...opts, entryPoints: [join(root, 'electron/release.ts')], outfile: join(dir, 'r.js') });
+await build({ ...opts, entryPoints: [join(root, 'electron/board.ts')], outfile: join(dir, 'b.js') });
 const req = createRequire(import.meta.url);
 const d = req(join(dir, 'd.js'));
 const r = req(join(dir, 'r.js'));
@@ -70,6 +74,45 @@ ok(e.pr === null && e.title === 'hotfix direto', 'commit direto');
 
 ok(r.isBackMerge('Back-merge: prod hotfix main -> develop') && r.isBackMerge("Merge branch 'main' into develop") && r.isBackMerge("Merge remote-tracking branch 'origin/master' into develop"), 'back-merge');
 ok(!r.isBackMerge('Merge pull request #3 from org/feature/x') && !r.isBackMerge('feat: mainframe'), 'não é back-merge');
+
+// ---------- quadro (workflow) por projeto ----------
+const bd = req(join(dir, 'b.js'));
+ok(bd.keyOf('Revisão por agente') === 'revisao-por-agente', 'key da coluna sem acento');
+let threw = '';
+try { bd.saveBoard('conteudo', [{ label: 'Ideias', kind: 'backlog' }]); } catch (e) { threw = e.message; }
+ok(threw.includes('feito'), 'quadro precisa de coluna feito');
+const cols = bd.saveBoard('conteudo', [
+  { label: 'Ideias', kind: 'backlog', description: 'o que pode virar post' },
+  { label: 'Pesquisa', kind: 'todo', agent_id: 7, instruction: 'Pesquise o tema', next_key: 'roteiro' },
+  { label: 'Roteiro', kind: 'doing', agent_id: 8, instruction: 'Escreva o roteiro', next_key: 'revisao' },
+  { label: 'Revisão', kind: 'review' },
+  { label: 'Publicado', kind: 'done' },
+]);
+ok(cols.map(c => c.key).join() === 'ideias,pesquisa,roteiro,revisao,publicado', 'colunas salvas na ordem');
+ok(db.prepare('select stage from tasks where id = 9').get().stage === 'ideias', 'tarefa existente cai na coluna do mesmo tipo');
+ok(bd.resolveStage('conteudo', 'Roteiro') === 'roteiro' && bd.stageFor('conteudo', 'review') === 'revisao', 'acha coluna por nome e por tipo');
+ok(bd.boardBlock('conteudo').includes('Pesquisa [pesquisa, a fazer]') && bd.boardBlock('kultivai') === '', 'quadro no prompt (só de quem tem)');
+
+// pipeline: tarefa entra em Pesquisa e o agente 7 pega com a etapa no prompt
+bd.setStage(9, 'pesquisa');
+ok(db.prepare('select "column" c from tasks where id = 9').get().c === 'todo', 'mover para a coluna leva o tipo junto');
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
+const st = started.find(s => s.task_id === 9);
+ok(st && st.agent_id === 7 && st.stage === 'pesquisa' && st.prompt.startsWith('Etapa do quadro: Pesquisa.') && st.prompt.includes('Roteiro'), 'etapa com agente dispara com a instrução e o destino');
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
+ok(!started.some(s => s.task_id === 9), 'já rodando: não dispara de novo');
+db.exec("update runs set status = 'succeeded' where task_id = 9; insert into proposals values (1, 9, 'proposed')");
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
+ok(!started.some(s => s.task_id === 9), 'decisão esperando você: a etapa espera');
+db.exec("update proposals set status = 'approved'");
+bd.setStage(9, 'roteiro');
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
+ok(started.find(s => s.task_id === 9)?.agent_id === 8, 'próxima etapa: o agente dela pega');
+ok(bd.saveBoard('conteudo', []).length === 0 && db.prepare('select stage from tasks where id = 9').get().stage === null, 'quadro vazio volta ao padrão');
 
 rmSync(dir, { recursive: true, force: true });
 console.log('dispatch ok');

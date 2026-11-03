@@ -21,6 +21,8 @@ import { CODE_TAB } from '../../../../shared/services/sessions/sessions.service'
 import { RoadmapTab } from './components/roadmap/roadmap-tab';
 import { ReleasePanel } from './components/release/release-panel';
 import { TodoOwner } from './components/todo-owner/todo-owner';
+import { BoardEditor } from './components/board-editor/board-editor';
+import { BoardService } from '../../../../shared/services/board/board.service';
 import { Summary } from './components/summary/summary';
 
 type Tab = 'sessoes' | 'rumo' | 'roadmap' | 'backlog' | 'producao' | 'contexto' | 'agentes';
@@ -32,7 +34,7 @@ const TABS = [
 
 @Component({
   selector: 'app-project-page',
-  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar, ContextView, RoadmapTab, ReleasePanel, TodoOwner],
+  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar, ContextView, RoadmapTab, ReleasePanel, TodoOwner, BoardEditor],
   templateUrl: './project-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -51,6 +53,10 @@ export class ProjectPage {
   protected readonly projectRuns = computed(() => this.runs.runs().filter(r => r.projectSlug === this.slug()));
 
   protected readonly tabs = TABS;
+  private readonly boards = inject(BoardService);
+  /** editor do workflow aberto */
+  protected readonly workflow = signal(false);
+  protected hasBoard(slug: string): boolean { this.boards.ensure(slug); return (this.boards.bySlug()[slug] ?? []).length > 0; }
   /** ?aba=backlog abre direto numa aba; ?nova=chat abre uma sessão nova */
   protected readonly tab = signal<Tab>('sessoes');
   /** as sessões só montam na primeira visita e depois ficam vivas (terminais, editor) */
