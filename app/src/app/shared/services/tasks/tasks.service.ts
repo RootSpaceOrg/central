@@ -36,12 +36,12 @@ export interface TaskDraft {
 }
 
 export const COLUMNS: { id: TaskColumn; label: string; hint: string }[] = [
-  { id: 'backlog', label: 'Backlog', hint: 'Ainda não decidido quando' },
-  { id: 'todo', label: 'A fazer', hint: 'Pronto para pegar ou mandar para um agente' },
-  { id: 'doing', label: 'Fazendo', hint: 'Com você ou com um agente' },
-  { id: 'review', label: 'Revisão', hint: 'PR aberto esperando seu olhar' },
-  { id: 'dev', label: 'Em dev', hint: 'Mergeado em develop, esperando produção' },
-  { id: 'done', label: 'Feito', hint: '' },
+  { id: 'backlog', label: 'Backlog', hint: 'Vai ser feito, mas ainda sem hora. Ninguém pega daqui sozinho.' },
+  { id: 'todo', label: 'A fazer', hint: 'Pronto para começar: você pega ou manda para um agente.' },
+  { id: 'doing', label: 'Fazendo', hint: 'Alguém trabalhando agora: você ou um agente.' },
+  { id: 'review', label: 'Revisão', hint: 'Terminado, esperando seu olhar: PR aberto ou entrega para revisar.' },
+  { id: 'dev', label: 'Em dev', hint: 'Mergeado em develop, esperando ir para produção (main).' },
+  { id: 'done', label: 'Feito', hint: 'PR mergeado.' },
 ];
 
 export const PRIORITY: Record<TaskPriority, { label: string; tone: string }> = {

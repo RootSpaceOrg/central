@@ -2,8 +2,8 @@
   @for (col of columns(); track col.id) {
     @let items = byColumn()[col.id];
     <section class="flex min-h-0 flex-col rounded-2xl bg-panel/70" [attr.aria-label]="col.label">
-      <header class="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
-        <h3 class="font-display text-[15px] font-semibold" [title]="col.hint">{{ col.label }}</h3>
+      <header class="flex flex-wrap items-center gap-x-2 px-4 pt-3.5 pb-2.5">
+        <h3 class="font-display text-[15px] font-semibold">{{ col.label }}</h3>
         <span class="rounded-full bg-raise px-2 text-[12px] tabular-nums text-mute">{{ items.length }}</span>
         @if (col.kind !== 'done' && col.kind !== 'doing') {
           <button type="button" class="ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text"
@@ -11,6 +11,7 @@
             <app-icon name="plus" [size]="18" />
           </button>
         }
+        @if (col.hint) { <p class="mt-0.5 w-full text-[12px] leading-snug text-faint">{{ col.hint }}</p> }
       </header>
 
       <div cdkDropList [cdkDropListData]="col.id" (cdkDropListDropped)="drop($event)"
@@ -61,7 +62,7 @@
             </div>
           </article>
         } @empty {
-          <p class="px-2 py-6 text-center text-[12.5px] text-faint">{{ col.hint || 'Nada aqui' }}</p>
+          <p class="px-2 py-6 text-center text-[12.5px] text-faint">Nada aqui</p>
         }
       </div>
     </section>

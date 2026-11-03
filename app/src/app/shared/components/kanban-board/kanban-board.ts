@@ -39,8 +39,15 @@ export class KanbanBoard {
   /** colunas fixas do backlog principal ("Em dev" só onde pronto é produção) */
   protected readonly columns = computed<ViewColumn[]>(() => {
     const slug = this.projectSlug();
-    const prod = slug ? this.projects.bySlug().get(slug)?.doneWhen === 'prod' : this.projects.living().some(p => p.doneWhen === 'prod');
-    return COLUMNS.filter(c => c.id !== 'dev' || prod).map(c => ({ id: c.id, label: c.label, kind: c.id, hint: c.hint }));
+    const project = slug ? this.projects.bySlug().get(slug) : null;
+    const prod = project ? project.doneWhen === 'prod' : this.projects.living().some(p => p.doneWhen === 'prod');
+    // o que a coluna quer dizer neste projeto: quem pega o "A fazer" e o que conta como pronto
+    const owner = project?.todoAgentId ? this.agents.byId().get(project.todoAgentId)?.name : null;
+    const hint = (id: TaskColumn, base: string) =>
+      id === 'todo' && owner ? `Pronto para começar: ${owner} pega sozinho.`
+        : id === 'done' && prod ? (project ? 'Em produção (chegou na main).' : 'PR mergeado; nos projetos com "Em dev", só depois de ir para produção.')
+          : base;
+    return COLUMNS.filter(c => c.id !== 'dev' || prod).map(c => ({ id: c.id, label: c.label, kind: c.id, hint: hint(c.id, c.hint) }));
   });
   /** decisão esperando você sobre a tarefa (o agente parou nela) */
   protected readonly asking = computed(() => new Map(this.proposals.inbox().filter(p => p.taskId).map(p => [p.taskId!, p])));
