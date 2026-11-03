@@ -24,6 +24,7 @@
               <p class="text-[12.5px] text-mute">Em revisão: termine antes de começar outra.</p>
             </div>
             <button type="button" class="btn btn-sm btn-ghost" (click)="dialogs.editTask(t.id)">Detalhes</button>
+            <button type="button" class="btn btn-sm btn-ghost" (click)="tasks.move(t.id, 'done', 0)" title="Já revisado: vai para Feito"><app-icon name="check" [size]="14" />Marcar como feito</button>
             <button type="button" class="btn btn-sm btn-primary" (click)="review(t)"><app-icon name="pr" [size]="14" />{{ t.prUrl ? 'Revisar PR' : 'Revisar' }}</button>
           </div>
         }

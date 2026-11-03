@@ -32,7 +32,7 @@ import { Icon } from '../../../../../../shared/ui/icon';
         @if (d.prUrl) { <button type="button" class="btn btn-sm btn-ghost" (click)="openPr(d.prUrl)"><app-icon name="external" [size]="14" />PR</button> }
         <button type="button" class="btn btn-sm btn-ghost" (click)="adjusting.set(!adjusting())">Pedir ajuste</button>
         <button type="button" class="btn btn-sm btn-ghost text-mute" (click)="deliveries.discard(d)">Descartar</button>
-        <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="deliveries.accept(d)" title="A tarefa vai para Feito; o merge do PR você faz no GitHub">Aceitar</button>
+        <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="deliveries.accept(d)" title="Revisado: a tarefa vai para Feito (o merge do PR, se faltar, você faz no GitHub)"><app-icon name="check" [size]="14" />Marcar como feito</button>
       </div>
 
       @if (open()) {
