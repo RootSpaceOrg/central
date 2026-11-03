@@ -15,21 +15,21 @@ const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(':memory:');
 db.exec(\`
   create table agents (id integer primary key, name text); insert into agents values (2, 'Marketing');
-  create table projects (slug text primary key, name text); insert into projects values ('kultivai', 'KultivAi');
+  create table projects (slug text primary key, name text, done_when text not null default 'merge'); insert into projects (slug, name) values ('kultivai', 'KultivAi');
   create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, prompt text, status text, result text,
     pr_url text, worktree_path text, base_branch text, cost_usd real, started_at text, finished_at text, waiting text);
-  create table tasks (id integer primary key, title text, project_slug text, "column" text, updated_at text);
+  create table tasks (id integer primary key, title text, project_slug text, "column" text, updated_at text, pr_url text);
   create table milestone_events (id integer primary key, kind text, title text, detail text, author text, at text, project_slug text);
   create table ideas (id integer primary key, created_at text, status text);
   create table proposals (id integer primary key, created_at text, status text);
   create table memories (id integer primary key, created_at text, author text, status text);
   \${${JSON.stringify(schema)}}
-  insert into tasks values (7, 'Exportar roadmap', 'kultivai', 'review', '2026-11-01T10:00:00Z');
+  insert into tasks values (7, 'Exportar roadmap', 'kultivai', 'review', '2026-11-01T10:00:00Z', null);
   insert into runs values (1, 'kultivai', 2, 7, 'Exportar o roadmap em PDF\\nDetalhes', 'succeeded', 'Feito. PR aberto.', 'https://github.com/x/y/pull/3', null, null, 0.5, '2026-11-02T10:00:00Z', '2026-11-02T11:30:00Z', null);
   insert into runs values (2, 'kultivai', null, null, '[gestor:planejar] Você é o gestor', 'succeeded', 'Backlog organizado.', null, null, null, 0.1, '2026-11-02T12:00:00Z', '2026-11-02T12:30:00Z', null);
   insert into runs values (3, 'kultivai', 2, null, 'Tentar algo', 'killed', null, null, null, null, null, '2026-11-02T12:00:00Z', '2026-11-02T12:01:00Z', null);
   insert into runs values (4, 'kultivai', 2, 8, 'Listar buckets', 'succeeded', 'Parei: sessão AWS expirada.', null, null, null, 0.1, '2026-11-02T13:00:00Z', '2026-11-02T13:05:00Z', '{"reason":"sessão AWS expirada"}');
-  insert into tasks values (8, 'Listar buckets', 'kultivai', 'doing', '2026-11-02T13:00:00Z');
+  insert into tasks values (8, 'Listar buckets', 'kultivai', 'doing', '2026-11-02T13:00:00Z', null);
   insert into milestone_events values (1, 'done', 'App abre rápido', 'Agora → Feito', 'agente', '2026-11-02T13:00:00Z', 'kultivai');
   insert into ideas values (1, '2026-11-02T09:00:00Z', 'new');
   insert into proposals values (1, '2026-11-02T09:00:00Z', 'proposed');
@@ -89,6 +89,14 @@ ok(g.tasks_done.some(t => t.id === 7), 'tarefa aceita conta como concluída');
 ok(g.deliveries.length === 3 && g.runs === 3 && g.minutes === 125 && g.cost_usd === 0.7, 'números do digest');
 ok(g.roadmap[0].title === 'App abre rápido' && g.ideas === 1 && g.decisions === 1 && g.memories === 1, 'roadmap, ideias, decisões, memórias');
 ok(d.digest('2999-01-01T00:00:00Z').deliveries.length === 0, 'desde depois: vazio');
+
+// projeto "pronto = produção": aceitar uma entrega com PR não fecha a tarefa (o sync leva para Em dev/Feito)
+{
+  const { db } = (await import('node:module')).createRequire(import.meta.url)(stub);
+  db.exec("update projects set done_when = 'prod'; update tasks set \"column\" = 'review', pr_url = 'https://github.com/x/y/pull/9' where id = 8");
+  d.reviewDelivery(d.listDeliveries(null, 'review').find(x => x.run_id === 4).id, 'accepted', null);
+  ok(db.prepare('select "column" c from tasks where id = 8').get().c === 'review', 'produção: aceite não leva a Feito');
+}
 
 rmSync(dir, { recursive: true, force: true });
 console.log('deliveries ok');

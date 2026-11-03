@@ -5,6 +5,7 @@
     "ng": "ng",
     "start": "npm run icons && npm run build:main && ng build && electron .",
     "build": "ng build",
+    "check": "node scripts/run-checks.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "build:main": "esbuild electron/main.ts electron/preload.ts electron/context/indexer.ts --bundle --platform=node --format=cjs --target=node22 --outdir=dist-electron --external:electron --external:@lydell/node-pty --external:web-tree-sitter",
