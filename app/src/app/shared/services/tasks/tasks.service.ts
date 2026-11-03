@@ -8,13 +8,12 @@ export type { TaskColumn, TaskPriority };
 
 export interface Task {
   id: number;
-  projectSlug: string;
+  /** null = pedido solto de um quadro */
+  projectSlug: string | null;
   repoPath: string | null;
   title: string;
   body: string | null;
   column: TaskColumn;
-  /** coluna do quadro do projeto (null = quadro padrão) */
-  stage: string | null;
   priority: TaskPriority;
   position: number;
   prUrl: string | null;
@@ -51,7 +50,7 @@ export const PRIORITY: Record<TaskPriority, { label: string; tone: string }> = {
 };
 
 const toModel = (d: TaskDto): Task => ({
-  id: d.id, projectSlug: d.project_slug, repoPath: d.repo_path, title: d.title, body: d.body, column: d.column, stage: d.stage ?? null,
+  id: d.id, projectSlug: d.project_slug, repoPath: d.repo_path, title: d.title, body: d.body, column: d.column,
   priority: d.priority, position: d.position, prUrl: d.pr_url, proposalId: d.proposal_id, ideaId: d.idea_id,
   runId: d.run_id, runStatus: d.run_status, updatedAt: new Date(d.updated_at),
 });
@@ -76,6 +75,16 @@ export class TasksService {
       .catch(e => this.error.set(errorMessage(e)));
   }
 
+  /** Pedido feito direto num quadro (projeto opcional): entra na coluna pedida ou na primeira. */
+  async request(boardId: number, title: string, projectSlug: string | null, stage: string | null = null, body: string | null = null): Promise<void> {
+    try {
+      await this.api.create({ project_slug: projectSlug, board_id: boardId, stage, repo_path: null, title, body, column: 'backlog', priority: 2 });
+      this.load();
+    } catch (e) {
+      throw new Error(errorMessage(e));
+    }
+  }
+
   async create(d: TaskDraft): Promise<void> {
     await this.api.create({
       project_slug: d.projectSlug, repo_path: d.repoPath, title: d.title, body: d.body || null, column: d.column, priority: d.priority,
@@ -83,7 +92,8 @@ export class TasksService {
   }
 
   async save(id: number, d: TaskDraft): Promise<void> {
-    await this.api.update(id, { project_slug: d.projectSlug, repo_path: d.repoPath, title: d.title, body: d.body || null, priority: d.priority });
+    // pedido solto de um quadro continua sem projeto se você não escolher um
+    await this.api.update(id, { project_slug: d.projectSlug || undefined, repo_path: d.repoPath, title: d.title, body: d.body || null, priority: d.priority });
     if (this.tasks().find(t => t.id === id)?.column !== d.column) await this.api.update(id, { column: d.column, position: 0 });
   }
 
@@ -99,12 +109,6 @@ export class TasksService {
       return [...rest.filter(t => t.column !== column), ...inCol];
     });
     this.api.update(id, { column, position }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
-  }
-
-  /** Quadro próprio: move para uma coluna do workflow (o tipo vem junto, do quadro). */
-  moveStage(id: number, stage: string, kind: TaskColumn, position: number): void {
-    this.tasks.update(list => list.map(t => (t.id === id ? { ...t, stage, column: kind, position } : t)));
-    this.api.update(id, { stage, position }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   remove(id: number): void {

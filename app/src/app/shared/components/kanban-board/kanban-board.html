@@ -5,10 +5,6 @@
       <header class="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
         <h3 class="font-display text-[15px] font-semibold" [title]="col.hint">{{ col.label }}</h3>
         <span class="rounded-full bg-raise px-2 text-[12px] tabular-nums text-mute">{{ items.length }}</span>
-        @if (col.agent; as a) {
-          <span class="flex min-w-0 items-center gap-1 rounded-full bg-frost/10 px-1.5 py-0.5 text-[11px] text-frost" [title]="a.name + ' pega o que entra aqui'">
-            <app-icon name="agent" [size]="11" /><span class="truncate">{{ a.name }}</span></span>
-        }
         @if (col.kind !== 'done' && col.kind !== 'doing') {
           <button type="button" class="ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text"
                   (click)="dialogs.newTask({ projectSlug: projectSlug(), column: col.kind })" [attr.aria-label]="'Nova tarefa em ' + col.label">
@@ -43,6 +39,10 @@
               } @else if (t.runStatus === 'succeeded' && t.runId && t.column === 'review') {
                 <a routerLink="/execucoes" [queryParams]="{ run: t.runId }" (click)="$event.stopPropagation()"
                    class="flex items-center gap-1 text-yes hover:underline"><app-icon name="check" [size]="14" />agente concluiu</a>
+              }
+              @for (p of boards.ofTask().get(t.id) ?? []; track p.boardId) {
+                <a [routerLink]="['/quadros', p.boardId]" (click)="$event.stopPropagation()" class="flex max-w-full items-center gap-1 rounded-full bg-[#B48CFF]/12 px-2 py-0.5 text-[11.5px] text-[#C6A6FF] hover:underline"
+                   [title]="'Neste quadro: ' + boards.label(p)"><app-icon name="workflow" [size]="11" /><span class="truncate">{{ boards.label(p) }}</span></a>
               }
               @if (asking().get(t.id); as d) {
                 <a routerLink="/triagem" (click)="$event.stopPropagation()" class="flex items-center gap-1 text-later hover:underline" [title]="d.title">

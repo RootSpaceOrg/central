@@ -19,6 +19,8 @@ export const routes: Routes = [
     title: 'Projeto',
     loadComponent: () => import('./modules/project/pages/project-page/project-page').then(m => m.ProjectPage),
   },
+  { path: 'quadros', title: 'Quadros', loadComponent: () => import('./modules/boards/pages/boards-page/boards-page').then(m => m.BoardsPage) },
+  { path: 'quadros/:id', title: 'Quadro', loadComponent: () => import('./modules/boards/pages/board-page/board-page').then(m => m.BoardPage) },
   { path: 'escritorio', title: 'Escritório', loadComponent: () => import('./modules/office/pages/office-page/office-page').then(m => m.OfficePage) },
   { path: 'grade', title: 'Grade', loadComponent: () => import('./modules/grid/pages/grid-page/grid-page').then(m => m.GridPage) },
   { path: '**', redirectTo: '' },

@@ -48,7 +48,7 @@ export class BacklogPage {
   protected readonly slug = computed(() => this.query()?.get('projeto') || null);
   protected readonly project = computed(() => (this.slug() ? this.projects.bySlug().get(this.slug()!) ?? null : null));
   protected readonly open = computed(() => this.tasks.tasks().filter(t =>
-    t.column !== 'done' && (this.slug() ? t.projectSlug === this.slug() : this.projects.bySlug().get(t.projectSlug)?.status !== 'dead')).length);
+    t.column !== 'done' && (this.slug() ? t.projectSlug === this.slug() : !!t.projectSlug && this.projects.bySlug().get(t.projectSlug)?.status !== 'dead')).length);
 
   protected filter(slug: string): void {
     this.router.navigate([], { queryParams: { projeto: slug || null } });

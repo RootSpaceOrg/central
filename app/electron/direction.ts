@@ -9,7 +9,7 @@ import type { DirectionDto, RunDto } from '../src/app/shared/contract';
 import { Emit, startRun } from './agents';
 import { all, get, run } from './db';
 import { SIZE_BUDGET } from './routines';
-import { boardBlock } from './board';
+import { boardBlock, boardsOfProject } from './board';
 import { roadmapBlock } from './roadmap';
 
 export const getDirection = (slug: string) =>
@@ -38,7 +38,7 @@ export function directionBlock(slug: string): string {
     g ? `## Rumo do grupo ${pname} (este projeto é uma frente dele)\n${g.text}` : '',
     d ? `## Rumo do projeto (o Gustavo define; siga-o)\n${d.text}` : '',
     roadmapBlock(slug),
-    boardBlock(slug),
+    boardBlock(boardsOfProject(slug)),
   ].filter(Boolean).join('\n\n');
 }
 

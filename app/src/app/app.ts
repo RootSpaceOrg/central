@@ -73,6 +73,7 @@ export class App {
     { path: '/triagem', label: 'Triagem (decisões e ideias novas)', icon: 'inbox' },
     { path: '/ideias', label: 'Ideias', icon: 'ideas' },
     { path: '/backlog', label: 'Backlog', icon: 'kanban' },
+    { path: '/quadros', label: 'Quadros (workflows com agentes)', icon: 'workflow' },
     { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
     { path: '/agentes', label: 'Agentes', icon: 'agent' },
     { path: '/execucoes', label: 'Execuções', icon: 'activity' },

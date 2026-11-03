@@ -67,18 +67,18 @@
     @if (tab() === 'backlog') {
       <div class="flex h-full flex-col px-8 pt-5 pb-5">
         <div class="mb-4 flex flex-wrap items-center justify-end gap-2">
-          @if (hasBoard(p.slug)) {
-            <span class="mr-auto text-[13px] text-mute">Workflow próprio: os agentes ficam nas colunas.</span>
-          } @else {
-            <app-todo-owner class="mr-auto" [project]="p" />
+          <app-todo-owner class="mr-auto" [project]="p" />
+          <!-- quadros (workflows) deste projeto -->
+          @for (b of projectBoards(p.slug); track b.id) {
+            <a [routerLink]="['/quadros', b.id]" class="btn btn-sm" [title]="b.description ?? 'Quadro deste projeto'"><app-icon name="workflow" [size]="15" />{{ b.name }}
+              @if (b.openTasks) { <span class="text-faint tabular-nums">{{ b.openTasks }}</span> }</a>
           }
-          <button type="button" class="btn btn-sm" (click)="workflow.set(true)" title="Colunas do quadro e o agente de cada uma"><app-icon name="kanban" [size]="16" />Workflow</button>
+          <a routerLink="/quadros" [queryParams]="{ novo: p.slug }" class="btn btn-sm" title="Um fluxo com colunas e agentes, para as tarefas deste projeto passarem"><app-icon name="plus" [size]="15" />Quadro</a>
           <button type="button" class="btn btn-sm" (click)="dialogs.newTurn({ projectSlug: p.slug })"><app-icon name="night" [size]="16" />Deixar evoluindo</button>
           <button type="button" class="btn btn-sm btn-primary" (click)="dialogs.newTask({ projectSlug: p.slug })"><app-icon name="plus" [size]="16" />Nova tarefa</button>
         </div>
         <app-kanban-board class="min-h-0 flex-1" [projectSlug]="p.slug" />
       </div>
-      @if (workflow()) { <app-board-editor [project]="p" (closed)="workflow.set(false)" /> }
     }
 
     @if (sessionsMounted()) {

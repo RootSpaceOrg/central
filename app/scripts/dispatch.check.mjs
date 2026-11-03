@@ -16,14 +16,17 @@ db.exec(\`
   insert into agents values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
   create table projects (slug text primary key, status text, todo_agent_id integer, todo_parallel integer, todo_hours text);
   insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, ''), ('conteudo', 'active', null, 1, '');
-  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text);
+  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text, board_id integer);
   create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, repo_path text, priority integer, position integer, stage text, pr_url text, updated_at text);
   insert into tasks values (1, 'kultivai', 'todo', 'Exportar PDF', 'detalhe', 'C:/r/front', 2, 0, null, null, null),
     (2, 'kultivai', 'todo', 'Corrigir login', null, null, 0, 1, null, null, null), (3, 'kultivai', 'todo', 'Terceira', null, null, 2, 2, null, null, null),
     (4, 'kultivai', 'backlog', 'Não é A fazer', null, null, 0, 0, null, null, null), (5, 'outro', 'todo', 'Sem responsável', null, null, 0, 0, null, null, null),
-    (9, 'conteudo', 'backlog', 'Post sobre a Central', null, null, 2, 0, null, null, null);
+    (9, 'conteudo', 'backlog', 'Post sobre a Central', null, null, 2, 0, null, null, null),
+    (10, null, 'backlog', 'Pedido solto: pesquisa de concorrentes', null, null, 2, 0, null, null, null);
   create table proposals (id integer primary key, task_id integer, status text);
-  create table board_columns (project_slug text, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, primary key (project_slug, key));
+  create table boards (id integer primary key autoincrement, name text not null, description text, project_slug text, color text not null default '#7FA2FF', position integer not null default 0, created_at text default '2026-11-01');
+  create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, primary key (board_id, key));
+  create table task_boards (task_id integer, board_id integer, stage text, position integer default 0, updated_at text, primary key (task_id, board_id));
   create table deliveries (pr_url text, title text, task_id integer);
 \`);
 module.exports = { db, now: () => '2026-11-02T12:00:00.000Z', all: (s, ...a) => db.prepare(s).all(...a), get: (s, ...a) => db.prepare(s).get(...a), run: (s, ...a) => db.prepare(s).run(...a) };`);
@@ -75,44 +78,58 @@ ok(e.pr === null && e.title === 'hotfix direto', 'commit direto');
 ok(r.isBackMerge('Back-merge: prod hotfix main -> develop') && r.isBackMerge("Merge branch 'main' into develop") && r.isBackMerge("Merge remote-tracking branch 'origin/master' into develop"), 'back-merge');
 ok(!r.isBackMerge('Merge pull request #3 from org/feature/x') && !r.isBackMerge('feat: mainframe'), 'não é back-merge');
 
-// ---------- quadro (workflow) por projeto ----------
+// ---------- quadros (workflows): independentes de projeto, tarefa em vários ----------
 const bd = req(join(dir, 'b.js'));
 ok(bd.keyOf('Revisão por agente') === 'revisao-por-agente', 'key da coluna sem acento');
-let threw = '';
-try { bd.saveBoard('conteudo', [{ label: 'Ideias', kind: 'backlog' }]); } catch (e) { threw = e.message; }
-ok(threw.includes('feito'), 'quadro precisa de coluna feito');
-const cols = bd.saveBoard('conteudo', [
-  { label: 'Ideias', kind: 'backlog', description: 'o que pode virar post' },
-  { label: 'Pesquisa', kind: 'todo', agent_id: 7, instruction: 'Pesquise o tema', next_key: 'roteiro' },
-  { label: 'Roteiro', kind: 'doing', agent_id: 8, instruction: 'Escreva o roteiro', next_key: 'revisao' },
+const solto = bd.createBoard({ name: 'Pipeline de conteúdo' });
+ok(solto.columns.map(c => c.key).join() === 'a-fazer,fazendo,pronto' && solto.project_slug === null, 'quadro solto nasce com colunas padrão');
+const cols = bd.saveColumns(solto.id, [
+  { label: 'Ideias' },
+  { label: 'Pesquisa', agent_id: 7, instruction: 'Pesquise o tema', kind: 'doing', parallel: 2 },
+  { label: 'Roteiro', agent_id: 8, instruction: 'Escreva o roteiro' },
   { label: 'Revisão', kind: 'review' },
   { label: 'Publicado', kind: 'done' },
 ]);
 ok(cols.map(c => c.key).join() === 'ideias,pesquisa,roteiro,revisao,publicado', 'colunas salvas na ordem');
-ok(db.prepare('select stage from tasks where id = 9').get().stage === 'ideias', 'tarefa existente cai na coluna do mesmo tipo');
-ok(bd.resolveStage('conteudo', 'Roteiro') === 'roteiro' && bd.stageFor('conteudo', 'review') === 'revisao', 'acha coluna por nome e por tipo');
-ok(bd.boardBlock('conteudo').includes('Pesquisa [pesquisa, a fazer]') && bd.boardBlock('kultivai') === '', 'quadro no prompt (só de quem tem)');
+ok(bd.resolveBoard('pipeline de conteúdo') === solto.id && bd.resolveStage(solto.id, 'Roteiro') === 'roteiro', 'acha quadro e coluna pelo nome');
+ok(bd.nextStage(solto.id, 'pesquisa') === 'roteiro' && bd.nextStage(solto.id, 'publicado') === null, 'depois = a próxima coluna (a última não tem)');
 
-// pipeline: tarefa entra em Pesquisa e o agente 7 pega com a etapa no prompt
-bd.setStage(9, 'pesquisa');
-ok(db.prepare('select "column" c from tasks where id = 9').get().c === 'todo', 'mover para a coluna leva o tipo junto');
+// a tarefa do projeto entra no quadro: a coluna com "kind" reflete no backlog principal
+bd.setStage(9, solto.id, 'pesquisa');
+ok(db.prepare('select "column" c from tasks where id = 9').get().c === 'doing', 'Pesquisa reflete "fazendo" no principal');
+// pedido solto (sem projeto) no mesmo quadro
+bd.setStage(10, solto.id, 'pesquisa');
+// a mesma tarefa em outro quadro, ao mesmo tempo
+const outro = bd.createBoard({ name: 'Revisões', project_slug: 'conteudo' });
+bd.setStage(9, outro.id, 'a-fazer');
+ok(bd.stagesOf().filter(x => x.task_id === 9).length === 2, 'uma tarefa em dois quadros');
+ok(bd.boardsOfProject('conteudo').sort().join() === [solto.id, outro.id].sort().join(), 'quadros do projeto: o dele e onde há tarefas dele');
+ok(bd.boardBlock([solto.id]).includes('Pesquisa [pesquisa]') && bd.boardBlock([solto.id]).includes('fazendo'), 'quadro no prompt');
+
+// pipeline: o agente da coluna pega, inclusive o pedido sem projeto
 started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
-const st = started.find(s => s.task_id === 9);
-ok(st && st.agent_id === 7 && st.stage === 'pesquisa' && st.prompt.startsWith('Etapa do quadro: Pesquisa.') && st.prompt.includes('Roteiro'), 'etapa com agente dispara com a instrução e o destino');
+const s9 = started.find(x => x.task_id === 9), s10 = started.find(x => x.task_id === 10);
+ok(s9 && s9.agent_id === 7 && s9.board_id === solto.id && s9.stage === 'pesquisa' && s9.prompt.startsWith('Etapa "Pesquisa" do quadro Pipeline de conteúdo.') && s9.prompt.includes('"Roteiro"'), 'etapa com agente dispara com a instrução e o destino');
+ok(s10 && s10.project_slug === null && s10.agent_id === 7, 'pedido sem projeto também (o agente atua na pasta dele)');
 started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
-ok(!started.some(s => s.task_id === 9), 'já rodando: não dispara de novo');
-db.exec("update runs set status = 'succeeded' where task_id = 9; insert into proposals values (1, 9, 'proposed')");
+ok(!started.some(x => x.task_id === 9), 'já rodando: não dispara de novo');
+db.exec("update runs set status = 'succeeded' where task_id in (9, 10); insert into proposals values (1, 9, 'proposed')");
+bd.setStage(9, solto.id, 'roteiro');
 started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
-ok(!started.some(s => s.task_id === 9), 'decisão esperando você: a etapa espera');
+ok(!started.some(x => x.task_id === 9), 'decisão esperando você: a etapa espera');
 db.exec("update proposals set status = 'approved'");
-bd.setStage(9, 'roteiro');
 started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
-ok(started.find(s => s.task_id === 9)?.agent_id === 8, 'próxima etapa: o agente dela pega');
-ok(bd.saveBoard('conteudo', []).length === 0 && db.prepare('select stage from tasks where id = 9').get().stage === null, 'quadro vazio volta ao padrão');
+ok(started.find(x => x.task_id === 9)?.agent_id === 8, 'próxima etapa: o agente dela pega');
+
+// remover uma coluna com tarefa: ela vai para a primeira; apagar o quadro não apaga a tarefa
+bd.saveColumns(solto.id, [{ key: 'ideias', label: 'Ideias' }, { key: 'publicado', label: 'Publicado', kind: 'done' }]);
+ok(bd.stagesOf().find(x => x.task_id === 10 && x.board_id === solto.id).stage === 'ideias', 'coluna removida: tarefa vai para a primeira');
+bd.deleteBoard(solto.id);
+ok(!bd.stagesOf().some(x => x.board_id === solto.id) && db.prepare('select count(*) n from tasks where id = 10').get().n === 1, 'apagar quadro mantém a tarefa');
 
 rmSync(dir, { recursive: true, force: true });
 console.log('dispatch ok');

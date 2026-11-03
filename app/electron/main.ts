@@ -17,7 +17,7 @@ import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameC
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
-import { listBoard, saveBoard } from './board';
+import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo } from './dispatch';
 import { releaseStatus, releaseSummary } from './release';
@@ -209,8 +209,14 @@ function registerIpc(): void {
   handle('context:node', key => nodeDetail(key));
   handle('context:search', (slug, q) => searchHits(slug, q));
   handle('context:block', (slug, focus, budget) => contextBlock(slug, focus ? [focus] : [], budget));
-  handle('board:get', slug => listBoard(slug));
-  handle('board:save', (slug, cols) => { const b = saveBoard(slug, cols); backlogChanged(); return b; });
+  handle('boards:list', () => listBoards());
+  handle('boards:create', input => { const b = createBoard(input); backlogChanged(); return b; });
+  handle('boards:update', (id, patch) => { updateBoard(id, patch); backlogChanged(); });
+  handle('boards:delete', id => { deleteBoard(id); backlogChanged(); });
+  handle('boards:columns', (id, cols) => { const c = saveColumns(id, cols); backlogChanged(); return c; });
+  handle('boards:stages', () => stagesOf());
+  handle('boards:place', (taskId, boardId, stage, position) => { setStage(taskId, boardId, stage, position); backlogChanged(); });
+  handle('boards:remove', (taskId, boardId) => { removeFromBoard(taskId, boardId); backlogChanged(); });
   handle('deliveries:list', (since, status) => listDeliveries(since, status));
   handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); backlogChanged(); });
   handle('digest:get', since => digest(since));

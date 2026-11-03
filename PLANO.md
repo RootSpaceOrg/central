@@ -300,6 +300,21 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   movem com update_task stage=<coluna>. Etapa com decisão aberta ou agente esperando não dispara; etapa que não terminou
   não insiste por 12 h. Projeto sem workflow = quadro padrão (com o "Responsável pelo A fazer").
 
+## Feito (v0.25)
+
+- **Quadros (workflows) independentes** (menu Quadros, /quadros): fluxos com colunas e um agente por coluna (de qualquer
+  projeto), de um projeto ou soltos. **Uma tarefa vive no backlog principal do projeto dela e pode estar em N quadros**,
+  numa coluna de cada; a coluna pode refletir no principal ("no backlog principal: fazendo"). Pedidos podem nascer direto
+  no quadro, até sem projeto (o agente atua na pasta dele). Agente termina bem → a tarefa vai para a próxima coluna (ou a
+  escolhida). Modelos: Simples, Código com revisor, Conteúdo.
+- UX: no quadro, "+ coluna" no fim e o botão "Agente nesta coluna" em cada uma (agente, instrução, depois vai para,
+  limites, reflexo no principal); "Visão geral" numa tabela enxuta (uma linha por coluna, detalhes na linha). No Kanban
+  principal o cartão mostra os quadros em que a tarefa está; no modal da tarefa, mover/tirar/pôr em quadros.
+- MCP: list_boards, create_board, move_on_board; create_task aceita board/stage (projeto opcional); list_tasks mostra os
+  quadros de cada tarefa. Os agentes recebem os quadros do projeto no contexto.
+- Migração: o workflow por projeto da v0.24 vira um quadro ligado ao projeto (colunas, agentes e posições preservados);
+  tarefas podem não ter projeto (tabela recriada; testado numa cópia do banco).
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

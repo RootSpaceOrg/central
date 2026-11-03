@@ -1,84 +1,154 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 
-import { BoardColumnDto, TaskColumn } from '../../contract';
+import { BoardColumnDto, BoardDto, TaskColumn } from '../../contract';
 import { IpcService, errorMessage } from '../ipc/ipc.service';
 
-/** Uma coluna do workflow de um projeto. */
+/** Uma coluna de um quadro (workflow). */
 export interface BoardColumn {
   key: string;
   label: string;
   description: string | null;
-  /** o que a coluna significa para a Central */
-  kind: TaskColumn;
-  /** agente que pega o que entra nela */
+  /** entrar nela põe a tarefa neste estado no backlog principal (null = não mexe) */
+  kind: TaskColumn | null;
+  /** agente (de qualquer projeto) que pega o que entra nela */
   agentId: number | null;
   instruction: string | null;
   parallel: number;
   hours: string;
-  /** para onde vai quando o agente termina bem (null = Revisão) */
+  /** para onde vai quando o agente termina bem (null = a próxima coluna) */
   nextKey: string | null;
 }
 
+/** Quadro (workflow): independente de projeto; uma tarefa pode estar em vários. */
+export interface Board {
+  id: number;
+  name: string;
+  description: string | null;
+  projectSlug: string | null;
+  color: string;
+  openTasks: number;
+  columns: BoardColumn[];
+}
+
+/** Onde uma tarefa está num quadro. */
+export interface Placement { taskId: number; boardId: number; stage: string; position: number }
+
 export const KIND_LABEL: Record<TaskColumn, string> = {
-  backlog: 'Fila', todo: 'A fazer', doing: 'Fazendo', review: 'Revisão', dev: 'Em dev', done: 'Feito',
+  backlog: 'Backlog', todo: 'A fazer', doing: 'Fazendo', review: 'Revisão', dev: 'Em dev', done: 'Feito',
 };
 
-const col = (label: string, kind: TaskColumn, extra: Partial<BoardColumn> = {}): BoardColumn =>
-  ({ key: '', label, description: null, kind, agentId: null, instruction: null, parallel: 1, hours: '', nextKey: null, ...extra });
+export const blankColumn = (label = '', extra: Partial<BoardColumn> = {}): BoardColumn =>
+  ({ key: '', label, description: null, kind: null, agentId: null, instruction: null, parallel: 1, hours: '', nextKey: null, ...extra });
+const col = blankColumn;
 
-/** Modelos para começar (os agentes você escolhe em cada coluna). */
+/** Modelos para começar um quadro (os agentes você escolhe em cada coluna). */
 export const BOARD_TEMPLATES: { id: string; label: string; hint: string; columns: BoardColumn[] }[] = [
-  { id: 'dev', label: 'Desenvolvimento', hint: 'O padrão: backlog até feito.', columns: [
-    col('Backlog', 'backlog'), col('A fazer', 'todo', { description: 'Pronto para pegar.' }), col('Fazendo', 'doing'),
-    col('Revisão', 'review', { description: 'PR aberto esperando seu olhar.' }), col('Feito', 'done')] },
-  { id: 'dev-revisor', label: 'Desenvolvimento com revisor', hint: 'Um agente codifica, outro revisa o PR antes de você.', columns: [
-    col('Backlog', 'backlog'),
-    col('A fazer', 'todo', { description: 'O dev pega daqui.', instruction: 'Implemente a tarefa num worktree, com teste, e abra o PR.', nextKey: 'revisao-tecnica' }),
-    col('Fazendo', 'doing'),
-    col('Revisão técnica', 'review', { description: 'Um agente revisor olha o PR antes de você.', instruction: 'Revise o PR da tarefa: bugs, segurança, convenções, testes. Comente no PR o que achou. Se estiver bom, diga que está pronto para o Gustavo; se não, liste o que corrigir.', nextKey: 'revisao-final' }),
-    col('Revisão final', 'review', { description: 'Seu olhar.' }),
-    col('Em dev', 'dev', { description: 'Mergeado em develop, esperando produção.' }),
-    col('Feito', 'done', { description: 'Em produção.' })] },
+  { id: 'simples', label: 'Simples', hint: 'A fazer → Fazendo → Pronto.', columns: [
+    col('A fazer'), col('Fazendo', { kind: 'doing' }), col('Pronto', { kind: 'done' })] },
+  { id: 'dev-revisor', label: 'Código com revisor', hint: 'Um agente implementa, outro revisa o PR, você aprova.', columns: [
+    col('Pedidos'),
+    col('Implementar', { kind: 'doing', description: 'Implementa num worktree, com teste, e abre o PR.', instruction: 'Implemente a tarefa num worktree, com teste, e abra o PR.' }),
+    col('Revisão técnica', { kind: 'review', description: 'Um agente revisor olha o PR antes de você.', instruction: 'Revise o PR da tarefa: bugs, segurança, convenções, testes. Comente no PR o que achou e diga se está pronto para o Gustavo.' }),
+    col('Sua aprovação', { kind: 'review', description: 'Seu olhar.' }),
+    col('Pronto', { kind: 'done' })] },
   { id: 'conteudo', label: 'Conteúdo', hint: 'Pesquisa → roteiro → arte → sua revisão → publicado.', columns: [
-    col('Ideias', 'backlog', { description: 'O que pode virar conteúdo.' }),
-    col('Pesquisa', 'todo', { instruction: 'Pesquise o tema: dados, referências, o que o público pergunta. Escreva o resumo na tarefa.', nextKey: 'roteiro' }),
-    col('Roteiro', 'doing', { instruction: 'Escreva o roteiro/texto a partir da pesquisa da tarefa.', nextKey: 'arte' }),
-    col('Arte', 'doing', { instruction: 'Descreva ou produza as peças visuais a partir do roteiro.', nextKey: 'revisao' }),
-    col('Revisão', 'review', { description: 'Seu olhar antes de publicar.' }),
-    col('Publicado', 'done')] },
+    col('Ideias', { description: 'O que pode virar conteúdo.' }),
+    col('Pesquisa', { kind: 'doing', instruction: 'Pesquise o tema: dados, referências, o que o público pergunta. Escreva o resumo na tarefa.' }),
+    col('Roteiro', { kind: 'doing', instruction: 'Escreva o roteiro/texto a partir da pesquisa da tarefa.' }),
+    col('Arte', { kind: 'doing', instruction: 'Descreva ou produza as peças visuais a partir do roteiro.' }),
+    col('Sua revisão', { kind: 'review', description: 'Seu olhar antes de publicar.' }),
+    col('Publicado', { kind: 'done' })] },
 ];
 
-const toModel = (d: BoardColumnDto): BoardColumn => ({
+const toCol = (d: BoardColumnDto): BoardColumn => ({
   key: d.key, label: d.label, description: d.description, kind: d.kind, agentId: d.agent_id, instruction: d.instruction,
   parallel: d.parallel, hours: d.hours, nextKey: d.next_key,
 });
-const toDto = (c: BoardColumn): BoardColumnDto => ({
+const toColDto = (c: BoardColumn): BoardColumnDto => ({
   key: c.key, label: c.label, description: c.description, kind: c.kind, agent_id: c.agentId, instruction: c.instruction,
   parallel: c.parallel, hours: c.hours, next_key: c.nextKey,
 });
+const toBoard = (d: BoardDto): Board => ({
+  id: d.id, name: d.name, description: d.description, projectSlug: d.project_slug, color: d.color, openTasks: d.open_tasks, columns: d.columns.map(toCol),
+});
+
+/** "Revisão técnica" → "revisao-tecnica" (o mesmo que o backend) */
+export const keyOf = (label: string) => label.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'coluna';
 
 /**
- * Quadro (workflow) de cada projeto: colunas livres com tipo, descrição e agente. Vazio = quadro padrão.
- * ponytail: o service fala com o IPC direto (só repassaria uma api de 2 métodos).
+ * Quadros e onde cada tarefa está neles. Recarrega quando o backlog muda (agentes movem pelo MCP, execução terminou).
+ * ponytail: fala com o IPC direto; uma api só repassaria os mesmos métodos.
  */
 @Injectable({ providedIn: 'root' })
 export class BoardService {
   private readonly ipc = inject(IpcService);
 
-  readonly bySlug = signal<Record<string, BoardColumn[]>>({});
+  readonly boards = signal<Board[]>([]);
+  readonly placements = signal<Placement[]>([]);
+  readonly loaded = signal(false);
+  readonly byId = computed(() => new Map(this.boards().map(b => [b.id, b])));
+  /** quadros de cada tarefa */
+  readonly ofTask = computed(() => {
+    const m = new Map<number, Placement[]>();
+    for (const p of this.placements()) m.set(p.taskId, [...(m.get(p.taskId) ?? []), p]);
+    return m;
+  });
 
-  ensure(slug: string): void { if (!(slug in this.bySlug())) this.load(slug); }
-
-  load(slug: string): void {
-    this.ipc.invoke('board:get', slug).then(list => this.bySlug.update(m => ({ ...m, [slug]: list.map(toModel) })));
+  constructor() {
+    this.load();
+    this.ipc.on('backlog:changed', () => this.load());
   }
 
-  async save(slug: string, columns: BoardColumn[]): Promise<void> {
-    try {
-      const saved = await this.ipc.invoke('board:save', slug, columns.map(toDto));
-      this.bySlug.update(m => ({ ...m, [slug]: saved.map(toModel) }));
-    } catch (e) {
-      throw new Error(errorMessage(e));
-    }
+  load(): void {
+    Promise.all([this.ipc.invoke('boards:list'), this.ipc.invoke('boards:stages')]).then(([b, p]) => {
+      this.boards.set(b.map(toBoard));
+      this.placements.set(p.map(x => ({ taskId: x.task_id, boardId: x.board_id, stage: x.stage, position: x.position })));
+      this.loaded.set(true);
+    });
+  }
+
+  /** "Conteúdo · Roteiro" */
+  label(p: Placement): string {
+    const b = this.byId().get(p.boardId);
+    return `${b?.name ?? 'Quadro'} · ${b?.columns.find(c => c.key === p.stage)?.label ?? p.stage}`;
+  }
+
+  async create(name: string, projectSlug: string | null, columns: BoardColumn[], description: string | null = null): Promise<Board> {
+    return this.call(async () => toBoard(await this.ipc.invoke('boards:create', { name, description, project_slug: projectSlug, columns: columns.map(toColDto) })));
+  }
+
+  update(id: number, patch: { name?: string; description?: string | null; project_slug?: string | null; color?: string }): Promise<void> {
+    return this.call(() => this.ipc.invoke('boards:update', id, patch));
+  }
+
+  remove(id: number): Promise<void> { return this.call(() => this.ipc.invoke('boards:delete', id)); }
+
+  saveColumns(id: number, columns: BoardColumn[]): Promise<void> {
+    // keys estáveis para as que já existiam; as novas nascem do nome (sem repetir)
+    const used = new Set<string>();
+    const cols = columns.map(c => {
+      let k = c.key || keyOf(c.label);
+      for (let n = 2; used.has(k); n++) k = `${c.key || keyOf(c.label)}-${n}`;
+      used.add(k);
+      return { ...c, key: k };
+    });
+    this.boards.update(list => list.map(b => (b.id === id ? { ...b, columns: cols } : b)));
+    return this.call(async () => { await this.ipc.invoke('boards:columns', id, cols.map(toColDto)); });
+  }
+
+  /** põe ou move a tarefa numa coluna do quadro */
+  place(taskId: number, boardId: number, stage: string, position = 0): void {
+    this.placements.update(list => [...list.filter(p => !(p.taskId === taskId && p.boardId === boardId)), { taskId, boardId, stage, position }]);
+    this.ipc.invoke('boards:place', taskId, boardId, stage, position).catch(() => this.load());
+  }
+
+  unplace(taskId: number, boardId: number): void {
+    this.placements.update(list => list.filter(p => !(p.taskId === taskId && p.boardId === boardId)));
+    this.ipc.invoke('boards:remove', taskId, boardId).catch(() => this.load());
+  }
+
+  private async call<T>(fn: () => Promise<T>): Promise<T> {
+    try { const r = await fn(); this.load(); return r; }
+    catch (e) { this.load(); throw new Error(errorMessage(e)); }
   }
 }

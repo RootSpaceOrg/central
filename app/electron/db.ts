@@ -260,20 +260,37 @@ db.exec(`
     reviewed_at text
   );
 
-  -- quadro (workflow) por projeto: colunas livres com tipo, descrição e agente que pega o que entra nela
-  create table if not exists board_columns (
-    project_slug text not null references projects on delete cascade,
+  -- quadros (workflows): independentes de projeto; uma tarefa pode estar em vários, numa coluna de cada
+  create table if not exists boards (
+    id           integer primary key autoincrement,
+    name         text not null,
+    description  text,
+    project_slug text references projects on delete set null,
+    color        text not null default '#7FA2FF',
+    position     integer not null default 0,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  );
+  create table if not exists board_cols (
+    board_id     integer not null references boards on delete cascade,
     key          text not null,
     label        text not null,
     description  text,
-    kind         text not null,
+    kind         text,
     position     integer not null default 0,
     agent_id     integer references agents on delete set null,
     instruction  text,
     parallel     integer not null default 1,
     hours        text not null default '',
     next_key     text,
-    primary key (project_slug, key)
+    primary key (board_id, key)
+  );
+  create table if not exists task_boards (
+    task_id    integer not null references tasks on delete cascade,
+    board_id   integer not null references boards on delete cascade,
+    stage      text not null,
+    position   integer not null default 0,
+    updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    primary key (task_id, board_id)
   );
 
   -- memória dos agentes: do agente (agent_id) ou de todos (agent_id null); esquecer retira com o motivo
@@ -356,7 +373,7 @@ for (const [table, column, type] of [
   ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
   ['projects', 'parent_slug', 'text'],
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
-  ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
+  ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['runs', 'board_id', 'integer'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
@@ -388,6 +405,46 @@ for (const table of ['runs', 'routines']) {
     throw e;
   } finally {
     db.exec('pragma foreign_keys = on');
+  }
+}
+
+// v0.25: o workflow por projeto da v0.24 (board_columns + tasks.stage) vira um quadro independente ligado ao projeto.
+{
+  const old = db.prepare(`select name from sqlite_master where type = 'table' and name = 'board_columns'`).get();
+  if (old) {
+    db.exec('begin');
+    try {
+      const slugs = db.prepare('select distinct project_slug s from board_columns').all() as { s: string }[];
+      for (const { s } of slugs) {
+        const name = (db.prepare('select name from projects where slug = ?').get(s) as { name: string } | undefined)?.name ?? s;
+        const id = Number(db.prepare('insert into boards (name, project_slug) values (?, ?)').run(`${name} · workflow`, s).lastInsertRowid);
+        db.prepare(`insert into board_cols (board_id, key, label, description, kind, position, agent_id, instruction, parallel, hours, next_key)
+          select ?, key, label, description, kind, position, agent_id, instruction, parallel, hours, next_key from board_columns where project_slug = ?`).run(id, s);
+        db.prepare(`insert into task_boards (task_id, board_id, stage) select id, ?, stage from tasks where project_slug = ? and stage is not null`).run(id, s);
+        db.prepare(`update runs set board_id = ? where project_slug = ? and stage is not null`).run(id, s);
+      }
+      db.exec('update tasks set stage = null');
+      db.exec('drop table board_columns');
+      db.exec('commit');
+    } catch (e) { db.exec('rollback'); throw e; }
+  }
+}
+
+// v0.25: tarefa pode não ter projeto (pedido feito direto num quadro sem projeto): project_slug deixa de ser NOT NULL.
+{
+  const ddl = (db.prepare(`select sql from sqlite_master where type = 'table' and name = 'tasks'`).get() as { sql: string }).sql;
+  if (/project_slug\s+text\s+not null/i.test(ddl)) {
+    const next = ddl.replace(/project_slug\s+text\s+not null/i, 'project_slug text').replace(/^CREATE TABLE\s+"?\w+"?/i, 'CREATE TABLE tasks_new');
+    db.exec('pragma foreign_keys = off');
+    db.exec('begin');
+    try {
+      db.exec(next);
+      db.exec('insert into tasks_new select * from tasks');
+      db.exec('drop table tasks');
+      db.exec('alter table tasks_new rename to tasks');
+      db.exec('commit');
+    } catch (e) { db.exec('rollback'); throw e; }
+    finally { db.exec('pragma foreign_keys = on'); }
   }
 }
 

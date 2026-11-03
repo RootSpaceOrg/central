@@ -244,7 +244,8 @@ export interface IdeaPatch {
 
 export interface TaskDto {
   id: number;
-  project_slug: string;
+  /** null = pedido solto de um quadro */
+  project_slug: string | null;
   /** repositório onde um agente trabalharia nesta tarefa */
   repo_path: string | null;
   title: string;
@@ -261,29 +262,49 @@ export interface TaskDto {
   created_at: string;
   updated_at: string;
   milestone_id: number | null;
-  /** coluna do quadro do projeto (null = quadro padrão) */
-  stage: string | null;
+
 }
 
-/** Uma coluna do quadro de um projeto (workflow). */
+/** Uma coluna de um quadro (workflow). */
 export interface BoardColumnDto {
   key: string;
   label: string;
   description: string | null;
-  /** o que ela significa para a Central (gatilhos, PR → Em dev/Feito, saúde) */
-  kind: TaskColumn;
-  /** agente que pega o que entra nesta coluna (null = ninguém) */
+  /** entrar nesta coluna põe a tarefa neste estado no backlog principal (null = não mexe lá) */
+  kind: TaskColumn | null;
+  /** agente (de qualquer projeto) que pega o que entra nesta coluna (null = ninguém) */
   agent_id: number | null;
   /** o que o agente faz nesta etapa */
   instruction: string | null;
   parallel: number;
   hours: string;
-  /** para onde a tarefa vai quando o agente termina bem (null = Revisão) */
+  /** para onde a tarefa vai quando o agente termina bem (null = a próxima coluna) */
   next_key: string | null;
 }
 
+/** Quadro (workflow): independente de projeto; uma tarefa pode estar em vários. */
+export interface BoardDto {
+  id: number;
+  name: string;
+  description: string | null;
+  /** projeto a que o quadro pertence (null = solto, agentes de vários projetos) */
+  project_slug: string | null;
+  color: string;
+  position: number;
+  created_at: string;
+  open_tasks: number;
+  columns: BoardColumnDto[];
+}
+
+/** Onde uma tarefa está num quadro. */
+export interface TaskPlacementDto { task_id: number; board_id: number; stage: string; position: number }
+
 export interface NewTaskInput {
-  project_slug: string;
+  /** null = pedido solto, feito direto num quadro (board_id) */
+  project_slug: string | null;
+  /** criar já num quadro (e numa coluna dele; padrão: a primeira) */
+  board_id?: number | null;
+  stage?: string | null;
   repo_path: string | null;
   title: string;
   body: string | null;
@@ -301,8 +322,6 @@ export interface TaskPatch {
   /** posição dentro da coluna (0 = topo) */
   position?: number;
   milestone_id?: number | null;
-  /** coluna do quadro do projeto (workflow); o tipo acompanha */
-  stage?: string;
 }
 
 export interface ImportResultDto {
@@ -875,9 +894,15 @@ export interface Api {
   'context:block': (projectSlug: string, focus: string, budget: number) => string;
   /** memória de um agente, a compartilhada ('shared') ou tudo ('all'); retired inclui as esquecidas */
   /** entregas desde (ISO) e/ou num status */
-  /** quadro (workflow) do projeto; [] = quadro padrão */
-  'board:get': (projectSlug: string) => BoardColumnDto[];
-  'board:save': (projectSlug: string, columns: BoardColumnDto[]) => BoardColumnDto[];
+  /** quadros (workflows) e onde cada tarefa está neles */
+  'boards:list': () => BoardDto[];
+  'boards:create': (input: { name: string; description?: string | null; project_slug?: string | null; color?: string; columns?: BoardColumnDto[] }) => BoardDto;
+  'boards:update': (id: number, patch: { name?: string; description?: string | null; project_slug?: string | null; color?: string }) => void;
+  'boards:delete': (id: number) => void;
+  'boards:columns': (id: number, columns: BoardColumnDto[]) => BoardColumnDto[];
+  'boards:stages': () => TaskPlacementDto[];
+  'boards:place': (taskId: number, boardId: number, stage: string, position: number) => void;
+  'boards:remove': (taskId: number, boardId: number) => void;
   'deliveries:list': (since: string | null, status: DeliveryStatus | null) => DeliveryDto[];
   'deliveries:review': (id: number, action: 'accepted' | 'adjusting' | 'discarded', note: string | null) => void;
   /** tudo o que aconteceu desde (ISO) */

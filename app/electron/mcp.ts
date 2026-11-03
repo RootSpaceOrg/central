@@ -20,6 +20,7 @@ import {
   updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
+import { createBoard, listBoards, resolveBoard, resolveStage, setStage, stagesOf } from './board';
 import { reportDelivery } from './deliveries';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
 import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
@@ -48,6 +49,15 @@ const fail = (e: unknown): Result => ({ content: [{ type: 'text', text: `Erro: $
 const column = z.enum(['backlog', 'todo', 'doing', 'review', 'dev', 'done']);
 const permission = z.enum(['edits', 'full']).describe('edits = seguro (repo: edita e roda git/npm; projeto: só lê). full = sem restrição');
 const size = z.enum(['small', 'medium', 'large']).describe('tamanho do trabalho; limita o consumo da cota');
+
+/** "Conteúdo: Roteiro" para cada quadro em que a tarefa está */
+function placements(taskId: number): string[] {
+  const boards = listBoards();
+  return stagesOf().filter(p => p.task_id === taskId).map(p => {
+    const b = boards.find(x => x.id === p.board_id);
+    return `${b?.name ?? p.board_id}: ${b?.columns.find(c => c.key === p.stage)?.label ?? p.stage}`;
+  });
+}
 
 function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): McpServer {
   const s = new McpServer({ name: 'central', version: app.getVersion() }, { instructions: INSTRUCTIONS });
@@ -101,18 +111,38 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
 
   // ---------- tarefas ----------
   tool('list_tasks', 'Lista tarefas do backlog. Filtros opcionais por projeto e coluna.', { project_slug: z.string().optional(), column: column.optional() }, a =>
-    listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, stage: t.stage, priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status })));
-  tool('create_task', 'Cria tarefa no backlog de um projeto. priority: 0 urgente, 1 alta, 2 normal, 3 baixa.', {
-    project_slug: z.string(), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
+    listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, boards: placements(t.id), priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status })));
+  tool('create_task', 'Cria tarefa no backlog de um projeto (ou direto num quadro: board + stage; aí o projeto é opcional). priority: 0 prioritária, 1 alta, 2 normal, 3 baixa.', {
+    project_slug: z.string().optional(), board: z.union([z.number().int(), z.string()]).optional().describe('quadro onde o pedido entra (id ou nome)'),
+    stage: z.string().optional().describe('coluna do quadro (padrão: a primeira)'), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     repo_path: z.string().optional().describe('caminho do repositório, se já souber onde o trabalho acontece'),
     idea_id: z.number().int().optional().describe('ideia aprovada de onde a tarefa nasceu (a ideia passa para "em andamento")'),
     milestone_id: z.number().int().optional().describe('marco do roadmap que a tarefa avança'),
-  }, a => createTask({ project_slug: a.project_slug, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
+  }, a => createTask({ project_slug: a.project_slug ?? null, board_id: a.board !== undefined ? resolveBoard(a.board) : null, stage: a.stage ?? null, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
   tool('update_task', 'Edita ou move uma tarefa (coluna, prioridade, título, descrição, projeto, repositório).', {
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     project_slug: z.string().optional(), repo_path: z.string().optional(), milestone_id: z.number().int().optional(),
-    stage: z.string().optional().describe('coluna do quadro do projeto (nome ou key), quando o projeto tem quadro próprio'),
-  }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column || patch.stage ? 0 : undefined }), h.backlog);
+  }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column ? 0 : undefined }), h.backlog);
+
+  // ---------- quadros (workflows): independentes de projeto; uma tarefa pode estar em vários ----------
+  tool('list_boards', 'Quadros (workflows): colunas, o agente de cada coluna e quantas tarefas abertas.', {}, () =>
+    listBoards().map(b => ({ id: b.id, name: b.name, project: b.project_slug, description: b.description, open: b.open_tasks,
+      columns: b.columns.map(c => ({ key: c.key, label: c.label, description: c.description, agent_id: c.agent_id, next: c.next_key })) })));
+  tool('create_board', 'Cria um quadro (workflow) com colunas; cada coluna pode ter um agente (de qualquer projeto) que pega o que entra nela. Só quando o Gustavo pedir.', {
+    name: z.string(), description: z.string().optional(), project_slug: z.string().optional().describe('vazio = quadro solto'),
+    columns: z.array(z.object({ label: z.string(), description: z.string().optional(), agent_id: z.number().int().optional(), instruction: z.string().optional(),
+      kind: z.enum(['backlog', 'todo', 'doing', 'review', 'dev', 'done']).optional().describe('reflete no backlog principal') })).min(1),
+  }, a => createBoard({ name: a.name, description: a.description ?? null, project_slug: a.project_slug ?? null, columns: a.columns }), h.backlog);
+  tool('move_on_board', 'Põe ou move uma tarefa numa coluna de um quadro (a tarefa pode estar em vários quadros).', {
+    task_id: z.number().int(), board: z.union([z.number().int(), z.string()]).describe('id ou nome do quadro'), stage: z.string().describe('coluna (nome ou key)'),
+  }, a => {
+    const b = resolveBoard(a.board);
+    if (!b) throw new Error('Quadro não encontrado.');
+    const s = resolveStage(b, a.stage);
+    if (!s) throw new Error('Coluna não encontrada nesse quadro.');
+    setStage(a.task_id, b, s);
+    return 'ok';
+  }, h.backlog);
   tool('delete_task', 'Exclui uma tarefa. Só use se o Gustavo pediu.', { id: z.number().int() }, ({ id }) => deleteTask(id), h.backlog);
 
   // ---------- ideias ----------

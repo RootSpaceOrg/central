@@ -1,3 +1,4 @@
+import { RouterLink } from '@angular/router';
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { ProjectSelect } from '../pickers/project-select';
 
@@ -5,6 +6,7 @@ import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { errorMessage } from '../../services/ipc/ipc.service';
 import { Repo } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
+import { BoardService } from '../../services/board/board.service';
 import { DeliveriesService } from '../../services/deliveries/deliveries.service';
 import { COLUMNS, PRIORITY, TaskColumn, TaskPriority, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
@@ -13,7 +15,7 @@ import { ChatService } from '../../services/chat/chat.service';
 
 @Component({
   selector: 'app-task-dialog',
-  imports: [Icon, ProjectSelect],
+  imports: [Icon, ProjectSelect, RouterLink],
   templateUrl: './task-dialog.html',
 })
 export class TaskDialog {
@@ -22,6 +24,10 @@ export class TaskDialog {
   private readonly agents = inject(AgentsService);
   private readonly chat = inject(ChatService);
   private readonly deliveries = inject(DeliveriesService);
+  protected readonly boards = inject(BoardService);
+  /** quadros em que a tarefa está */
+  protected readonly placements = computed(() => { const t = this.editing(); return t ? this.boards.ofTask().get(t.id) ?? [] : []; });
+  protected readonly otherBoards = computed(() => { const on = new Set(this.placements().map(p => p.boardId)); return this.boards.boards().filter(b => !on.has(b.id)); });
   protected readonly projects = inject(ProjectsService);
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
@@ -64,7 +70,8 @@ export class TaskDialog {
 
   protected async submit(e: Event): Promise<void> {
     e.preventDefault();
-    if (!this.title().trim() || !this.projectSlug()) return;
+    // pedido solto (sem projeto) de um quadro pode ser editado sem escolher projeto
+    if (!this.title().trim() || (!this.projectSlug() && !(this.editing() && !this.editing()!.projectSlug))) return;
     this.busy.set(true);
     const draft = {
       projectSlug: this.projectSlug(), repoPath: this.repoPath() || null, title: this.title().trim(), body: this.body().trim(),
@@ -92,6 +99,11 @@ export class TaskDialog {
     this.close();
   }
 
+  protected addToBoard(taskId: number, boardId: string): void {
+    const b = this.boards.byId().get(Number(boardId));
+    if (b?.columns.length) this.boards.place(taskId, b.id, b.columns[0].key);
+  }
+
   protected remove(): void {
     const t = this.editing();
     if (t && confirm(`Excluir "${t.title}"?`)) { this.tasks.remove(t.id); this.close(); }
@@ -103,7 +115,7 @@ export class TaskDialog {
     const agent = this.agents.agents().find(a => a.projectSlug === t.projectSlug && !a.builtin) ?? this.agents.central();
     if (!agent) return;
     this.close();
-    this.chat.compose(agent.id, `Sobre a tarefa #${t.id} "${t.title}" (${this.projects.bySlug().get(t.projectSlug)?.name ?? t.projectSlug}): `);
+    this.chat.compose(agent.id, `Sobre a tarefa #${t.id} "${t.title}" (${this.projects.bySlug().get(t.projectSlug ?? '')?.name ?? 'sem projeto'}): `);
   }
 
   protected toAgent(): void {
@@ -122,7 +134,7 @@ export class TaskDialog {
     const t = this.editing();
     if (t) {
       this.title.set(t.title); this.body.set(t.body ?? ''); this.column.set(t.column); this.priority.set(t.priority);
-      this.selectProject(t.projectSlug, t.repoPath ?? '');
+      this.selectProject(t.projectSlug ?? '', t.repoPath ?? '');
     } else if (s.mode === 'create') {
       this.title.set(s.title ?? ''); this.body.set(s.body ?? ''); this.column.set(s.column ?? 'backlog'); this.priority.set(2);
       this.selectProject(s.projectSlug ?? this.projects.defaultSlug());
