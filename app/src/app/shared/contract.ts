@@ -544,6 +544,8 @@ export interface ReleaseRepoDto {
   commits: number;
   items: ReleaseItemDto[];
   oldest_at: string | null;
+  /** página do repositório no GitHub (null = sem remote do GitHub) */
+  url: string | null;
   error: string | null;
 }
 

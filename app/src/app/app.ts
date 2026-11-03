@@ -120,6 +120,24 @@ export class App {
   protected readonly tick = signal(0);
 
   constructor() {
+    // clicar no fundo escuro de qualquer modal fecha, como o Esc (requestClose dispara o mesmo cancel/close que cada
+    // modal já trata). Só se o clique começou e terminou fora da caixa: arrastar uma seleção até fora não fecha.
+    const backdrop = (e: MouseEvent): HTMLDialogElement | null => {
+      const d = e.target;
+      if (!(d instanceof HTMLDialogElement) || !d.open) return null;
+      const r = d.getBoundingClientRect();
+      return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom ? d : null;
+    };
+    let pressed: HTMLDialogElement | null = null;
+    document.addEventListener('mousedown', e => { pressed = backdrop(e); });
+    document.addEventListener('click', e => {
+      const d = backdrop(e);
+      if (d && d === pressed) {
+        const dlg = d as HTMLDialogElement & { requestClose?: () => void };
+        if (dlg.requestClose) dlg.requestClose(); else dlg.close();
+      }
+      pressed = null;
+    });
     setInterval(() => this.tick.update(t => t + 1), 30_000);
     // clique numa notificação ou no menu da bandeja
     inject(PrefsApiService).onNavigate(route => this.router.navigateByUrl(route));

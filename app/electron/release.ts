@@ -36,7 +36,7 @@ export function parseEntry(subject: string, body: string): { pr: number | null; 
 }
 
 async function repoStatus(path: string, name: string, remote: string | null, fetch: boolean): Promise<ReleaseRepoDto> {
-  const base: ReleaseRepoDto = { path, name, prod: null, dev: null, commits: 0, items: [], oldest_at: null, error: null };
+  const base: ReleaseRepoDto = { path, name, prod: null, dev: null, commits: 0, items: [], oldest_at: null, error: null, url: webUrl(remote) };
   try {
     if (fetch && remote) await git(path, ['fetch', 'origin', '--quiet', '--prune'], 45_000).catch(() => { base.error = 'não deu para buscar o remoto (offline?); mostrando o último conhecido'; });
     base.prod = (await exists(path, 'origin/main')) ? 'main' : (await exists(path, 'origin/master')) ? 'master' : null;
@@ -45,7 +45,7 @@ async function repoStatus(path: string, name: string, remote: string | null, fet
     const range = `origin/${base.prod}..origin/${base.dev}`;
     base.commits = Number((await git(path, ['rev-list', '--count', range])).trim());
     const raw = await git(path, ['log', range, '--first-parent', '--format=%H%x1f%ct%x1f%an%x1f%s%x1f%b%x1e']);
-    const url = webUrl(remote);
+    const url = base.url;
     base.items = raw.split('\x1e').map(s => s.trim()).filter(Boolean).filter(rec => !isBackMerge(rec.split('\x1f')[3] ?? '')).map(rec => {
       const [sha, ct, author, subject, body = ''] = rec.split('\x1f');
       const { pr, title } = parseEntry(subject, body);
