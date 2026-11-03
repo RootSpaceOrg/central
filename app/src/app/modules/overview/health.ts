@@ -11,7 +11,7 @@
 
 export type Health = 'risco' | 'atencao' | 'parado' | 'ok';
 
-export interface HealthTask { column: 'backlog' | 'todo' | 'doing' | 'review' | 'done'; priority: number; updatedAt: Date; title: string }
+export interface HealthTask { column: 'backlog' | 'todo' | 'doing' | 'review' | 'dev' | 'done'; priority: number; updatedAt: Date; title: string }
 
 export interface HealthInput {
   status: string;
@@ -33,7 +33,7 @@ export interface Signal {
   level: 'risco' | 'atencao';
   text: string;
   /** para onde ir resolver */
-  go: 'triagem' | 'backlog' | 'execucoes' | 'rumo' | 'roadmap' | 'projeto';
+  go: 'triagem' | 'backlog' | 'execucoes' | 'rumo' | 'roadmap' | 'projeto' | 'producao';
 }
 
 const DAY = 86_400_000;
@@ -58,6 +58,8 @@ export function health(i: HealthInput, now = Date.now()): { health: Health; sign
     if (review.length) warn(`${plural(review.length, 'tarefa', 'tarefas')} em revisão (PR para olhar)`, 'backlog');
     const stuck = open.filter(t => t.column === 'doing' && days(t.updatedAt, now) >= 7);
     if (stuck.length) warn(`${plural(stuck.length, 'tarefa parada', 'tarefas paradas')} em "fazendo" há 7+ dias`, 'backlog');
+    const waitingProd = open.filter(t => t.column === 'dev' && days(t.updatedAt, now) >= 7);
+    if (waitingProd.length) warn(`${plural(waitingProd.length, 'tarefa em dev', 'tarefas em dev')} há 7+ dias esperando produção`, 'producao');
     if (i.newIdeas >= 3) warn(`${i.newIdeas} ideias para triar`, 'triagem');
     if (i.dirtyRepos) warn(`${plural(i.dirtyRepos, 'repositório', 'repositórios')} com mudança sem commit`, 'projeto');
   }

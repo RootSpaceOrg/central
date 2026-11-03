@@ -39,6 +39,16 @@
                     }
                   </div>
                 </div>
+                <div>
+                  <span class="mb-2 block font-semibold">Tarefa pronta quando</span>
+                  <div class="flex w-fit gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Tarefa pronta quando">
+                    <button type="button" role="radio" [attr.aria-checked]="doneWhen() === 'merge'" (click)="doneWhen.set('merge')"
+                            class="rounded-full px-4 py-1.5 text-[13px] font-semibold" [class]="doneWhen() === 'merge' ? 'bg-raise text-text' : 'text-mute hover:text-text'">O PR é mergeado</button>
+                    <button type="button" role="radio" [attr.aria-checked]="doneWhen() === 'prod'" (click)="doneWhen.set('prod')"
+                            class="rounded-full px-4 py-1.5 text-[13px] font-semibold" [class]="doneWhen() === 'prod' ? 'bg-raise text-text' : 'text-mute hover:text-text'">Chega em produção</button>
+                  </div>
+                  <span class="mt-1 block text-[12.5px] text-mute">{{ doneWhen() === 'prod' ? 'Merge em develop leva a tarefa para "Em dev"; ela vai para Feito sozinha quando o merge chega em main.' : 'PR mergeado leva a tarefa para Feito.' }}</span>
+                </div>
                 <label class="block">
                   <span class="mb-1.5 block font-semibold">Descrição</span>
                   <textarea class="field min-h-24 resize-y leading-relaxed" placeholder="O que é, para quem, o que importa agora. Agentes leem isto."

@@ -280,6 +280,16 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   (o que falta, o que fazer, o comando) e para. A tarefa fica em "fazendo", a entrega fica pausada; no Início aparece
   "está esperando você" com "Rodar no terminal" e "Já resolvi, continuar", que retoma a mesma sessão de onde parou.
 
+## Feito (v0.23)
+
+- **Decisão ligada à tarefa**: escolha sobre uma tarefa que já existe vira decisão com task_id (create_decision). A tarefa
+  espera em Fazendo com o selo "decisão #N esperando você"; ao decidir, a resposta é anexada à própria tarefa e ela volta
+  para A fazer (o responsável segue). Antes, aprovar criava uma tarefa nova repetindo a pergunta.
+- **Pronto = produção** (por projeto, no editor: "Tarefa pronta quando"): coluna "Em dev". PR mergeado em develop leva a
+  tarefa para Em dev; quando o merge chega em main (ou foi direto em main), Feito, sozinho. Agentes do projeto sabem que
+  merge em develop não fecha a tarefa. Visão geral avisa tarefa em dev há 7+ dias.
+- Migração da tabela de tarefas (CHECK das colunas) testada numa cópia do banco: 18 tarefas preservadas, FKs íntegras.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

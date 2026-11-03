@@ -75,7 +75,10 @@ export function reviewDelivery(id: number, action: 'accepted' | 'adjusting' | 'd
   const d = get<{ task_id: number | null }>('select task_id from deliveries where id = ?', id);
   if (!d) throw new Error('Entrega não encontrada.');
   run('update deliveries set status = ?, review_note = ?, reviewed_at = ? where id = ?', action, note?.trim() || null, now(), id);
-  if (action === 'accepted' && d.task_id) run(`update tasks set "column" = 'done', updated_at = ? where id = ? and "column" <> 'done'`, now(), d.task_id);
+  if (action === 'accepted' && d.task_id) {
+    const prodWithPr = get('select 1 from tasks t join projects p on p.slug = t.project_slug where t.id = ? and p.done_when = ? and t.pr_url is not null', d.task_id, 'prod');
+    if (!prodWithPr) run(`update tasks set "column" = 'done', updated_at = ? where id = ? and "column" <> 'done'`, now(), d.task_id);
+  }
 }
 
 /** Tudo o que aconteceu desde `since`, para o "Enquanto você estava fora". */

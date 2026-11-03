@@ -47,6 +47,8 @@ export interface ProjectDto {
   todo_parallel: number;
   /** horário em que pode disparar ("08-22"; vazio = qualquer hora) */
   todo_hours: string;
+  /** quando uma tarefa está pronta: 'merge' (PR mergeado) ou 'prod' (chegou em main); com 'prod' existe a coluna Em dev */
+  done_when: 'merge' | 'prod';
 }
 
 export interface NewProjectInput {
@@ -73,6 +75,7 @@ export interface ProjectPatch {
   todo_agent_id?: number | null;
   todo_parallel?: number;
   todo_hours?: string;
+  done_when?: 'merge' | 'prod';
 }
 
 export interface RepoDto {
@@ -111,6 +114,8 @@ export interface ProposalDto {
   source: string;
   created_at: string;
   updated_at: string;
+  /** a tarefa sobre a qual é a escolha (decidir devolve a resposta para ela, sem criar outra) */
+  task_id?: number | null;
 }
 
 export interface NewProposalInput {
@@ -190,7 +195,7 @@ export interface UsageDto {
 
 /** new = para triagem; approved = aprovada, vira insumo do backlog; doing = já tem tarefas; done = tarefas concluídas; archived = descartada */
 export type IdeaStatus = 'new' | 'approved' | 'doing' | 'done' | 'archived';
-export type TaskColumn = 'backlog' | 'todo' | 'doing' | 'review' | 'done';
+export type TaskColumn = 'backlog' | 'todo' | 'doing' | 'review' | 'dev' | 'done';
 export type TaskPriority = 0 | 1 | 2 | 3;
 
 export interface IdeaDto {

@@ -173,7 +173,8 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
   if (proposal) run('update proposals set status = ?, updated_at = ? where id = ?', status === 'succeeded' ? 'done' : 'approved', now(), proposal);
   // concluída vai para Revisão (alguém precisa olhar o PR); falha volta para A fazer
   const waiting = !!get<{ w: string | null }>('select waiting w from runs where id = ?', id)?.w;
-  if (task && !waiting) moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
+  const asking = task ? !!get(`select 1 from proposals where task_id = ? and status = 'proposed'`, task) : false;
+  if (task && !waiting && !asking) moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
   procs.delete(id);
   // nota de entrega: garante, mede o diff e decide se vai para a revisão
   closeDelivery(id).catch(() => {}).finally(() => emit.changed());
@@ -288,6 +289,11 @@ async function execute(id: number, emit: Emit): Promise<void> {
 
 type Where = { kind: 'repo'; branch: string; base: string } | { kind: 'project'; folder: string; repos: string[] } | { kind: 'workspace'; folder: string };
 
+/** Projeto onde "pronto" é produção: o agente não dá a tarefa como feita no merge em develop. */
+const prodRule = (slug: string | null) => (slug && get(`select 1 from projects where slug = ? and done_when = 'prod'`, slug)
+  ? '\n- Neste projeto, pronto é em produção: merge em develop não fecha a tarefa. A Central leva para "Em dev" e depois para\n  Feito sozinha quando chegar em main. Não marque como feita.'
+  : '');
+
 function framePrompt(r: RunDto, where: Where): string {
   const task = r.task_id ? get<{ id: number; title: string }>('select id, title from tasks where id = ?', r.task_id) : null;
   const central = `## Central
@@ -301,6 +307,9 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
 - Faltou algo que só o Gustavo resolve (sessão AWS/SSO expirada, gh sem login, credencial, VPN, acesso)? Não contorne nem
   desista: chame need_gustavo (o que falta, o que ele faz e o comando, ex.: aws sso login --profile X) e termine. A Central te
   retoma de onde parou quando ele resolver.
+- Escolha que depende do Gustavo (qual caminho seguir, se pode mergear, se tira ou mantém): crie uma decisão com
+  create_decision${task ? ` e task_id ${task.id}` : ' e o task_id da tarefa'}, com as opções no texto e o que você faz em cada uma. Não escreva escolhas
+  pendentes na descrição da tarefa: a tarefa espera, e quando ele decidir a resposta volta para ela e você segue.${prodRule(r.project_slug)}
 - Antes de terminar, chame report_delivery: o que mudou, por quê, como testar em 1 minuto e o que ficou de risco.
   É o que o Gustavo lê quando volta; sem isso ele não sabe o que você fez.`;
 

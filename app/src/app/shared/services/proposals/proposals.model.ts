@@ -14,6 +14,8 @@ export interface Proposal {
   status: ProposalStatus;
   source: string;
   createdAt: Date;
+  /** a tarefa sobre a qual é a escolha */
+  taskId: number | null;
 }
 
 export const RISK_LABEL: Record<RiskTier, string> = { 0: 'risco baixo', 1: 'risco médio', 2: 'risco alto' };

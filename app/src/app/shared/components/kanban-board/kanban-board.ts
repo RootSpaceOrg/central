@@ -7,6 +7,7 @@ import { AgentsService } from '../../services/agents/agents.service';
 import { ChatService } from '../../services/chat/chat.service';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
+import { ProposalsService } from '../../services/proposals/proposals.service';
 import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
 
@@ -24,10 +25,18 @@ export class KanbanBoard {
   private readonly menu = inject(ContextMenuService);
   private readonly agents = inject(AgentsService);
   private readonly chat = inject(ChatService);
+  private readonly proposals = inject(ProposalsService);
 
   readonly projectSlug = input<string | null>(null);
 
-  protected readonly columns = COLUMNS;
+  /** "Em dev" só aparece em projeto onde pronto é produção (ou no quadro geral, se algum for) */
+  protected readonly columns = computed(() => {
+    const slug = this.projectSlug();
+    const prod = slug ? this.projects.bySlug().get(slug)?.doneWhen === 'prod' : this.projects.living().some(p => p.doneWhen === 'prod');
+    return COLUMNS.filter(c => c.id !== 'dev' || prod);
+  });
+  /** decisão esperando você sobre a tarefa (o agente parou nela) */
+  protected readonly asking = computed(() => new Map(this.proposals.inbox().filter(p => p.taskId).map(p => [p.taskId!, p])));
   protected readonly priority = PRIORITY;
   protected readonly byColumn = computed(() => {
     const slug = this.projectSlug();
@@ -67,7 +76,7 @@ export class KanbanBoard {
       { label: 'Conversar sobre esta tarefa', icon: 'central', run: () => this.talk(t) },
       ...(t.prUrl ? [{ label: 'Abrir PR', icon: 'pr' as const, run: () => this.projects.openExternal(t.prUrl!) }] : []),
       null,
-      ...COLUMNS.filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.id, 0) })),
+      ...this.columns().filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.id, 0) })),
       null,
       { label: 'Excluir', icon: 'delete', danger: true, run: () => { if (confirm(`Excluir "${t.title}"?`)) this.tasks.remove(t.id); } },
     ]);

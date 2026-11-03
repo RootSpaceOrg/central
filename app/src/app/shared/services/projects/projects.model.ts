@@ -29,6 +29,8 @@ export interface Project {
   todoAgentId: number | null;
   todoParallel: number;
   todoHours: string;
+  /** pronto = PR mergeado ('merge') ou em produção ('prod', com a coluna Em dev) */
+  doneWhen: 'merge' | 'prod';
 }
 
 export interface Repo {
@@ -55,6 +57,7 @@ export interface NewProject {
 }
 
 export interface ProjectEdit {
+  doneWhen?: 'merge' | 'prod';
   name?: string;
   status?: ProjectStatus;
   color?: string;

@@ -30,6 +30,7 @@ const toProject = (d: ProjectDto): Project => ({
   todoAgentId: d.todo_agent_id ?? null,
   todoParallel: d.todo_parallel ?? 1,
   todoHours: d.todo_hours ?? '',
+  doneWhen: d.done_when === 'prod' ? 'prod' : 'merge',
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -146,7 +147,7 @@ export class ProjectsService {
     try {
       await this.api.update(slug, {
         name: e.name, status: e.status, color: e.color, description: e.description,
-        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder, parent_slug: e.parentSlug,
+        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder, parent_slug: e.parentSlug, done_when: e.doneWhen,
       });
     } catch (err) {
       throw new Error(errorMessage(err));

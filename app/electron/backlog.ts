@@ -14,7 +14,7 @@ import { all, get, now, run } from './db';
 import { pool } from './git';
 
 const execFileP = promisify(execFile);
-const COLUMNS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'done'];
+const COLUMNS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'dev', 'done'];
 
 // ---------- configurações ----------
 
@@ -27,18 +27,19 @@ export const setSetting = (key: string, value: string) =>
 const VERDICT: Record<Verdict, ProposalStatus> = { approve: 'approved', defer: 'deferred', reject: 'rejected' };
 
 export function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
-  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at
+  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at, task_id
     from proposals where status in (${statuses.map(() => '?').join(',') || "''"})
     order by coalesce(tier, 9), created_at desc`, ...statuses);
 }
 
-export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string }): ProposalDto {
+export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string; task_id?: number | null }): ProposalDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Escreva o que precisa acontecer.');
   const tier = input.tier === 0 || input.tier === 1 || input.tier === 2 ? input.tier : null;
   const { lastInsertRowid } = run(`insert into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,?,?)`,
     input.project_slug || null, title, input.body?.trim() || null, input.next_action?.trim() || null, tier,
     input.source ?? 'manual', `${Date.now()}-${Math.random()}`);
+  if (input.task_id && get('select 1 from tasks where id = ?', input.task_id)) run('update proposals set task_id = ? where id = ?', input.task_id, Number(lastInsertRowid));
   return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
 }
 
@@ -50,6 +51,16 @@ export function decide(id: number, verdict: Verdict, reason: string | null): voi
   }
   run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
   const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
+  // escolha sobre uma tarefa que já existe: a resposta volta para ela (vai para A fazer, o responsável segue) em vez de
+  // virar uma tarefa nova que repete a pergunta
+  const task = p.task_id ? get<{ id: number; body: string | null; column: string }>('select id, body, "column" from tasks where id = ?', p.task_id) : null;
+  if (task && verdict !== 'defer') {
+    const when = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const answer = `Decisão #${p.id} (${when}): ${verdict === 'approve' ? 'APROVADA' : 'RECUSADA'}: ${p.title}${p.next_action && verdict === 'approve' ? `\nSe aprovada: ${p.next_action}` : ''}${reason ? `\nGustavo: ${reason}` : ''}`;
+    run(`update tasks set body = ?, "column" = case when "column" = 'done' then 'done' else 'todo' end, updated_at = ? where id = ?`,
+      [task.body?.trim(), answer].filter(Boolean).join('\n\n'), now(), task.id);
+    return;
+  }
   if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {
     // decisões do piloto e dos agentes dizem o repositório no texto: a tarefa já nasce sabendo onde trabalhar
     const text = `${p.title}
@@ -192,14 +203,33 @@ export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string
   syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', taskId)?.i ?? null);
 }
 
-/** Tarefas em Revisão cujo PR foi mergeado vão para Feito. Devolve quantas andaram. */
+/**
+ * Tarefas com PR andam sozinhas. Projeto "pronto = merge": PR mergeado vai para Feito. Projeto "pronto = produção":
+ * mergeado em develop vai para Em dev; quando o merge chega em main (ou foi direto em main), Feito. Devolve quantas andaram.
+ */
 export async function syncPullRequests(): Promise<number> {
-  const review = all<{ id: number; pr_url: string }>(`select id, pr_url from tasks where "column" = 'review' and pr_url is not null`);
+  const tasks = all<{ id: number; pr_url: string; col: string; prod: number; slug: string }>(`
+    select t.id, t.pr_url, t."column" col, p.done_when = 'prod' prod, t.project_slug slug from tasks t join projects p on p.slug = t.project_slug
+    where t.pr_url is not null and (t."column" = 'review' or (t."column" = 'dev' and p.done_when = 'prod'))`);
+  const fetched = new Map<string, Promise<unknown>>();
   let moved = 0;
-  await pool(review, 4, async t => {
+  const move = (t: { id: number; col: string }, to: TaskColumn) => { if (t.col !== to) { moveTaskForRun(t.id, to); moved++; } };
+  await pool(tasks, 4, async t => {
     try {
-      const { stdout } = await execFileP('gh', ['pr', 'view', t.pr_url, '--json', 'state'], { windowsHide: true });
-      if (JSON.parse(stdout).state === 'MERGED') { moveTaskForRun(t.id, 'done'); moved++; }
+      const { stdout } = await execFileP('gh', ['pr', 'view', t.pr_url, '--json', 'state,baseRefName,mergeCommit'], { windowsHide: true });
+      const pr = JSON.parse(stdout) as { state: string; baseRefName: string; mergeCommit: { oid: string } | null };
+      if (pr.state !== 'MERGED') return;
+      if (!t.prod || /^(main|master)$/.test(pr.baseRefName)) return move(t, 'done');
+      // mergeado em develop: chegou em main?
+      const name = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(t.pr_url)?.[1]?.toLowerCase();
+      const repo = all<{ path: string; remote: string | null }>('select path, remote from repos where project_slug = ?', t.slug)
+        .find(r => githubName(r.remote)?.toLowerCase() === name);
+      if (!repo || !pr.mergeCommit) return move(t, 'dev');
+      if (!fetched.has(repo.path)) fetched.set(repo.path, execFileP('git', ['-C', repo.path, 'fetch', 'origin', '--quiet'], { windowsHide: true, timeout: 45_000 }).catch(() => null));
+      await fetched.get(repo.path);
+      const prodRef = await execFileP('git', ['-C', repo.path, 'rev-parse', '--verify', '--quiet', 'origin/main'], { windowsHide: true }).then(() => 'origin/main', () => 'origin/master');
+      const inProd = await execFileP('git', ['-C', repo.path, 'merge-base', '--is-ancestor', pr.mergeCommit.oid, prodRef], { windowsHide: true }).then(() => true, () => false);
+      move(t, inProd ? 'done' : 'dev');
     } catch { /* PR apagado, sem acesso ou offline: deixa como está */ }
   });
   return moved;

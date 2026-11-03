@@ -38,4 +38,6 @@ ok(health({ ...base, lastCommitAt: ago(40), failedRuns7d: 1 }, NOW).health === '
 ok(health({ ...base, status: 'maintenance', rumoAt: null, nowMilestones: 0, lastCommitAt: ago(90) }, NOW).health === 'ok', 'manutenção sem rumo/marco/ritmo = ok');
 ok(health({ ...base, status: 'frozen', openProposals: 3, rumoAt: null }, NOW).health === 'ok', 'congelado ignora atenção');
 ok(health({ ...base, status: 'frozen', folderExists: false }, NOW).health === 'risco', 'congelado ainda acusa risco');
+ok(health({ ...base, tasks: [t('dev', 2, 9)] }, NOW).signals.some(s => s.go === 'producao'), 'em dev há 9 dias = esperando produção');
+ok(!health({ ...base, tasks: [t('dev', 2, 2)] }, NOW).signals.length, 'em dev há 2 dias = normal');
 console.log('health ok');

@@ -37,6 +37,7 @@ export const COLUMNS: { id: TaskColumn; label: string; hint: string }[] = [
   { id: 'todo', label: 'A fazer', hint: 'Pronto para pegar ou mandar para um agente' },
   { id: 'doing', label: 'Fazendo', hint: 'Com você ou com um agente' },
   { id: 'review', label: 'Revisão', hint: 'PR aberto esperando seu olhar' },
+  { id: 'dev', label: 'Em dev', hint: 'Mergeado em develop, esperando produção' },
   { id: 'done', label: 'Feito', hint: '' },
 ];
 

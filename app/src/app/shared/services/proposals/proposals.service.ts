@@ -16,6 +16,7 @@ const toModel = (d: ProposalDto): Proposal => ({
   status: d.status,
   source: d.source,
   createdAt: new Date(d.created_at),
+  taskId: d.task_id ?? null,
 });
 
 @Injectable({ providedIn: 'root' })

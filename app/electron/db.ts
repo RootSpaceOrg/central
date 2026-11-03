@@ -340,7 +340,7 @@ for (const [table, column, type] of [
   ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
   ['projects', 'parent_slug', 'text'],
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
-  ['agents', 'room', "text not null default ''"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
+  ['agents', 'room', "text not null default ''"], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
@@ -372,6 +372,31 @@ for (const table of ['runs', 'routines']) {
     throw e;
   } finally {
     db.exec('pragma foreign_keys = on');
+  }
+}
+
+// v0.23: tarefas ganham a coluna "Em dev" (mergeado em develop, esperando produção). O CHECK antigo não aceita:
+// recria a tabela com o mesmo SQL e o CHECK novo, copia tudo e troca (mesmo nome: referências continuam valendo).
+{
+  const ddl = (db.prepare(`select sql from sqlite_master where type = 'table' and name = 'tasks'`).get() as { sql: string }).sql;
+  if (!ddl.includes("'dev'")) {
+    const next = ddl.replace(/check \("column" in \([^)]*\)\)/i, `check ("column" in ('backlog','todo','doing','review','dev','done'))`)
+      .replace(/^CREATE TABLE\s+"?\w+"?/i, 'CREATE TABLE tasks_new');
+    if (!next.includes("'dev'")) throw new Error('Migração das tarefas: não achei o CHECK das colunas.');
+    db.exec('pragma foreign_keys = off');
+    db.exec('begin');
+    try {
+      db.exec(next);
+      db.exec('insert into tasks_new select * from tasks');
+      db.exec('drop table tasks');
+      db.exec('alter table tasks_new rename to tasks');
+      db.exec('commit');
+    } catch (e) {
+      db.exec('rollback');
+      throw e;
+    } finally {
+      db.exec('pragma foreign_keys = on');
+    }
   }
 }
 

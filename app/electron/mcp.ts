@@ -45,7 +45,7 @@ type Result = { content: { type: 'text'; text: string }[]; isError?: boolean };
 const ok = (v: unknown): Result => ({ content: [{ type: 'text', text: typeof v === 'string' ? v : JSON.stringify(v ?? { ok: true }) }] });
 const fail = (e: unknown): Result => ({ content: [{ type: 'text', text: `Erro: ${(e as Error)?.message ?? e}` }], isError: true });
 
-const column = z.enum(['backlog', 'todo', 'doing', 'review', 'done']);
+const column = z.enum(['backlog', 'todo', 'doing', 'review', 'dev', 'done']);
 const permission = z.enum(['edits', 'full']).describe('edits = seguro (repo: edita e roda git/npm; projeto: só lê). full = sem restrição');
 const size = z.enum(['small', 'medium', 'large']).describe('tamanho do trabalho; limita o consumo da cota');
 
@@ -153,9 +153,10 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   // ---------- decisões ----------
   tool('list_decisions', 'Lista decisões. status: proposed (esperando o Gustavo, padrão), approved, rejected, deferred, done.', { status: z.enum(['proposed', 'approved', 'rejected', 'deferred', 'running', 'done']).optional() }, a =>
     listProposals([a.status ?? 'proposed']).map(p => ({ id: p.id, project: p.project_slug, title: p.title, body: p.body, next_action: p.next_action, tier: p.tier })));
-  tool('create_decision', 'Cria uma decisão para o Gustavo aprovar ou recusar. next_action: o que acontece se ele aprovar. tier: 0 risco baixo, 1 médio, 2 alto.', {
+  tool('create_decision', 'Cria uma decisão para o Gustavo aprovar ou recusar. next_action: o que acontece se ele aprovar. tier: 0 risco baixo, 1 médio, 2 alto. task_id: quando a escolha é sobre uma tarefa que já existe (a decisão volta para ela, sem criar outra tarefa).', {
     title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), next_action: z.string().optional(), tier: z.number().int().min(0).max(2).optional(),
-  }, a => createProposal({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, next_action: a.next_action ?? null, tier: a.tier ?? null, source: 'central' }), () => { h.backlog(); h.projects(); });
+    task_id: z.number().int().optional(),
+  }, a => createProposal({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, next_action: a.next_action ?? null, tier: a.tier ?? null, source: 'central', task_id: a.task_id ?? null }), () => { h.backlog(); h.projects(); });
   tool('decide', 'Registra a decisão do Gustavo sobre uma decisão (só quando ele disser o que quer). approve cria tarefa em todo.', {
     id: z.number().int(), verdict: z.enum(['approve', 'defer', 'reject']), reason: z.string().optional(),
   }, a => decide(a.id, a.verdict, a.reason ?? null), () => { h.backlog(); h.projects(); });

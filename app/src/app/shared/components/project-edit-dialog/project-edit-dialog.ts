@@ -31,6 +31,7 @@ export class ProjectEditDialog {
   protected readonly name = signal('');
   protected readonly description = signal('');
   protected readonly status = signal<ProjectStatus>('active');
+  protected readonly doneWhen = signal<'merge' | 'prod'>('merge');
   protected readonly color = signal(PROJECT_COLORS[0]);
   protected readonly iconKind = signal<ProjectIconKind>('letter');
   protected readonly iconValue = signal<string | null>(null);
@@ -54,7 +55,7 @@ export class ProjectEditDialog {
       const el = this.dlg()?.nativeElement;
       if (!el) return;
       if (p && !el.open) {
-        this.name.set(p.name); this.description.set(p.description ?? ''); this.status.set(p.status); this.color.set(p.color);
+        this.name.set(p.name); this.description.set(p.description ?? ''); this.status.set(p.status); this.doneWhen.set(p.doneWhen); this.color.set(p.color);
         this.iconKind.set(p.iconKind); this.iconValue.set(p.iconValue); this.folder.set(p.folder); this.parentSlug.set(p.parentSlug ?? '');
         this.confirmDelete.set(false); this.error.set(null); this.busy.set(false); this.tab.set('geral');
         el.showModal();
@@ -80,7 +81,7 @@ export class ProjectEditDialog {
       await this.projects.edit(p.slug, {
         name: this.name(), description: this.description().trim() || null, status: this.status(), color: this.color(),
         iconKind: this.iconKind(), iconValue: this.iconValue(), folder: this.folder() !== p.folder ? this.folder() : undefined,
-        parentSlug: (this.parentSlug() || null) !== p.parentSlug ? this.parentSlug() || null : undefined,
+        parentSlug: (this.parentSlug() || null) !== p.parentSlug ? this.parentSlug() || null : undefined, doneWhen: this.doneWhen(),
       });
       this.close();
     } catch (err) {

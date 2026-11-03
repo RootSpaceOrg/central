@@ -25,7 +25,7 @@ interface Card {
   name: string;
   health: Health;
   signals: Signal[];
-  backlog: { todo: number; doing: number; review: number; urgent: number };
+  backlog: { todo: number; doing: number; review: number; dev: number; urgent: number };
   now: { title: string; done: number; total: number; more: number } | null;
   rumoAt: Date | null;
   triage: { ideas: number; decisions: number };
@@ -35,10 +35,10 @@ interface Card {
 
 const WEEK = 7 * 86_400_000;
 /** dentro do mesmo nível: o que depende de você antes do que é arrumação */
-const WEIGHT: Record<Signal['go'], number> = { execucoes: 0, triagem: 1, backlog: 1, projeto: 2, rumo: 3, roadmap: 3 };
+const WEIGHT: Record<Signal['go'], number> = { execucoes: 0, triagem: 1, backlog: 1, producao: 2, projeto: 2, rumo: 3, roadmap: 3 };
 const QUERY: Record<Signal['go'], { aba?: string; route?: string }> = {
   triagem: { route: '/triagem' }, execucoes: { route: '/execucoes' }, backlog: { aba: 'backlog' }, rumo: { aba: 'rumo' },
-  roadmap: { aba: 'roadmap' }, projeto: {},
+  roadmap: { aba: 'roadmap' }, projeto: {}, producao: { aba: 'producao' },
 };
 
 /**
@@ -103,7 +103,7 @@ export class OverviewPage {
       return {
         p, name: parent ? `${parent.name} › ${p.name}` : p.name, health: h, signals,
         backlog: { todo: open.filter(t => t.column === 'todo' || t.column === 'backlog').length, doing: open.filter(t => t.column === 'doing').length,
-          review: open.filter(t => t.column === 'review').length, urgent: open.filter(t => t.priority === 0).length },
+          review: open.filter(t => t.column === 'review').length, dev: open.filter(t => t.column === 'dev').length, urgent: open.filter(t => t.priority === 0).length },
         now: ms[0] ? { title: ms[0].title, done: ms[0].tasksDone, total: ms[0].tasks, more: ms.length - 1 } : null,
         rumoAt, triage: { ideas: newIdeas, decisions: p.openProposals },
         last: commit && run ? (commit.at > run.at ? commit : run) : commit ?? run,
