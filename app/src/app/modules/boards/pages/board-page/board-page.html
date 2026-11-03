@@ -46,6 +46,11 @@
               }
             </div>
           }
+          <button type="button" (click)="kindMenu($event, c)" title="Entrar nesta coluna põe a tarefa neste estado no backlog principal do projeto. Clique para mudar."
+                  class="mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11.5px] transition-colors"
+                  [class]="c.kind ? 'border-frost/30 bg-frost/10 text-frost hover:border-frost/60' : 'border-dashed border-edge text-faint hover:border-faint hover:text-mute'">
+            <app-icon name="kanban" [size]="11" />{{ c.kind ? 'Backlog: ' + kindLabel[c.kind] : 'Não muda o backlog' }}
+            <app-icon name="chevron" [size]="10" class="rotate-90 opacity-60" /></button>
           <!-- agente da coluna -->
           <button type="button" class="mt-2 flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[12.5px] transition-colors"
                   [class]="c.agentId ? 'bg-frost/10 text-frost hover:bg-frost/15' : 'border border-dashed border-edge text-mute hover:border-faint hover:text-text'"
@@ -56,10 +61,8 @@
           </button>
           @if (agentPanel() === c.key) {
             <div class="mt-2 space-y-2 rounded-xl border border-edge bg-night p-2.5 text-[12.5px]">
-              <select class="field !py-1 text-[12.5px]" aria-label="Agente" (change)="patchColumn(c.key, { agentId: $any($event.target).value ? +$any($event.target).value : null })">
-                <option value="" [selected]="!c.agentId">Ninguém (você move)</option>
-                @for (a of agentList(); track a.id) { <option [value]="a.id" [selected]="c.agentId === a.id">{{ a.name }}</option> }
-              </select>
+              <app-agent-select [compact]="true" [hideCentral]="true" [value]="c.agentId ? '' + c.agentId : ''" noneLabel="Ninguém (você move)"
+                                (valueChange)="patchColumn(c.key, { agentId: $event ? +$event : null })" />
               @if (c.agentId) {
                 <textarea class="field h-20 resize-y !py-1 text-[12.5px]" placeholder="O que ele faz nesta etapa" aria-label="Instrução"
                           [value]="c.instruction ?? ''" (change)="patchColumn(c.key, { instruction: $any($event.target).value.trim() || null })"></textarea>
@@ -77,11 +80,6 @@
                            (change)="patchColumn(c.key, { hours: $any($event.target).value.trim() })" title="Ex.: 08-22. Vazio = qualquer hora." /></span>
                 </div>
               }
-              <label class="flex items-center gap-2 border-t border-edge pt-2"><span class="shrink-0 text-mute" title="Entrar nesta coluna põe a tarefa neste estado no backlog principal do projeto">No backlog principal</span>
-                <select class="field !py-1 text-[12.5px]" (change)="patchColumn(c.key, { kind: $any($event.target).value || null })">
-                  <option value="" [selected]="!c.kind">não muda</option>
-                  @for (k of kinds; track k.id) { <option [value]="k.id" [selected]="c.kind === k.id">{{ k.label }}</option> }
-                </select></label>
             </div>
           }
         </header>

@@ -6,6 +6,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TaskColumn } from '../../../../shared/contract';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { BoardColumn, BoardService, COLORS, KIND_LABEL, blankColumn } from '../../../../shared/services/board/board.service';
+import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
 import { ContextMenuService } from '../../../../shared/services/context-menu/context-menu.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
@@ -23,7 +24,7 @@ import { AskService } from '../../../../shared/services/ask/ask.service';
  */
 @Component({
   selector: 'app-board-page',
-  imports: [RouterLink, Icon, ProjectAvatar, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, BoardOverview],
+  imports: [RouterLink, Icon, ProjectAvatar, AgentSelect, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, BoardOverview],
   templateUrl: './board-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -42,7 +43,6 @@ export class BoardPage {
   protected readonly id = computed(() => Number(this.params()?.get('id')));
   protected readonly board = computed(() => this.boards.byId().get(this.id()) ?? null);
   protected readonly project = computed(() => { const s = this.board()?.projectSlug; return s ? this.projects.bySlug().get(s) ?? null : null; });
-  protected readonly agentList = computed(() => this.agents.agents().filter(a => !a.builtin));
   /** coluna com o painel do agente aberto */
   protected readonly agentPanel = signal<string | null>(null);
   protected readonly addingColumn = signal(false);
@@ -110,6 +110,16 @@ export class BoardPage {
     });
     if (!ok) return;
     this.save(this.board()!.columns.filter(x => x.key !== c.key).map(x => (x.nextKey === c.key ? { ...x, nextKey: null } : x)));
+  }
+
+  /** pílula "Backlog: X": em que estado a tarefa fica no backlog principal ao entrar nesta coluna */
+  protected kindMenu(e: MouseEvent, c: BoardColumn): void {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    this.menu.open(new MouseEvent('click', { clientX: r.left, clientY: r.bottom + 4 }), [
+      { label: 'Não muda o backlog', icon: 'close', hint: !c.kind ? 'atual' : undefined, run: () => this.patchColumn(c.key, { kind: null }) },
+      null,
+      ...this.kinds.map(k => ({ label: k.label, icon: 'kanban' as const, hint: c.kind === k.id ? 'atual' : undefined, run: () => this.patchColumn(c.key, { kind: k.id }) })),
+    ]);
   }
 
   protected async rename(c: BoardColumn): Promise<void> {
