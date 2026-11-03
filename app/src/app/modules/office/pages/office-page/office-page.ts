@@ -178,6 +178,7 @@ export class OfficePage {
       const p = projectOf(w.slug);
       return {
         key: w.key, room: w.room, name: w.name, hair: w.hair, shirt: p?.color ?? '#6b7385', working: true,
+        look: w.agentId ? this.agents.byId().get(w.agentId)?.look : undefined,
         doing: w.phase ? `${PHASES[w.phase].label} · ${w.doing ?? 'pensando…'}` : w.doing,
         tag: p?.name ?? null, plan: w.plan.length ? [this.planDone(w), w.plan.length] : null, subs: w.subagents.filter(x => !x.finishedAt).length,
         hidden: !this.shown(w.slug),
@@ -185,7 +186,7 @@ export class OfficePage {
     });
     for (const a of this.idle()) {
       const p = projectOf(a.projectSlug);
-      out.push({ key: `a${a.id}`, room: 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', working: false, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
+      out.push({ key: `a${a.id}`, room: 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', look: a.look, working: false, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
     }
     return out;
   });

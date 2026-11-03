@@ -8,6 +8,8 @@
  * Aqui só fica o que é lógica (salas, lugares, caminhos); o desenho mora em office-world.ts.
  */
 
+import { SKINS } from '../../shared/ui/avatar-look';
+
 export type RoomId = 'gestao' | 'eng' | 'monitor' | 'creative' | 'business' | 'copa';
 
 export const MAP_W = 24, MAP_H = 14;
@@ -109,7 +111,6 @@ export function route(from: Placement | null, to: Placement): [number, number][]
 }
 
 /** cor de pele estável por pessoa */
-const SKINS = ['#f1c9a5', '#e0ac85', '#c68863', '#8d5a3b', '#f5d6bd'];
 export function skinOf(key: string): string {
   let h = 0;
   for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;

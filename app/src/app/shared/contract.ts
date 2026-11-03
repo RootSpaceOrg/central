@@ -744,6 +744,8 @@ export interface AgentDto {
   model: string;
   /** sala no Escritório: '' = deduzida pelo papel; gestao, eng, monitor, creative, business */
   room: string;
+  /** aparência do boneco 3D (JSON: hair, acc, skin, outfit); '' = padrão */
+  look: string;
   builtin: boolean;
   created_at: string;
   chats: number;
@@ -763,6 +765,7 @@ export interface NewAgentInput {
   permission?: RunPermission;
   model?: string;
   room?: string;
+  look?: string;
 }
 
 export type AgentPatch = Partial<NewAgentInput>;

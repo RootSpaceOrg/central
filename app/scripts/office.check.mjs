@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 const dir = mkdtempSync(join(tmpdir(), 'office-'));
 const out = join(dir, 'office-map.mjs');
-await build({ entryPoints: [new URL('../src/app/modules/office/office-map.ts', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')], outfile: out, format: 'esm', logLevel: 'error' });
+await build({ entryPoints: [new URL('../src/app/modules/office/office-map.ts', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')], outfile: out, format: 'esm', bundle: true, logLevel: 'error' });
 const m = await import(pathToFileURL(out).href);
 rmSync(dir, { recursive: true, force: true });
 
@@ -50,3 +50,19 @@ for (const room of m.ROOMS) for (const [x, y] of [...room.desks.map(([x, y]) => 
   ok(x > room.x && x < room.x + room.w && y > room.y && y < room.y + room.d, `${room.id}: lugar (${x},${y}) fora da sala`);
 
 console.log('office ok');
+
+// aparência do boneco: o que vem do banco é validado (campo estranho volta ao padrão)
+{
+  const dir2 = mkdtempSync(join(tmpdir(), 'look-'));
+  const out2 = join(dir2, 'look.mjs');
+  await build({ entryPoints: [new URL('../src/app/shared/ui/avatar-look.ts', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')], outfile: out2, format: 'esm', logLevel: 'error' });
+  const l = await import(pathToFileURL(out2).href);
+  rmSync(dir2, { recursive: true, force: true });
+  const d = l.LOOK_DEFAULT;
+  ok(l.parseLook('') === d && l.parseLook(null) === d && l.parseLook('{quebrado') === d, 'vazio ou inválido = padrão');
+  const v = l.parseLook(JSON.stringify({ hair: 'rabo', acc: 'oculos', skin: 2, outfit: '#aabbcc' }));
+  ok(v.hair === 'rabo' && v.acc === 'oculos' && v.skin === 2 && v.outfit === '#aabbcc', 'look válido');
+  const x = l.parseLook(JSON.stringify({ hair: 'chapéu', acc: 'capa', skin: 99, outfit: 'red; x' }));
+  ok(x.hair === 'curto' && x.acc === 'nenhum' && x.skin === -1 && x.outfit === '', 'campos estranhos voltam ao padrão');
+  console.log('look ok');
+}

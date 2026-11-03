@@ -1,7 +1,7 @@
 <dialog #dlg (close)="closed.emit(null)" aria-labelledby="ag-title"
-        class="m-auto w-[min(780px,94vw)] max-h-[92vh] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
-  <form (submit)="save($event)" class="flex max-h-[92vh] flex-col">
-    <header class="flex items-center gap-4 px-8 pt-7 pb-5">
+        class="m-auto w-[min(780px,94vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+  <form (submit)="save($event)" class="flex h-[min(720px,90vh)] flex-col">
+    <header class="flex items-center gap-4 px-8 pt-7 pb-4">
       <app-project-avatar [project]="preview()" [size]="52" />
       <div class="min-w-0 flex-1">
         <h2 id="ag-title" class="truncate font-display text-2xl font-semibold">{{ name() || (agent() ? 'Agente' : 'Novo agente') }}</h2>
@@ -10,106 +10,169 @@
       <button type="button" class="btn btn-ghost !p-2" (click)="closed.emit(null)" aria-label="Fechar"><app-icon name="close" /></button>
     </header>
 
-    <div class="min-h-0 flex-1 space-y-6 overflow-y-auto px-8 pb-6">
-      <div class="grid grid-cols-2 gap-3">
-        <label class="block">
-          <span class="mb-1.5 block font-semibold">Nome</span>
-          <input class="field" placeholder="Ex.: Suporte KultivAi" [value]="name()" (input)="name.set($any($event.target).value)" [disabled]="builtin()" required>
-        </label>
-        <div>
-          <span class="mb-1.5 block font-semibold">Projeto <span class="font-normal text-mute">(opcional)</span></span>
-          @if (builtin()) { <p class="field text-mute">Todos os projetos</p> }
-          @else { <app-project-select [value]="projectSlug()" (valueChange)="projectSlug.set($event)" noneLabel="Sem projeto (pasta própria)" /> }
-        </div>
-      </div>
-
-      <label class="block">
-        <span class="mb-1.5 block font-semibold">Descrição curta</span>
-        <input class="field" placeholder="Ex.: Responde dúvidas de suporte olhando o código e o runbook." [value]="description()" (input)="description.set($any($event.target).value)">
-      </label>
-
-      @if (!builtin()) {
-        <label class="block">
-          <span class="mb-1.5 block font-semibold">Instruções</span>
-          <textarea class="field min-h-44 resize-y font-mono text-[12.5px] leading-relaxed"
-                    placeholder="Quem é este agente, o que faz, como trabalha, o que registra na Central e o que nunca deve fazer."
-                    [value]="instructions()" (input)="instructions.set($any($event.target).value)"></textarea>
-          <span class="mt-1 block text-[12.5px] text-mute">Todo agente já sabe mexer na Central (projetos, backlog, ideias, decisões, rotinas). Aqui vai o papel dele.</span>
-        </label>
+    <!-- abas -->
+    <nav class="flex gap-1 border-b border-edge px-8" role="tablist" aria-label="Partes do agente">
+      @for (t of tabs; track t.id) {
+        <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)"
+                class="-mb-px border-b-2 px-3 pb-2.5 text-[14px] font-semibold transition-colors"
+                [class]="tab() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">{{ t.label }}</button>
       }
+    </nav>
 
-      <div>
-        <span class="mb-1.5 block font-semibold">Ferramentas extras</span>
-        <div class="flex flex-wrap items-center gap-1.5">
-          @for (t of tools(); track t) {
-            <span class="flex items-center gap-1.5 rounded-full bg-frost/15 px-3 py-1 font-mono text-[12px] text-frost">{{ t }}
-              <button type="button" (click)="removeTool(t)" [attr.aria-label]="'Remover ' + t" class="hover:text-text"><app-icon name="close" [size]="12" /></button></span>
-          }
-          <input class="field !w-56 !py-1.5 font-mono text-[12px]" placeholder="mcp__nome ou Bash(cmd:*)" aria-label="Adicionar ferramenta"
-                 [value]="toolInput()" (input)="toolInput.set($any($event.target).value)" (keydown.enter)="$event.preventDefault(); addTool()">
-        </div>
-        @if (freeSuggestions().length) {
-          <div class="mt-2 flex flex-wrap gap-1.5">
-            @for (s of freeSuggestions(); track s.value) {
-              <button type="button" (click)="addTool(s.value)" class="rounded-full border border-dashed border-edge px-3 py-1 text-[12px] text-mute transition hover:border-faint hover:text-text">+ {{ s.label }}</button>
+    <div class="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+      @switch (tab()) {
+        @case ('papel') {
+          <div class="space-y-6">
+            <div class="grid grid-cols-2 gap-3">
+              <label class="block">
+                <span class="mb-1.5 block font-semibold">Nome</span>
+                <input class="field" placeholder="Ex.: Suporte KultivAi" [value]="name()" (input)="name.set($any($event.target).value)" [disabled]="builtin()" required>
+              </label>
+              <div>
+                <span class="mb-1.5 block font-semibold">Projeto <span class="font-normal text-mute">(opcional)</span></span>
+                @if (builtin()) { <p class="field text-mute">Todos os projetos</p> }
+                @else { <app-project-select [value]="projectSlug()" (valueChange)="projectSlug.set($event)" noneLabel="Sem projeto (pasta própria)" /> }
+              </div>
+            </div>
+            <label class="block">
+              <span class="mb-1.5 block font-semibold">Descrição curta</span>
+              <input class="field" placeholder="Ex.: Responde dúvidas de suporte olhando o código e o runbook." [value]="description()" (input)="description.set($any($event.target).value)">
+            </label>
+            @if (!builtin()) {
+              <label class="block">
+                <span class="mb-1.5 block font-semibold">Instruções</span>
+                <textarea class="field min-h-64 resize-y font-mono text-[12.5px] leading-relaxed"
+                          placeholder="Quem é este agente, o que faz, como trabalha, o que registra na Central e o que nunca deve fazer."
+                          [value]="instructions()" (input)="instructions.set($any($event.target).value)"></textarea>
+                <span class="mt-1 block text-[12.5px] text-mute">Todo agente já sabe mexer na Central (projetos, backlog, ideias, decisões, rotinas). Aqui vai o papel dele.</span>
+              </label>
             }
           </div>
         }
-        <span class="mt-1.5 block text-[12.5px] text-mute">Servidores MCP (Sentry, Supabase…) precisam estar configurados e autorizados no seu Claude Code.</span>
-      </div>
 
-      <div class="grid grid-cols-2 gap-5">
-        <div>
-          <span class="mb-1.5 block font-semibold">Liberdade</span>
-          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Liberdade">
-            <button type="button" role="radio" [attr.aria-checked]="permission() === 'edits'" (click)="permission.set('edits')"
-                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'edits' ? 'bg-raise' : 'text-mute hover:text-text'">Segura</button>
-            <button type="button" role="radio" [attr.aria-checked]="permission() === 'full'" (click)="permission.set('full')"
-                    class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'full' ? 'bg-raise text-later' : 'text-mute hover:text-text'">Total</button>
-          </div>
-          <span class="mt-1 block text-[12.5px] text-mute">{{ permission() === 'edits' ? (projectSlug() || builtin() ? 'Lê e organiza a Central; não edita código.' : 'Lê, organiza e escreve só na pasta dele.') : 'Edita arquivos e roda comandos sem perguntar.' }}</span>
-        </div>
-        <div>
-          <span class="mb-1.5 block font-semibold">Modelo</span>
-          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Modelo">
-            @for (m of models; track m.value) {
-              <button type="button" role="radio" [attr.aria-checked]="model() === m.value" (click)="model.set(m.value)"
-                      class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="model() === m.value ? 'bg-raise' : 'text-mute hover:text-text'">{{ m.label }}</button>
-            }
-          </div>
-        </div>
-      </div>
-
-      <label class="block">
-        <span class="mb-1.5 block font-semibold">Sala no Escritório</span>
-        <select class="field w-full" [value]="room()" (change)="room.set($any($event.target).value)">
-          @for (r of rooms; track r.id) { <option [value]="r.id" [selected]="room() === r.id">{{ r.label }}</option> }
-        </select>
-        <span class="mt-1 block text-[12.5px] text-mute">Onde ele senta quando está trabalhando. Automática deduz pelo papel.</span>
-      </label>
-
-      <app-icon-picker [(kind)]="iconKind" [(value)]="iconValue" [(color)]="color" />
-
-      @if (agent() && !builtin()) {
-        <div class="rounded-2xl border border-no/30 p-4">
-          @if (!confirmDelete()) {
-            <div class="flex items-center gap-4">
-              <div class="flex-1"><p class="font-semibold">Excluir agente</p>
-                <p class="text-[13px] text-mute">Apaga as conversas dele. Rotinas e execuções ficam, sem o agente.</p></div>
-              <button type="button" class="btn !border-no/40 !text-no hover:!bg-no/10" (click)="confirmDelete.set(true)"><app-icon name="delete" [size]="16" />Excluir</button>
+        @case ('trabalho') {
+          <div class="space-y-6">
+            <div class="grid grid-cols-2 gap-5">
+              <div>
+                <span class="mb-1.5 block font-semibold">Liberdade</span>
+                <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Liberdade">
+                  <button type="button" role="radio" [attr.aria-checked]="permission() === 'edits'" (click)="permission.set('edits')"
+                          class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'edits' ? 'bg-raise' : 'text-mute hover:text-text'">Segura</button>
+                  <button type="button" role="radio" [attr.aria-checked]="permission() === 'full'" (click)="permission.set('full')"
+                          class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="permission() === 'full' ? 'bg-raise text-later' : 'text-mute hover:text-text'">Total</button>
+                </div>
+                <span class="mt-1 block text-[12.5px] text-mute">{{ permission() === 'edits' ? (projectSlug() || builtin() ? 'Lê e organiza a Central; não edita código.' : 'Lê, organiza e escreve só na pasta dele.') : 'Edita arquivos e roda comandos sem perguntar.' }}</span>
+              </div>
+              <div>
+                <span class="mb-1.5 block font-semibold">Modelo</span>
+                <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Modelo">
+                  @for (m of models; track m.value) {
+                    <button type="button" role="radio" [attr.aria-checked]="model() === m.value" (click)="model.set(m.value)"
+                            class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="model() === m.value ? 'bg-raise' : 'text-mute hover:text-text'">{{ m.label }}</button>
+                  }
+                </div>
+              </div>
             </div>
-          } @else {
-            <div class="flex items-center gap-3">
-              <p class="flex-1 font-semibold text-no">Excluir "{{ agent()!.name }}"?</p>
-              <button type="button" class="btn btn-ghost" (click)="confirmDelete.set(false)">Cancelar</button>
-              <button type="button" class="btn !border-no !bg-no !text-night" (click)="remove()" [disabled]="busy()">Excluir mesmo</button>
+
+            <div>
+              <span class="mb-1.5 block font-semibold">Ferramentas extras</span>
+              <div class="flex flex-wrap items-center gap-1.5">
+                @for (t of tools(); track t) {
+                  <span class="flex items-center gap-1.5 rounded-full bg-frost/15 px-3 py-1 font-mono text-[12px] text-frost">{{ t }}
+                    <button type="button" (click)="removeTool(t)" [attr.aria-label]="'Remover ' + t" class="hover:text-text"><app-icon name="close" [size]="12" /></button></span>
+                }
+                <input class="field !w-56 !py-1.5 font-mono text-[12px]" placeholder="mcp__nome ou Bash(cmd:*)" aria-label="Adicionar ferramenta"
+                       [value]="toolInput()" (input)="toolInput.set($any($event.target).value)" (keydown.enter)="$event.preventDefault(); addTool()">
+              </div>
+              @if (freeSuggestions().length) {
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  @for (s of freeSuggestions(); track s.value) {
+                    <button type="button" (click)="addTool(s.value)" class="rounded-full border border-dashed border-edge px-3 py-1 text-[12px] text-mute transition hover:border-faint hover:text-text">+ {{ s.label }}</button>
+                  }
+                </div>
+              }
+              <span class="mt-1.5 block text-[12.5px] text-mute">Servidores MCP (Sentry, Supabase…) precisam estar configurados e autorizados no seu Claude Code.</span>
             </div>
-          }
-        </div>
+
+            <label class="block">
+              <span class="mb-1.5 block font-semibold">Sala no Escritório</span>
+              <select class="field w-full" [value]="room()" (change)="room.set($any($event.target).value)">
+                @for (r of rooms; track r.id) { <option [value]="r.id" [selected]="room() === r.id">{{ r.label }}</option> }
+              </select>
+              <span class="mt-1 block text-[12.5px] text-mute">Onde ele senta quando está trabalhando. Automática deduz pelo papel.</span>
+            </label>
+          </div>
+        }
+
+        @case ('aparencia') {
+          <div class="grid grid-cols-[1fr_200px] gap-6">
+            <div class="space-y-5">
+              <div>
+                <span class="mb-1.5 block font-semibold">Cabelo</span>
+                <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Cabelo">
+                  @for (h of hairStyles; track h.id) {
+                    <button type="button" role="radio" [attr.aria-checked]="look().hair === h.id" (click)="setLook({ hair: h.id })"
+                            class="rounded-full border px-3 py-1 text-[13px]" [class]="look().hair === h.id ? 'border-frost/60 bg-frost/10 text-text' : 'border-edge text-mute hover:text-text'">{{ h.label }}</button>
+                  }
+                </div>
+                <span class="mt-1 block text-[12.5px] text-mute">A cor do cabelo é a cor do agente (embaixo, no ícone).</span>
+              </div>
+              <div>
+                <span class="mb-1.5 block font-semibold">Acessório</span>
+                <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Acessório">
+                  @for (a of accessories; track a.id) {
+                    <button type="button" role="radio" [attr.aria-checked]="look().acc === a.id" (click)="setLook({ acc: a.id })"
+                            class="rounded-full border px-3 py-1 text-[13px]" [class]="look().acc === a.id ? 'border-frost/60 bg-frost/10 text-text' : 'border-edge text-mute hover:text-text'">{{ a.label }}</button>
+                  }
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-8">
+                <div>
+                  <span class="mb-1.5 block font-semibold">Pele</span>
+                  <div class="flex items-center gap-1.5" role="radiogroup" aria-label="Pele">
+                    <button type="button" role="radio" [attr.aria-checked]="look().skin === -1" (click)="setLook({ skin: -1 })"
+                            class="h-7 rounded-full border px-2.5 text-[12px]" [class]="look().skin === -1 ? 'border-frost/60 bg-frost/10' : 'border-edge text-mute'">auto</button>
+                    @for (s of skins; track $index) {
+                      <button type="button" role="radio" [attr.aria-checked]="look().skin === $index" (click)="setLook({ skin: $index })" [attr.aria-label]="'Tom ' + ($index + 1)"
+                              class="size-7 rounded-full ring-offset-2 ring-offset-panel" [style.background]="s" [class.ring-2]="look().skin === $index" [class.ring-frost]="look().skin === $index"></button>
+                    }
+                  </div>
+                </div>
+                <div>
+                  <span class="mb-1.5 block font-semibold">Roupa</span>
+                  <div class="flex items-center gap-2">
+                    <button type="button" class="h-7 rounded-full border px-2.5 text-[12px]" (click)="setLook({ outfit: '' })"
+                            [class]="!look().outfit ? 'border-frost/60 bg-frost/10' : 'border-edge text-mute'">cor do projeto</button>
+                    <label class="flex items-center gap-1.5 text-[12.5px] text-mute">
+                      <input type="color" class="size-7 cursor-pointer rounded-full border-0 bg-transparent p-0" [value]="look().outfit || '#6b7385'"
+                             (input)="setLook({ outfit: $any($event.target).value })" aria-label="Cor da roupa" />própria</label>
+                  </div>
+                </div>
+              </div>
+              <div class="border-t border-edge pt-5">
+                <app-icon-picker [(kind)]="iconKind" [(value)]="iconValue" [(color)]="color" />
+              </div>
+            </div>
+            <!-- prévia girando -->
+            <div class="sticky top-0 self-start">
+              <div #preview class="office-sky h-64 w-full overflow-hidden rounded-2xl border border-edge" aria-hidden="true"></div>
+              <p class="mt-2 text-center text-[12px] text-faint">Como ele aparece no Escritório</p>
+            </div>
+          </div>
+        }
       }
     </div>
 
     <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
+      @if (agent() && !builtin()) {
+        @if (!confirmDelete()) {
+          <button type="button" class="btn btn-ghost !px-2.5 !text-no" (click)="confirmDelete.set(true)" title="Excluir agente" aria-label="Excluir agente"><app-icon name="delete" [size]="17" /></button>
+        } @else {
+          <span class="text-[13px] text-no">Excluir "{{ agent()!.name }}"? Apaga as conversas.</span>
+          <button type="button" class="btn btn-ghost" (click)="confirmDelete.set(false)">Não</button>
+          <button type="button" class="btn !border-no !bg-no !text-night" (click)="remove()" [disabled]="busy()">Excluir</button>
+        }
+      }
       @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
       <span class="flex-1"></span>
       <button type="button" class="btn btn-ghost" (click)="closed.emit(null)">Cancelar</button>

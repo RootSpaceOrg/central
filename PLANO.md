@@ -259,6 +259,16 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
   Kanban é da Central); rotina "Revisão técnica diária" criada desligada (dias úteis, 8h). Backup das instruções antigas
   em %APPDATA%\Centralackups.
 
+## Feito (v0.21)
+
+- **Boneco 3D por agente**: cabelo (curto, longo, rabo de cavalo, coque, cacheado, moicano, careca), acessório (óculos,
+  fone, gorro, boné, barba), pele e roupa (cor do projeto ou própria), com prévia girando no editor. Mudou o look: o
+  boneco é trocado no lugar no Escritório. O boneco mora em shared/ui/avatar3d (three.js só sob demanda).
+- **Editores em abas**: agente (Papel · Trabalho · Aparência) e projeto (Geral · Aparência · Pasta); excluir virou a lixeira
+  no rodapé, com confirmação.
+- Fechar qualquer modal clicando no fundo (como o Esc); "Marcar como feito" no Início e no modal da tarefa; aba Produção
+  abre o repositório e a comparação develop/main no GitHub; mapa 3D do Escritório pode ser desligado.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

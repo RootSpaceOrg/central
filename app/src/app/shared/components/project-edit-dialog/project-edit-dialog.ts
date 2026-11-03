@@ -38,6 +38,8 @@ export class ProjectEditDialog {
   protected readonly parentSlug = signal('');
   protected readonly childNames = computed(() => this.projects.children(this.project()?.slug ?? '').map(c => c.name).join(', '));
   protected readonly confirmDelete = signal(false);
+  protected readonly tabs = [{ id: 'geral', label: 'Geral' }, { id: 'aparencia', label: 'Aparência' }, { id: 'pasta', label: 'Pasta' }] as const;
+  protected readonly tab = signal<'geral' | 'aparencia' | 'pasta'>('geral');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -54,7 +56,7 @@ export class ProjectEditDialog {
       if (p && !el.open) {
         this.name.set(p.name); this.description.set(p.description ?? ''); this.status.set(p.status); this.color.set(p.color);
         this.iconKind.set(p.iconKind); this.iconValue.set(p.iconValue); this.folder.set(p.folder); this.parentSlug.set(p.parentSlug ?? '');
-        this.confirmDelete.set(false); this.error.set(null); this.busy.set(false);
+        this.confirmDelete.set(false); this.error.set(null); this.busy.set(false); this.tab.set('geral');
         el.showModal();
       }
       if (!p && el.open) el.close();

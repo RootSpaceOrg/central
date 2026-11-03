@@ -340,7 +340,7 @@ for (const [table, column, type] of [
   ['chats', 'model', "text not null default ''"], ['chats', 'effort', "text not null default ''"],
   ['projects', 'parent_slug', 'text'],
   ['tasks', 'milestone_id', 'integer'], ['ideas', 'milestone_id', 'integer'], ['projects', 'position', 'integer not null default 0'],
-  ['agents', 'room', "text not null default ''"],
+  ['agents', 'room', "text not null default ''"], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],

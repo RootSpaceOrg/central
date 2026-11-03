@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import { AgentDto, ProjectIconKind, RunPermission } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
+import { AvatarLook, parseLook } from '../../ui/avatar-look';
 import { AgentsApiService } from './agents-api.service';
 
 export interface Agent {
@@ -19,13 +20,15 @@ export interface Agent {
   model: string;
   /** sala no Escritório ('' = automática) */
   room: string;
+  /** aparência do boneco 3D */
+  look: AvatarLook;
   builtin: boolean;
   chats: number;
   routines: number;
   runs: number;
 }
 
-export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKind' | 'iconValue' | 'projectSlug' | 'instructions' | 'tools' | 'permission' | 'model' | 'room'>;
+export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKind' | 'iconValue' | 'projectSlug' | 'instructions' | 'tools' | 'permission' | 'model' | 'room' | 'look'>;
 
 /** Ferramentas extras conhecidas, para sugerir no editor (o MCP precisa estar configurado no Claude Code). */
 export const TOOL_SUGGESTIONS: { value: string; label: string }[] = [
@@ -64,7 +67,7 @@ export const EFFORTS = [
 const toModel = (d: AgentDto): Agent => ({
   id: d.id, slug: d.slug, name: d.name, description: d.description, color: d.color, iconKind: d.icon_kind, iconValue: d.icon_value,
   projectSlug: d.project_slug, instructions: d.instructions, tools: d.tools ? d.tools.split(',').filter(Boolean) : [],
-  permission: d.permission, model: d.model, room: d.room ?? '', builtin: d.builtin, chats: d.chats, routines: d.routines, runs: d.runs,
+  permission: d.permission, model: d.model, room: d.room ?? '', look: parseLook(d.look), builtin: d.builtin, chats: d.chats, routines: d.routines, runs: d.runs,
 });
 
 /** Agentes definidos (Central, Suporte KultivAi, Marketing…). */
@@ -89,7 +92,7 @@ export class AgentsService {
   async save(id: number | null, d: AgentDraft): Promise<Agent> {
     const input = {
       name: d.name, description: d.description || null, color: d.color, icon_kind: d.iconKind, icon_value: d.iconValue,
-      project_slug: d.projectSlug, instructions: d.instructions, tools: d.tools, permission: d.permission, model: d.model, room: d.room,
+      project_slug: d.projectSlug, instructions: d.instructions, tools: d.tools, permission: d.permission, model: d.model, room: d.room, look: JSON.stringify(d.look),
     };
     try {
       if (id) { await this.api.update(id, input); this.load(); return { ...this.byId().get(id)!, ...d }; }

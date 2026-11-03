@@ -7,6 +7,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
+import { Avatar, BODY, avatar, boxGeo, clearAvatarCaches, mat } from '../../shared/ui/avatar3d';
+import type { AvatarLook } from '../../shared/ui/avatar-look';
 import { CORRIDOR_Y, ELEVATOR, MAP_H, MAP_W, Placement, ROOM, ROOMS, RoomId, route, skinOf } from './office-map';
 
 /** Uma pessoa no andar: quem trabalha senta numa mesa da sala; quem está parado fica na copa. */
@@ -28,30 +30,16 @@ export interface Person {
   subs: number;
   /** fora do filtro: some na hora (sem andar até o elevador) */
   hidden?: boolean;
+  /** aparência escolhida no editor do agente (sem = boneco padrão) */
+  look?: AvatarLook;
 }
 
 const WALL_H = 2.4;
-/** bonecos um pouco maiores que a escala dos móveis (fica legível de longe) */
-const BODY = 1.3;
 const SPEED = 2.6; // ladrilhos por segundo
 const SUB_SPOTS: [number, number][] = [[1.25, -0.55], [1.35, 0.35], [-0.95, 0.2]]; // estagiários, em relação a quem está sentado
 const SUB_HAIR = ['#3b2a20', '#e2c072', '#7a3b2e'];
 
 // ---------- peças ----------
-
-const mats = new Map<string, MeshLambertMaterial>();
-const mat = (color: string) => {
-  let m = mats.get(color);
-  if (!m) mats.set(color, (m = new MeshLambertMaterial({ color })));
-  return m;
-};
-const geoBox = new Map<string, BoxGeometry>();
-const boxGeo = (w: number, h: number, d: number) => {
-  const k = `${w},${h},${d}`;
-  let g = geoBox.get(k);
-  if (!g) geoBox.set(k, (g = new BoxGeometry(w, h, d)));
-  return g;
-};
 
 /** caixa com a base em y (coordenadas do centro em x/z) */
 function box(parent: Object3D, w: number, h: number, d: number, color: string | Material, x: number, y: number, z: number, shadow = true): Mesh {
@@ -123,46 +111,6 @@ function floorLabel(text: string, color: string): Mesh {
   return m;
 }
 
-// ---------- boneco (voxel) ----------
-
-interface Avatar {
-  root: Group;
-  legL: Group; legR: Group; armL: Group; armR: Group; head: Mesh;
-  shirt: MeshLambertMaterial; hair: MeshLambertMaterial;
-}
-
-function limb(w: number, h: number, d: number, m: Material, x: number, pivotY: number): Group {
-  const g = new Group();
-  g.position.set(x, pivotY, 0);
-  const mesh = new Mesh(boxGeo(w, h, d), m);
-  mesh.position.y = -h / 2;
-  mesh.castShadow = true;
-  g.add(mesh);
-  return g;
-}
-
-/** de frente para +z, pés em y = 0 */
-function avatar(hairColor: string, shirtColor: string, skinColor: string): Avatar {
-  const root = new Group();
-  const shirt = new MeshLambertMaterial({ color: shirtColor });
-  const hair = new MeshLambertMaterial({ color: hairColor });
-  const skin = mat(skinColor), pants = mat('#2b3242'), dark = mat('#14171d');
-  const legL = limb(0.17, 0.45, 0.19, pants, -0.1, 0.45), legR = limb(0.17, 0.45, 0.19, pants, 0.1, 0.45);
-  const armL = limb(0.12, 0.4, 0.14, shirt, -0.28, 0.86), armR = limb(0.12, 0.4, 0.14, shirt, 0.28, 0.86);
-  const torso = new Mesh(boxGeo(0.44, 0.45, 0.27), shirt);
-  torso.position.y = 0.675; torso.castShadow = true;
-  const head = new Mesh(boxGeo(0.4, 0.37, 0.36), skin);
-  head.position.y = 1.09; head.castShadow = true;
-  const top = new Mesh(boxGeo(0.43, 0.12, 0.39), hair); top.position.set(0, 0.24, 0);
-  const back = new Mesh(boxGeo(0.43, 0.27, 0.08), hair); back.position.set(0, 0.07, -0.17);
-  const eyeL = new Mesh(boxGeo(0.06, 0.07, 0.01), dark); eyeL.position.set(-0.085, 0.01, 0.181);
-  const eyeR = new Mesh(boxGeo(0.06, 0.07, 0.01), dark); eyeR.position.set(0.085, 0.01, 0.181);
-  head.add(top, back, eyeL, eyeR);
-  root.add(legL, legR, armL, armR, torso, head);
-  root.scale.setScalar(BODY);
-  return { root, legL, legR, armL, armR, head, shirt, hair };
-}
-
 // ---------- quem está no andar ----------
 
 interface Actor {
@@ -176,6 +124,8 @@ interface Actor {
   at: Placement | null;
   working: boolean;
   facing: number;
+  /** look atual (mudou no editor: troca o boneco no lugar) */
+  lookKey: string;
   /** quando o parado vira para outro lado */
   turnAt: number;
   phase: number;
@@ -404,6 +354,7 @@ export class OfficeWorld {
         a.path = route(a.leaving ? null : a.at, to).slice(1).map(([x, y]) => new Vector2(x, y));
         a.leaving = false;
       }
+      if (JSON.stringify(p.look ?? null) !== a.lookKey) this.restyle(a, p);
       a.at = to;
       a.working = p.working;
       a.hidden = !!p.hidden;
@@ -434,7 +385,7 @@ export class OfficeWorld {
   }
 
   private spawn(p: Person): Actor {
-    const av = avatar(p.hair, p.shirt, skinOf(p.key));
+    const av = avatar(p.hair, p.shirt, skinOf(p.key), p.look);
     av.root.userData['key'] = p.key;
     const ring = new Mesh(new RingGeometry(0.36, 0.46, 28), new MeshLambertMaterial({ color: p.hair }));
     ring.rotation.x = -Math.PI / 2;
@@ -456,10 +407,25 @@ export class OfficeWorld {
     this.floor.add(av.root);
     const a: Actor = {
       key: p.key, av, label, el: { root, say, nick }, ring, pos: new Vector2(), path: [], at: null, working: p.working,
-      facing: Math.random() * Math.PI * 2, turnAt: 0, phase: Math.random() * 10, leaving: false, hidden: false, subs: [],
+      facing: Math.random() * Math.PI * 2, lookKey: JSON.stringify(p.look ?? null), turnAt: 0, phase: Math.random() * 10, leaving: false, hidden: false, subs: [],
     };
     this.actors.set(p.key, a);
     return a;
+  }
+
+  /** troca o boneco mantendo lugar, direção, anel e nick */
+  private restyle(a: Actor, p: Person): void {
+    const old = a.av;
+    const av = avatar(p.hair, p.shirt, skinOf(p.key), p.look);
+    av.root.userData['key'] = p.key;
+    av.root.position.copy(old.root.position);
+    av.root.rotation.copy(old.root.rotation);
+    av.root.add(a.ring, a.label);
+    this.floor.remove(old.root);
+    old.shirt.dispose(); old.hair.dispose();
+    this.floor.add(av.root);
+    a.av = av;
+    a.lookKey = JSON.stringify(p.look ?? null);
   }
 
   private text(a: Actor, p: Person): void {
@@ -662,8 +628,7 @@ export class OfficeWorld {
         for (const m of [o.material].flat()) { (m as MeshLambertMaterial).map?.dispose(); m.dispose(); }
       }
     });
-    geoBox.clear();
-    mats.clear();
+    clearAvatarCaches();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.domElement.remove();
