@@ -5,6 +5,7 @@ import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { errorMessage } from '../../services/ipc/ipc.service';
 import { Repo } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
+import { DeliveriesService } from '../../services/deliveries/deliveries.service';
 import { COLUMNS, PRIORITY, TaskColumn, TaskPriority, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
 import { AgentsService } from '../../services/agents/agents.service';
@@ -20,6 +21,7 @@ export class TaskDialog {
   private readonly tasks = inject(TasksService);
   private readonly agents = inject(AgentsService);
   private readonly chat = inject(ChatService);
+  private readonly deliveries = inject(DeliveriesService);
   protected readonly projects = inject(ProjectsService);
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
@@ -78,6 +80,16 @@ export class TaskDialog {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Feito: se a tarefa tem entrega na fila de revisão, aceita a entrega (que move a tarefa); senão só move. */
+  protected markDone(): void {
+    const t = this.editing();
+    if (!t) return;
+    const d = this.deliveries.queue().find(x => x.taskId === t.id);
+    if (d) this.deliveries.accept(d);
+    else this.tasks.move(t.id, 'done', 0);
+    this.close();
   }
 
   protected remove(): void {

@@ -53,6 +53,9 @@
       }
       @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
       <span class="flex-1"></span>
+      @if (editing() && editing()!.column !== 'done') {
+        <button type="button" class="btn" (click)="markDone()" title="Vai para Feito (e sai da fila de revisão, se estiver nela)"><app-icon name="check" [size]="17" />Marcar como feito</button>
+      }
       <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
       <button class="btn btn-primary" [disabled]="busy() || !title().trim() || !projectSlug()">{{ editing() ? 'Salvar' : 'Criar tarefa' }}</button>
     </footer>
