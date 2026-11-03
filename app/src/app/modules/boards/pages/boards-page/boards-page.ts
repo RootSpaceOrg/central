@@ -69,9 +69,10 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
             <!-- o fluxo: colunas e quem cuida -->
             <p class="mt-3 flex flex-wrap items-center gap-1 text-[12px]">
               @for (c of b.columns; track c.key; let last = $last) {
-                <span class="rounded-md border px-1.5 py-0.5" [class]="c.agentId ? 'border-frost/40 bg-frost/10 text-frost' : 'border-edge text-mute'"
-                      [title]="c.agentId ? agentName(c.agentId) + ' cuida desta etapa' : 'Sem agente'">
-                  {{ c.label }}@if (c.agentId) { <span class="opacity-70"> · {{ agentName(c.agentId) }}</span> }</span>
+                <span class="flex items-center gap-1 rounded-md border px-1.5 py-0.5" [class]="c.agentId ? 'border-frost/40 bg-frost/10 text-frost' : 'border-edge text-mute'"
+                      [style.border-color]="c.color" [title]="c.agentId ? agentName(c.agentId) + ' cuida desta etapa' : 'Sem agente'">
+                  @if (agentOf(c.agentId); as a) { <app-project-avatar [project]="a" [size]="14" /> }
+                  {{ c.label }}</span>
                 @if (!last) { <span class="text-faint">→</span> }
               }
             </p>
@@ -98,6 +99,7 @@ export class BoardsPage {
   protected readonly template = signal(BOARD_TEMPLATES[0].id);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly agentOf = (id: number | null) => (id ? this.agents.byId().get(id) ?? null : null);
   protected readonly agentName = (id: number | null) => (id ? this.agents.byId().get(id)?.name ?? 'agente' : '');
   protected readonly projectOf = (slug: string | null) => (slug ? this.projects.bySlug().get(slug) ?? null : null);
 

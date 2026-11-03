@@ -18,7 +18,8 @@
         @for (t of items; track t.id) {
           <article cdkDrag [cdkDragData]="t" (click)="dialogs.editTask(t.id)" tabindex="0" (keydown.enter)="dialogs.editTask(t.id)" (contextmenu)="cardMenu($event, t)"
                    class="group cursor-grab rounded-xl border border-edge bg-raise p-3 hover:border-faint active:cursor-grabbing"
-                   [class.opacity-60]="t.column === 'done'">
+                   [class.opacity-60]="t.column === 'done'"
+                   [style.background]="t.color ? 'color-mix(in srgb, ' + t.color + ' 12%, var(--color-raise))' : null" [style.box-shadow]="t.color ? 'inset 3px 0 0 ' + t.color : null">
             <div *cdkDragPlaceholder class="h-16 rounded-xl border-2 border-dashed border-frost/50 bg-frost/5"></div>
 
             @if (!projectSlug() && project(t.projectSlug); as p) {

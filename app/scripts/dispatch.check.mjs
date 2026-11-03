@@ -25,7 +25,7 @@ db.exec(\`
     (10, null, 'backlog', 'Pedido solto: pesquisa de concorrentes', null, null, 2, 0, null, null, null);
   create table proposals (id integer primary key, task_id integer, status text);
   create table boards (id integer primary key autoincrement, name text not null, description text, project_slug text, color text not null default '#7FA2FF', position integer not null default 0, created_at text default '2026-11-01');
-  create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, primary key (board_id, key));
+  create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, color text, primary key (board_id, key));
   create table task_boards (task_id integer, board_id integer, stage text, position integer default 0, updated_at text, primary key (task_id, board_id));
   create table deliveries (pr_url text, title text, task_id integer);
 \`);

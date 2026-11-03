@@ -17,6 +17,8 @@ export interface BoardColumn {
   hours: string;
   /** para onde vai quando o agente termina bem (null = a próxima coluna) */
   nextKey: string | null;
+  /** cor da coluna (null = padrão) */
+  color: string | null;
 }
 
 /** Quadro (workflow): independente de projeto; uma tarefa pode estar em vários. */
@@ -33,12 +35,18 @@ export interface Board {
 /** Onde uma tarefa está num quadro. */
 export interface Placement { taskId: number; boardId: number; stage: string; position: number }
 
+/** Cores para colunas e cartões (null = padrão, sem cor). */
+export const COLORS: { value: string; label: string }[] = [
+  { value: '#7FA2FF', label: 'Azul' }, { value: '#5FD3B5', label: 'Turquesa' }, { value: '#7ED69A', label: 'Verde' }, { value: '#E8C46A', label: 'Amarelo' },
+  { value: '#E8A36A', label: 'Laranja' }, { value: '#F07A7A', label: 'Vermelho' }, { value: '#FF8FB1', label: 'Rosa' }, { value: '#C6A6FF', label: 'Roxo' },
+];
+
 export const KIND_LABEL: Record<TaskColumn, string> = {
   backlog: 'Backlog', todo: 'A fazer', doing: 'Fazendo', review: 'Revisão', dev: 'Em dev', done: 'Feito',
 };
 
 export const blankColumn = (label = '', extra: Partial<BoardColumn> = {}): BoardColumn =>
-  ({ key: '', label, description: null, kind: null, agentId: null, instruction: null, parallel: 1, hours: '', nextKey: null, ...extra });
+  ({ key: '', label, description: null, kind: null, agentId: null, instruction: null, parallel: 1, hours: '', nextKey: null, color: null, ...extra });
 const col = blankColumn;
 
 /** Modelos para começar um quadro (os agentes você escolhe em cada coluna). */
@@ -62,11 +70,11 @@ export const BOARD_TEMPLATES: { id: string; label: string; hint: string; columns
 
 const toCol = (d: BoardColumnDto): BoardColumn => ({
   key: d.key, label: d.label, description: d.description, kind: d.kind, agentId: d.agent_id, instruction: d.instruction,
-  parallel: d.parallel, hours: d.hours, nextKey: d.next_key,
+  parallel: d.parallel, hours: d.hours, nextKey: d.next_key, color: d.color ?? null,
 });
 const toColDto = (c: BoardColumn): BoardColumnDto => ({
   key: c.key, label: c.label, description: c.description, kind: c.kind, agent_id: c.agentId, instruction: c.instruction,
-  parallel: c.parallel, hours: c.hours, next_key: c.nextKey,
+  parallel: c.parallel, hours: c.hours, next_key: c.nextKey, color: c.color,
 });
 const toBoard = (d: BoardDto): Board => ({
   id: d.id, name: d.name, description: d.description, projectSlug: d.project_slug, color: d.color, openTasks: d.open_tasks, columns: d.columns.map(toCol),

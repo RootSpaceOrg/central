@@ -7,7 +7,7 @@ import { AgentsService } from '../../services/agents/agents.service';
 import { ChatService } from '../../services/chat/chat.service';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
-import { BoardService } from '../../services/board/board.service';
+import { BoardService, COLORS } from '../../services/board/board.service';
 import { ProposalsService } from '../../services/proposals/proposals.service';
 import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
@@ -80,6 +80,9 @@ export class KanbanBoard {
       { label: 'Mandar para um agente', icon: 'play', run: () => this.toAgent(t, e), disabled: t.column === 'doing' || t.column === 'done' },
       { label: 'Conversar sobre esta tarefa', icon: 'central', run: () => this.talk(t) },
       ...(t.prUrl ? [{ label: 'Abrir PR', icon: 'pr' as const, run: () => this.projects.openExternal(t.prUrl!) }] : []),
+      null,
+      ...COLORS.map(k => ({ label: k.label, swatch: k.value, hint: t.color === k.value ? 'atual' : undefined, run: () => this.tasks.setColor(t.id, k.value) })),
+      ...(t.color ? [{ label: 'Cor padrão', icon: 'close' as const, run: () => this.tasks.setColor(t.id, null) }] : []),
       null,
       ...this.columns().filter(c => c.id !== t.column).map(c => ({ label: `Mover para ${c.label}`, icon: 'chevron' as const, run: () => this.tasks.move(t.id, c.kind, 0) })),
       null,

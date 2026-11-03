@@ -5,7 +5,8 @@ import { Router } from '@angular/router';
 import { TaskColumn } from '../../../../../../shared/contract';
 import { ProjectSelect } from '../../../../../../shared/components/pickers/project-select';
 import { AgentsService } from '../../../../../../shared/services/agents/agents.service';
-import { Board, BoardColumn, BoardService, KIND_LABEL, blankColumn } from '../../../../../../shared/services/board/board.service';
+import { Board, BoardColumn, BoardService, COLORS, KIND_LABEL, blankColumn } from '../../../../../../shared/services/board/board.service';
+import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
 import { Icon } from '../../../../../../shared/ui/icon';
 
 /**
@@ -14,7 +15,7 @@ import { Icon } from '../../../../../../shared/ui/icon';
  */
 @Component({
   selector: 'app-board-overview',
-  imports: [Icon, ProjectSelect, CdkDropList, CdkDrag, CdkDragHandle],
+  imports: [Icon, ProjectSelect, ProjectAvatar, CdkDropList, CdkDrag, CdkDragHandle],
   template: `
     <dialog #dlg (close)="closed.emit()" aria-labelledby="bo-title" class="m-auto w-[min(860px,94vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
       <form class="flex h-[min(720px,92vh)] flex-col" (submit)="save($event)">
@@ -44,10 +45,13 @@ import { Icon } from '../../../../../../shared/ui/icon';
                   <div class="grid grid-cols-[28px_1.3fr_1.2fr_1.1fr_1fr_56px] items-center gap-2 px-3 py-2">
                     <span cdkDragHandle class="cursor-grab text-faint" title="Arraste para reordenar"><app-icon name="grip" [size]="14" /></span>
                     <input class="field !py-1 text-[13px] font-semibold" [value]="c.label" (input)="set(i, { label: $any($event.target).value })" aria-label="Nome da coluna">
-                    <select class="field !py-1 text-[12.5px]" aria-label="Agente" (change)="set(i, { agentId: $any($event.target).value ? +$any($event.target).value : null })">
-                      <option value="" [selected]="!c.agentId">—</option>
-                      @for (a of agentList(); track a.id) { <option [value]="a.id" [selected]="c.agentId === a.id">{{ a.name }}</option> }
-                    </select>
+                    <span class="flex min-w-0 items-center gap-1.5">
+                      @if (agentOf(c.agentId); as a) { <app-project-avatar [project]="a" [size]="22" class="shrink-0" /> }
+                      <select class="field min-w-0 !py-1 text-[12.5px]" aria-label="Agente" (change)="set(i, { agentId: $any($event.target).value ? +$any($event.target).value : null })">
+                        <option value="" [selected]="!c.agentId">—</option>
+                        @for (a of agentList(); track a.id) { <option [value]="a.id" [selected]="c.agentId === a.id">{{ a.name }}</option> }
+                      </select>
+                    </span>
                     <select class="field !py-1 text-[12.5px]" aria-label="Depois vai para" [disabled]="!c.agentId" (change)="set(i, { nextKey: $any($event.target).value || null })">
                       <option value="" [selected]="!c.nextKey">a próxima</option>
                       @for (o of cols(); track $index; let j = $index) { @if (j !== i && o.key) { <option [value]="o.key" [selected]="c.nextKey === o.key">{{ o.label }}</option> } }
@@ -65,6 +69,14 @@ import { Icon } from '../../../../../../shared/ui/icon';
                   @if (open().has(i)) {
                     <div class="grid grid-cols-[1fr_auto_auto] gap-3 px-3 pb-3 pl-[42px] text-[12.5px]">
                       <input class="field col-span-3 !py-1 text-[12.5px]" placeholder="Para que serve a coluna (os agentes leem)" [value]="c.description ?? ''" (input)="set(i, { description: $any($event.target).value || null })" aria-label="Descrição">
+                      <div class="col-span-3 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Cor da coluna">
+                        <span class="mr-1 text-mute">Cor</span>
+                        <button type="button" role="radio" [attr.aria-checked]="!c.color" class="h-5 rounded-full border border-edge px-1.5 text-[11px]" [class.text-mute]="!!c.color" (click)="set(i, { color: null })">padrão</button>
+                        @for (k of colors; track k.value) {
+                          <button type="button" role="radio" [attr.aria-checked]="c.color === k.value" [attr.aria-label]="k.label" [title]="k.label" class="size-5 rounded-full ring-offset-1 ring-offset-panel"
+                                  [style.background]="k.value" [class.ring-2]="c.color === k.value" [class.ring-text]="c.color === k.value" (click)="set(i, { color: k.value })"></button>
+                        }
+                      </div>
                       @if (c.agentId) {
                         <textarea class="field h-16 resize-y !py-1 text-[12.5px]" placeholder="O que o agente faz nesta etapa" [value]="c.instruction ?? ''" (input)="set(i, { instruction: $any($event.target).value || null })" aria-label="Instrução"></textarea>
                         <label class="flex items-center gap-1.5 self-start text-mute">até
@@ -109,6 +121,8 @@ export class BoardOverview {
 
   protected readonly kinds = Object.entries(KIND_LABEL).map(([id, label]) => ({ id: id as TaskColumn, label }));
   protected readonly agentList = computed(() => this.agents.agents().filter(a => !a.builtin));
+  protected readonly colors = COLORS;
+  protected agentOf(id: number | null) { return id ? this.agents.byId().get(id) ?? null : null; }
   protected readonly name = signal('');
   protected readonly description = signal('');
   protected readonly project = signal('');

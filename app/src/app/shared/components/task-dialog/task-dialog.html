@@ -45,6 +45,17 @@
       <!-- quadros (workflows) em que a tarefa está, além do backlog principal -->
       @if (editing(); as t) {
         <div>
+          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Cor do cartão</span>
+          <div class="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Cor do cartão">
+            <button type="button" role="radio" [attr.aria-checked]="!t.color" class="h-6 rounded-full border border-edge px-2 text-[12px]" [class.text-mute]="!!t.color" (click)="tasksSvc.setColor(t.id, null)">padrão</button>
+            @for (k of colors; track k.value) {
+              <button type="button" role="radio" [attr.aria-checked]="t.color === k.value" [attr.aria-label]="k.label" [title]="k.label"
+                      class="size-6 rounded-full ring-offset-2 ring-offset-panel" [style.background]="k.value" [class.ring-2]="t.color === k.value" [class.ring-text]="t.color === k.value"
+                      (click)="tasksSvc.setColor(t.id, k.value)"></button>
+            }
+          </div>
+        </div>
+        <div>
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Quadros</span>
           <div class="space-y-1.5">
             @for (p of placements(); track p.boardId) {

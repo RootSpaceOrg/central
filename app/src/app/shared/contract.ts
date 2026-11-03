@@ -263,6 +263,8 @@ export interface TaskDto {
   updated_at: string;
   milestone_id: number | null;
 
+  /** cor do cartão (null = padrão) */
+  color?: string | null;
 }
 
 /** Uma coluna de um quadro (workflow). */
@@ -280,6 +282,8 @@ export interface BoardColumnDto {
   hours: string;
   /** para onde a tarefa vai quando o agente termina bem (null = a próxima coluna) */
   next_key: string | null;
+  /** cor da coluna (null = padrão) */
+  color?: string | null;
 }
 
 /** Quadro (workflow): independente de projeto; uma tarefa pode estar em vários. */
@@ -322,6 +326,8 @@ export interface TaskPatch {
   /** posição dentro da coluna (0 = topo) */
   position?: number;
   milestone_id?: number | null;
+  /** cor do cartão (null = padrão) */
+  color?: string | null;
 }
 
 export interface ImportResultDto {

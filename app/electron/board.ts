@@ -12,10 +12,13 @@ export const KINDS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'dev',
 const KIND_LABEL: Record<TaskColumn, string> = { backlog: 'backlog', todo: 'a fazer', doing: 'fazendo', review: 'revisão', dev: 'em dev', done: 'feito' };
 
 /** "Revisão técnica" → "revisao-tecnica" */
+/** cor válida (#rrggbb) ou null = padrão */
+export const color = (c: string | null | undefined) => (c && /^#[0-9a-fA-F]{6}$/.test(c) ? c : null);
+
 export const keyOf = (label: string) => label.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'coluna';
 
 export const listColumns = (boardId: number) =>
-  all<BoardColumnDto>('select key, label, description, kind, agent_id, instruction, parallel, hours, next_key from board_cols where board_id = ? order by position', boardId);
+  all<BoardColumnDto>('select key, label, description, kind, agent_id, instruction, parallel, hours, next_key, color from board_cols where board_id = ? order by position', boardId);
 
 export const listBoards = (): BoardDto[] => all<Omit<BoardDto, 'columns'>>(`
     select b.id, b.name, b.description, b.project_slug, b.color, b.position, b.created_at,
@@ -65,7 +68,7 @@ export function deleteBoard(id: number): void {
 
 export interface BoardColumnInput {
   key?: string; label: string; description?: string | null; kind?: TaskColumn | null;
-  agent_id?: number | null; instruction?: string | null; parallel?: number; hours?: string; next_key?: string | null;
+  agent_id?: number | null; instruction?: string | null; parallel?: number; hours?: string; next_key?: string | null; color?: string | null;
 }
 
 /** Troca as colunas do quadro. Tarefas numa coluna que sumiu vão para a primeira. */
@@ -89,9 +92,9 @@ export function saveColumns(boardId: number, input: BoardColumnInput[]): BoardCo
   try {
     run('delete from board_cols where board_id = ?', boardId);
     for (const c of cols) {
-      run(`insert into board_cols (board_id, key, label, description, kind, position, agent_id, instruction, parallel, hours, next_key) values (?,?,?,?,?,?,?,?,?,?,?)`,
+      run(`insert into board_cols (board_id, key, label, description, kind, position, agent_id, instruction, parallel, hours, next_key, color) values (?,?,?,?,?,?,?,?,?,?,?,?)`,
         boardId, c.key, c.label, c.description?.trim() || null, c.kind ?? null, c.position, c.agent_id ?? null, c.instruction?.trim() || null, c.parallel,
-        c.hours?.trim() ?? '', c.next_key ? keyOf(c.next_key) : null);
+        c.hours?.trim() ?? '', c.next_key ? keyOf(c.next_key) : null, color(c.color));
     }
     run(`update task_boards set stage = ? where board_id = ? and stage not in (${[...used].map(() => '?').join(',')})`, cols[0].key, boardId, ...used);
     run('commit');

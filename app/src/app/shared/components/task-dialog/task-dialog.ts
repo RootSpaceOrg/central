@@ -6,7 +6,7 @@ import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { errorMessage } from '../../services/ipc/ipc.service';
 import { Repo } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
-import { BoardService } from '../../services/board/board.service';
+import { BoardService, COLORS } from '../../services/board/board.service';
 import { DeliveriesService } from '../../services/deliveries/deliveries.service';
 import { COLUMNS, PRIORITY, TaskColumn, TaskPriority, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
@@ -25,6 +25,8 @@ export class TaskDialog {
   private readonly chat = inject(ChatService);
   private readonly deliveries = inject(DeliveriesService);
   protected readonly boards = inject(BoardService);
+  protected readonly tasksSvc = inject(TasksService);
+  protected readonly colors = COLORS;
   /** quadros em que a tarefa está */
   protected readonly placements = computed(() => { const t = this.editing(); return t ? this.boards.ofTask().get(t.id) ?? [] : []; });
   protected readonly otherBoards = computed(() => { const on = new Set(this.placements().map(p => p.boardId)); return this.boards.boards().filter(b => !on.has(b.id)); });

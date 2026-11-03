@@ -1,11 +1,12 @@
-import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { TaskColumn } from '../../../../shared/contract';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
-import { BoardColumn, BoardService, KIND_LABEL, blankColumn } from '../../../../shared/services/board/board.service';
+import { BoardColumn, BoardService, COLORS, KIND_LABEL, blankColumn } from '../../../../shared/services/board/board.service';
+import { ContextMenuService } from '../../../../shared/services/context-menu/context-menu.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
@@ -21,7 +22,7 @@ import { BoardOverview } from './components/board-overview/board-overview';
  */
 @Component({
   selector: 'app-board-page',
-  imports: [RouterLink, Icon, ProjectAvatar, CdkDropListGroup, CdkDropList, CdkDrag, CdkDragPlaceholder, BoardOverview],
+  imports: [RouterLink, Icon, ProjectAvatar, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, BoardOverview],
   templateUrl: './board-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -44,6 +45,12 @@ export class BoardPage {
   protected readonly agentPanel = signal<string | null>(null);
   protected readonly addingColumn = signal(false);
   protected readonly overview = signal(false);
+  protected readonly colors = COLORS;
+  /** coluna com o seletor de cor aberto */
+  protected readonly colorPanel = signal<string | null>(null);
+  private readonly menu = inject(ContextMenuService);
+  /** listas de cartões (para ligar só elas entre si; a de colunas fica de fora) */
+  protected readonly cardLists = computed(() => (this.board()?.columns ?? []).map(c => `cards-${c.key}`));
   protected readonly error = signal<string | null>(null);
   protected readonly asking = computed(() => new Map(this.proposals.inbox().filter(p => p.taskId).map(p => [p.taskId!, p])));
 
@@ -62,6 +69,8 @@ export class BoardPage {
     const slug = this.board()?.projectSlug;
     return this.tasks.tasks().filter(t => !here.has(t.id) && t.column !== 'done').sort((a, b) => Number(b.projectSlug === slug) - Number(a.projectSlug === slug)).slice(0, 80);
   });
+
+  protected agentOf(id: number | null) { return id ? this.agents.byId().get(id) ?? null : null; }
 
   protected agentName(id: number | null): string | null { return id ? this.agents.byId().get(id)?.name ?? null : null; }
   protected projectOf(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
@@ -106,7 +115,27 @@ export class BoardPage {
     if (d !== null) this.patchColumn(c.key, { description: d.trim() || null });
   }
 
+  /** arrastou a coluna: nova ordem */
+  protected moveColumn(e: CdkDragDrop<unknown>): void {
+    if (e.previousIndex === e.currentIndex) return;
+    const cols = [...this.board()!.columns];
+    moveItemInArray(cols, e.previousIndex, e.currentIndex);
+    this.save(cols);
+  }
+
   // ---------- tarefas ----------
+  /** botão direito no cartão: abrir, cor, tirar do quadro */
+  protected cardMenu(e: MouseEvent, t: Task): void {
+    this.menu.open(e, [
+      { label: 'Abrir', icon: 'edit', run: () => this.dialogs.editTask(t.id) },
+      null,
+      ...COLORS.map(k => ({ label: k.label, swatch: k.value, hint: t.color === k.value ? 'atual' : undefined, run: () => this.tasks.setColor(t.id, k.value) })),
+      ...(t.color ? [{ label: 'Cor padrão', icon: 'close' as const, run: () => this.tasks.setColor(t.id, null) }] : []),
+      null,
+      { label: 'Tirar deste quadro', icon: 'close', danger: true, run: () => this.boards.unplace(t.id, this.id()) },
+    ]);
+  }
+
   protected drop(e: CdkDragDrop<string, string, Task>): void {
     if (e.previousContainer === e.container && e.previousIndex === e.currentIndex) return;
     this.boards.place(e.item.data.id, this.id(), e.container.data, e.currentIndex);

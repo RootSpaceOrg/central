@@ -315,6 +315,10 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
 - Migração: o workflow por projeto da v0.24 vira um quadro ligado ao projeto (colunas, agentes e posições preservados);
   tarefas podem não ter projeto (tabela recriada; testado numa cópia do banco).
 
+- v0.25.1: colunas dos quadros reordenam arrastando (alça no cabeçalho; os cartões só passam entre listas de cartões);
+  cor opcional de coluna (cabeçalho e fundo) e de cartão (vale no backlog principal e em todos os quadros; modal da tarefa
+  e botão direito); ícone do agente no botão da coluna, na lista de quadros e na visão geral.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

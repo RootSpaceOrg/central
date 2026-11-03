@@ -132,7 +132,7 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
 // ---------- tarefas ----------
 
 const TASK_SELECT = `
-  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.stage, t.priority, t.position, t.pr_url,
+  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.color, t.priority, t.position, t.pr_url,
          t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at,
          r.id run_id, r.status run_status
   from tasks t
@@ -178,7 +178,8 @@ export function updateTask(id: number, input: TaskPatch): void {
   if (!task) throw new Error('Tarefa não encontrada.');
   if (patch.column && !COLUMNS.includes(patch.column)) throw new Error('Coluna inválida.');
 
-  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id'] as const).filter(k => k in patch && patch[k] !== undefined);
+  if (patch.color !== undefined && patch.color !== null && !/^#[0-9a-fA-F]{6}$/.test(patch.color)) throw new Error('Cor inválida.');
+  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id', 'color'] as const).filter(k => k in patch && patch[k] !== undefined);
   if (simple.length) {
     run(`update tasks set ${simple.map(k => `${k} = ?`).join(', ')}, updated_at = ? where id = ?`,
       ...simple.map(k => (patch[k] ?? null) as string | number | null), now(), id);

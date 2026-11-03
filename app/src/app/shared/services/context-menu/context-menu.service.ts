@@ -7,6 +7,8 @@ export interface MenuItem {
   icon?: IconName;
   /** imagem no lugar do ícone (ex.: logo original do Claude ou do PowerShell) */
   img?: string;
+  /** bolinha de cor no lugar do ícone (escolher cor) */
+  swatch?: string;
   run: () => void;
   danger?: boolean;
   disabled?: boolean;
