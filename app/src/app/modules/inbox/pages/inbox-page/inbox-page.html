@@ -9,6 +9,10 @@
     </h1>
     <p class="mt-2 text-mute">Decisões primeiro, depois ideias novas. Atalhos: A aprova, D deixa para depois, N recusa/descarta, R direciona.</p>
 
+    @if (sentToPlan().length) {
+      <p class="mt-4 rounded-2xl bg-yes/10 px-5 py-3 text-[13.5px] text-yes" role="status">
+        O gestor está quebrando em tarefas: {{ sentToPlan().join(' · ') }}. Acompanhe no Escritório ou no backlog do projeto.</p>
+    }
     @if (proposals.error() || error()) {
       <p role="alert" class="mt-6 rounded-2xl bg-no/10 px-5 py-4 text-no">{{ error() ?? proposals.error() }}</p>
     }
@@ -83,7 +87,12 @@
             <button type="button" (click)="openSteer()" [attr.aria-pressed]="steering()" title="Dizer o que fazer: a Central lê e age"
                     class="flex-1 rounded-full border-2 py-3.5 font-semibold text-frost hover:border-frost" [class]="steering() ? 'border-frost' : 'border-edge'">
               Direcionar <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
-            <button type="button" (click)="decide('approve')" class="flex-[1.6] rounded-full bg-yes py-3.5 font-semibold text-night hover:brightness-110">
+            @if (item.kind === 'idea') {
+              <button type="button" (click)="approveAndPlan()" title="Aprova e põe o gestor do projeto para quebrar em tarefas ou decisões"
+                      class="flex-[1.4] rounded-full border-2 border-yes py-3.5 font-semibold text-yes hover:bg-yes/10">
+                Aprovar e planejar <kbd class="ml-1 text-xs opacity-60">P</kbd></button>
+            }
+            <button type="button" (click)="decide('approve')" class="flex-[1.2] rounded-full bg-yes py-3.5 font-semibold text-night hover:brightness-110">
               Aprovar <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
           </div>
         </article>

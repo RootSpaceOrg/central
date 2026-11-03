@@ -33,7 +33,11 @@ export interface Run {
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
+  /** o agente parou esperando você (sessão AWS, login…): o que falta, o que fazer e o comando */
+  waiting: RunWaiting | null;
 }
+
+export interface RunWaiting { reason: string; fix: string; command: string | null }
 
 export interface RunEvent {
   at: Date;

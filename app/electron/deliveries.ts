@@ -53,15 +53,21 @@ export async function closeDelivery(runId: number): Promise<void> {
     } catch { /* worktree já removido ou sem a base: fica sem diff */ }
   }
   const code = files > 0 || !!r.pr_url;
+  const waiting = !!get<{ w: string | null }>('select waiting w from runs where id = ?', runId)?.w;
   run(`update deliveries set outcome = ?, pr_url = ?, files = ?, additions = ?, deletions = ?, diff_stat = ?,
        status = case when status = 'pending' then ? else status end where run_id = ?`,
-    r.status, r.pr_url, files, additions, deletions, stat, code ? 'review' : 'info', runId);
+    r.status, r.pr_url, files, additions, deletions, stat, waiting ? 'paused' : code ? 'review' : 'info', runId);
 }
 
 /** Ajuste terminou: volta para a revisão e mede o diff de novo. */
 export async function reopenDelivery(runId: number): Promise<void> {
-  if (!run(`update deliveries set status = 'pending' where run_id = ? and status = 'adjusting'`, runId).changes) return;
+  if (!run(`update deliveries set status = 'pending' where run_id = ? and status in ('adjusting', 'paused')`, runId).changes) return;
   await closeDelivery(runId);
+  // retomada de uma espera: a tarefa que ficou em "fazendo" segue o caminho normal
+  const t = get<{ task_id: number | null; status: string }>('select d.task_id, r.status from deliveries d join runs r on r.id = d.run_id where d.run_id = ?', runId);
+  if (t?.task_id && !get<{ w: string | null }>('select waiting w from runs where id = ?', runId)?.w) {
+    run(`update tasks set "column" = ?, updated_at = ? where id = ? and "column" = 'doing'`, t.status === 'failed' ? 'todo' : 'review', now(), t.task_id);
+  }
 }
 
 /** Revisão do Gustavo: aceitar (tarefa vai para Feito), pedir ajuste (com o texto) ou descartar. */

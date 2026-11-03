@@ -19,7 +19,7 @@ import {
   createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   updateIdea, updateTask,
 } from './backlog';
-import { get } from './db';
+import { get, run } from './db';
 import { reportDelivery } from './deliveries';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
 import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
@@ -264,8 +264,16 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     return 'Esquecida.';
   }, h.agents);
 
-  // ---------- nota de entrega (só execuções) ----------
+  // ---------- nota de entrega e espera (só execuções) ----------
   if (caller?.kind === 'run') {
+    tool('need_gustavo', 'Falta algo que só o Gustavo resolve (sessão AWS/SSO expirada, gh sem login, credencial, VPN, acesso): registre e PARE. Ele resolve e a Central te retoma de onde parou, na mesma sessão. Não contorne nem desista da tarefa.', {
+      reason: z.string().max(200).describe('o que falta, curto (ex.: "sessão AWS SSO expirada no perfil mkt-platform")'),
+      fix: z.string().max(400).describe('o que ele precisa fazer'),
+      command: z.string().max(300).optional().describe('o comando que ele roda, se houver (ex.: aws sso login --profile mkt-platform)'),
+    }, a => {
+      run('update runs set waiting = ? where id = ?', JSON.stringify({ reason: a.reason, fix: a.fix, command: a.command ?? null }), caller.id);
+      return 'Registrado. Termine agora: diga em poucas linhas o que já fez e onde parou. A Central te retoma quando o Gustavo resolver.';
+    }, h.backlog);
     tool('report_delivery', 'Antes de terminar, conte ao Gustavo o que você entregou. Ele lê isso no resumo de quando estava fora e na fila de revisão.', {
       title: z.string().max(160).describe('a entrega em uma linha (ex.: "Exportação do roadmap em PDF")'),
       what: z.string().max(2000).describe('o que mudou, concreto (arquivos/telas/comportamento)'),

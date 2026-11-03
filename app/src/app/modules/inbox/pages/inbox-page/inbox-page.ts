@@ -16,6 +16,10 @@ import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
 const KEYS: Record<string, Verdict> = { a: 'approve', d: 'defer', n: 'reject' };
+
+/** O pedido ao gestor quando você aprova e manda planejar: só esta ideia, nada de reorganizar o backlog inteiro. */
+export const planRequest = (id: number, title: string) =>
+  `Acabei de aprovar a ideia #${id} ("${title}"). Quebre só ela: tarefas no backlog ligadas a ela (create_task com idea_id; coluna todo quando estiver clara e pequena, backlog quando precisar de mais definição) e decisões (create_decision) para o que depender de mim. Ligue ao marco do roadmap que ela serve, se houver. Não mexa no resto do backlog.`;
 /** conversas abertas a partir da triagem começam assim (a lateral lista as recentes) */
 const PREFIX = 'Triagem: ';
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -59,6 +63,8 @@ export class InboxPage {
   /** projeto escolhido no cartão da ideia (se ela ainda não tem) */
   protected readonly pickSlug = signal('');
   protected readonly error = signal<string | null>(null);
+  /** ideias aprovadas e mandadas para o gestor planejar nesta tela (aviso discreto) */
+  protected readonly sentToPlan = signal<string[]>([]);
 
   /** aprovadas que ainda não viraram tarefa, por projeto: o gestor de cada um tem trabalho */
   protected readonly waiting = computed(() => {
@@ -87,7 +93,10 @@ export class InboxPage {
 
   protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
 
-  protected decide(verdict: Verdict): void {
+  /** Aprovar e já pôr o gestor do projeto para quebrar a ideia em tarefas (ligadas a ela) ou decisões. */
+  protected approveAndPlan(): void { this.decide('approve', true); }
+
+  protected decide(verdict: Verdict, plan = false): void {
     const item = this.current();
     if (!item || this.leaving()) return;
     if (item.kind === 'idea' && verdict === 'approve' && !(item.i.projectSlug || this.pickSlug())) {
@@ -99,7 +108,14 @@ export class InboxPage {
     setTimeout(async () => {
       try {
         if (item.kind === 'decision') this.proposals.decide(item.p, verdict);
-        else if (verdict === 'approve') await this.ideas.approve(item.i.id, item.i.projectSlug ? null : this.pickSlug());
+        else if (verdict === 'approve') {
+          const slug = item.i.projectSlug ?? this.pickSlug();
+          await this.ideas.approve(item.i.id, item.i.projectSlug ? null : slug);
+          if (plan) {
+            await this.direction.plan(slug, planRequest(item.i.id, item.i.title));
+            this.sentToPlan.update(l => [item.i.title, ...l].slice(0, 5));
+          }
+        }
         else if (verdict === 'reject') this.ideas.setStatus(item.i.id, 'archived');
         else this.skipped.update(s => new Set([...s, item.i.id]));
       } catch (e) {
@@ -114,6 +130,7 @@ export class InboxPage {
     const tag = (e.target as HTMLElement).tagName;
     if (e.ctrlKey || e.metaKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.querySelector('dialog[open]')) return;
     if (e.key.toLowerCase() === 'r') { e.preventDefault(); this.openSteer(); return; }
+    if (e.key.toLowerCase() === 'p' && this.current()?.kind === 'idea') { e.preventDefault(); this.approveAndPlan(); return; }
     const verdict = KEYS[e.key.toLowerCase()];
     if (verdict) this.decide(verdict);
   }

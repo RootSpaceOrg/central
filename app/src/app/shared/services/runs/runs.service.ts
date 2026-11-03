@@ -32,7 +32,14 @@ const toRun = (d: RunDto): Run => ({
   createdAt: new Date(d.created_at),
   startedAt: d.started_at ? new Date(d.started_at) : null,
   finishedAt: d.finished_at ? new Date(d.finished_at) : null,
+  waiting: parseWaiting(d.waiting),
 });
+
+function parseWaiting(raw: string | null | undefined): Run['waiting'] {
+  if (!raw) return null;
+  try { const w = JSON.parse(raw); return { reason: String(w.reason ?? ''), fix: String(w.fix ?? ''), command: w.command ? String(w.command) : null }; }
+  catch { return null; }
+}
 
 const toEvent = (d: RunEventDto): RunEvent => ({ at: new Date(d.at), kind: d.kind, text: d.text });
 
@@ -83,5 +90,19 @@ export class RunsService {
 
   kill(id: number): void {
     this.api.kill(id);
+  }
+
+  /** Execuções que pararam esperando você (já terminaram o processo). */
+  readonly waiting = computed(() => this.runs().filter(r => r.waiting && r.finishedAt));
+
+  /** Você resolveu: retoma a sessão da execução de onde parou. Devolve a conversa. */
+  async resume(id: number, note: string | null = null): Promise<number> {
+    try {
+      const chatId = await this.api.resume(id, note);
+      this.runs.update(list => list.map(r => (r.id === id ? { ...r, waiting: null } : r)));
+      return chatId;
+    } catch (e) {
+      throw new Error(errorMessage(e));
+    }
   }
 }

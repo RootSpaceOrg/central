@@ -4,8 +4,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
-import { DB_PATH, DEV_ROOT, all, get } from './db';
-import { killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
+import { DB_PATH, DEV_ROOT, all, get, run } from './db';
+import { dto as runDto, killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
@@ -226,6 +226,19 @@ function registerIpc(): void {
   handle('facts:import', slug => { const n = importClaudeMemory(slug); contextChanged(slug); return n; });
   handle('claude:import', (id, slug) => importClaudeSession(id, slug));
   handle('chat:fromRun', runId => chatFromRun(runId));
+  handle('runs:resume', (runId, note) => {
+    const w = get<{ waiting: string | null; agent_id: number | null }>('select waiting, agent_id from runs where id = ?', runId);
+    if (!w?.waiting) throw new Error('Essa execução não está esperando.');
+    const why = (JSON.parse(w.waiting) as { reason: string }).reason;
+    const chatId = chatFromRun(runId);
+    run('update runs set waiting = null where id = ?', runId);
+    const agentId = get<{ a: number }>('select agent_id a from chats where id = ?', chatId)!.a;
+    sendChat(chatId, agentId, `O Gustavo resolveu o que faltava (${why}).${note?.trim() ? ` Ele disse: ${note.trim()}` : ''}\nContinue de onde parou e termine a tarefa; no fim, conte a entrega.`,
+      chatNotify, () => { changed(); backlogChanged(); }, null, null);
+    emitRun.update(runDto(runId));
+    backlogChanged();
+    return chatId;
+  });
   handle('chat:rename', (id, title) => { renameChat(id, title); });
   handle('chat:stop', id => stopChat(id));
   handle('chat:delete', id => deleteChat(id));

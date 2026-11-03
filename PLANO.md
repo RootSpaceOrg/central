@@ -269,6 +269,17 @@ Você (gestor) ── aponta o rumo, faz a triagem, pede
 - Fechar qualquer modal clicando no fundo (como o Esc); "Marcar como feito" no Início e no modal da tarefa; aba Produção
   abre o repositório e a comparação develop/main no GitHub; mapa 3D do Escritório pode ser desligado.
 
+## Feito (v0.22)
+
+- **Aprovar e planejar** (triagem, tecla P): aprova a ideia e põe o gestor do projeto para quebrar só ela em tarefas
+  ligadas (A fazer quando clara e pequena, Backlog quando precisa de definição) e decisões para o que depende de você.
+- **Comandos rápidos** no topo do app (como no Orca): nome, ação (terminal ou agente), comando, Enter no fim; avançado:
+  projeto da pasta do terminal (ou o aberto na tela), PowerShell/Git Bash/CMD, ou o agente que recebe. Um clique abre a
+  sessão no projeto e digita; botão direito edita/remove.
+- **Agente em espera**: faltou algo que só você resolve (sessão AWS/SSO, gh, credencial, VPN), o agente chama `need_gustavo`
+  (o que falta, o que fazer, o comando) e para. A tarefa fica em "fazendo", a entrega fica pausada; no Início aparece
+  "está esperando você" com "Rodar no terminal" e "Já resolvi, continuar", que retoma a mesma sessão de onde parou.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |

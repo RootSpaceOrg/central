@@ -82,6 +82,20 @@ export class TerminalsService {
     }
   }
 
+  /**
+   * Digita no terminal da sessão (comando rápido). Espera o terminal abrir e o shell mostrar alguma coisa (o prompt),
+   * senão o texto se perde no meio da inicialização.
+   */
+  async send(sessionId: number, text: string): Promise<void> {
+    const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 150 && !this.terms().get(sessionId)?.alive; i++) await wait(100);
+    const t = this.terms().get(sessionId);
+    if (!t?.alive) throw new Error('O terminal não abriu a tempo.');
+    // ponytail: espera fixa pelo prompt; detectar o prompt de cada shell se 1,2 s não bastar
+    await wait(1200);
+    await this.api.write(t.pty, text);
+  }
+
   stop(sessionId: number): void {
     const t = this.terms().get(sessionId);
     if (!t) return;

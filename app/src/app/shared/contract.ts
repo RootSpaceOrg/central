@@ -151,6 +151,8 @@ export interface RunDto {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  /** o agente parou esperando o Gustavo (JSON: reason, fix, command); null = não está esperando */
+  waiting?: string | null;
 }
 
 export interface NewRunInput {
@@ -551,7 +553,7 @@ export interface ReleaseRepoDto {
 
 // ---------- entregas e "enquanto você estava fora" ----------
 
-export type DeliveryStatus = 'pending' | 'review' | 'info' | 'accepted' | 'adjusting' | 'discarded';
+export type DeliveryStatus = 'pending' | 'review' | 'info' | 'accepted' | 'adjusting' | 'discarded' | 'paused';
 
 export interface DeliveryDto {
   id: number;
@@ -815,6 +817,8 @@ export interface Api {
   'runs:list': (slug: string | null) => RunDto[];
   'runs:start': (input: NewRunInput) => RunDto;
   'runs:kill': (id: number) => void;
+  /** o Gustavo resolveu o que o agente esperava: retoma a sessão da execução de onde parou (devolve a conversa) */
+  'runs:resume': (id: number, note: string | null) => number;
   'runs:events': (id: number) => RunEventDto[];
   'fs:list': (dir: string) => FsEntryDto[];
   'fs:read': (path: string) => FileDto;

@@ -145,7 +145,7 @@ export function killRun(id: number, emit: Emit): void {
   }
 }
 
-const dto = (id: number): RunDto => {
+export const dto = (id: number): RunDto => {
   const r = get<RunDto>('select * from runs where id = ?', id)!;
   return { ...r, repo_name: basename(r.repo_path) };
 };
@@ -172,7 +172,8 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
   const { proposal_id: proposal, task_id: task } = dto(id);
   if (proposal) run('update proposals set status = ?, updated_at = ? where id = ?', status === 'succeeded' ? 'done' : 'approved', now(), proposal);
   // concluída vai para Revisão (alguém precisa olhar o PR); falha volta para A fazer
-  if (task) moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
+  const waiting = !!get<{ w: string | null }>('select waiting w from runs where id = ?', id)?.w;
+  if (task && !waiting) moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
   procs.delete(id);
   // nota de entrega: garante, mede o diff e decide se vai para a revisão
   closeDelivery(id).catch(() => {}).finally(() => emit.changed());
@@ -297,6 +298,9 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
 - Comece declarando seu plano na lista de tarefas (TaskCreate, 3 a 6 passos) e marque cada um (TaskUpdate) ao avançar:
   é assim que o Gustavo vê para onde você está indo.
 - Ao começar cada etapa, chame set_status (fase + o que, curto${task ? `, task_id ${task.id}` : ''}): é o quadro que o Gustavo olha.
+- Faltou algo que só o Gustavo resolve (sessão AWS/SSO expirada, gh sem login, credencial, VPN, acesso)? Não contorne nem
+  desista: chame need_gustavo (o que falta, o que ele faz e o comando, ex.: aws sso login --profile X) e termine. A Central te
+  retoma de onde parou quando ele resolver.
 - Antes de terminar, chame report_delivery: o que mudou, por quê, como testar em 1 minuto e o que ficou de risco.
   É o que o Gustavo lê quando volta; sem isso ele não sabe o que você fez.`;
 

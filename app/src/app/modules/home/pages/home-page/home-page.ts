@@ -20,6 +20,7 @@ import { SettingsApiService } from '../../../../shared/services/settings/setting
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { TurnsService } from '../../../../shared/services/turns/turns.service';
 import { UsageService, untilReset } from '../../../../shared/services/usage/usage.service';
+import { QuickCommandsService } from '../../../../shared/services/quick-commands/quick-commands.service';
 import { DeliveriesService } from '../../../../shared/services/deliveries/deliveries.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { AwayDigest } from './components/away-digest/away-digest';
@@ -76,6 +77,7 @@ export class HomePage {
   /** "Enquanto você estava fora": desde o último "Já vi" (no máximo 7 dias) */
   protected readonly awaySince = signal<Date | null>(null);
   protected readonly deliveries = inject(DeliveriesService);
+  private readonly quick = inject(QuickCommandsService);
   protected readonly note = signal('');
   protected readonly noteSaved = signal(false);
   protected readonly runLabel = RUN_STATUS_LABEL;
@@ -98,8 +100,8 @@ export class HomePage {
   });
   protected readonly decide3 = computed(() => this.proposals.inbox().slice(0, 3));
   protected readonly failed = computed(() =>
-    this.runs.runs().filter(r => r.status === 'failed' && r.finishedAt && r.finishedAt > this.since()).slice(0, 3));
-  protected readonly waiting = computed(() => this.deliveries.queue().length + this.reviews().length + this.proposals.inbox().length + this.ideas.fresh().length + this.failed().length);
+    this.runs.runs().filter(r => r.status === 'failed' && !r.waiting && r.finishedAt && r.finishedAt > this.since()).slice(0, 3));
+  protected readonly waiting = computed(() => this.runs.waiting().length + this.deliveries.queue().length + this.reviews().length + this.proposals.inbox().length + this.ideas.fresh().length + this.failed().length);
   protected readonly finished = computed(() =>
     this.runs.runs().filter(r => r.status === 'succeeded' && r.finishedAt && r.finishedAt > this.since()));
 
@@ -132,6 +134,19 @@ export class HomePage {
       this.awaySince.set(new Date(Math.max(v ? Date.parse(v) : Date.now() - 86_400_000, week)));
     });
   }
+
+  /** agente que parou esperando: rodar o comando que ele pediu (terminal no projeto) */
+  protected runFix(command: string, slug: string | null): void {
+    this.quick.inTerminal(command, slug, 'shell', true).catch(e => this.quick.error.set((e as Error).message));
+  }
+
+  /** você resolveu: o agente continua de onde parou (abre a conversa no painel) */
+  protected async resume(runId: number): Promise<void> {
+    try { this.chat.openInPanel(await this.runs.resume(runId)); }
+    catch (e) { this.quick.error.set((e as Error).message); }
+  }
+
+  protected agentName(id: number | null): string { return (id ? this.agents.byId().get(id)?.name : null) ?? 'O agente'; }
 
   /** "Já vi": o resumo recomeça a partir de agora */
   protected markSeen(): void {
