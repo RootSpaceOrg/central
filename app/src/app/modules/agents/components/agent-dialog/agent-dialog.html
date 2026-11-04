@@ -44,7 +44,8 @@
                 <textarea class="field min-h-64 resize-y font-mono text-[12.5px] leading-relaxed"
                           placeholder="Quem é este agente, o que faz, como trabalha, o que registra na Central e o que nunca deve fazer."
                           [value]="instructions()" (input)="instructions.set($any($event.target).value)"></textarea>
-                <span class="mt-1 block text-[12.5px] text-mute">Todo agente já sabe mexer na Central (projetos, backlog, ideias, decisões, rotinas). Aqui vai o papel dele.</span>
+                <span class="mt-1 block text-[12.5px] text-mute">Todo agente já sabe mexer na Central (projetos, backlog, ideias, decisões, rotinas). Aqui vai o papel dele.
+                  Produção também se decide aqui: escreva o que ele pode subir sozinho (ex.: "hotfix pequeno pode ir para produção; mudança em pagamento, crítica ou sem teste, crie uma decisão"). Sem isso, ele pede a você.</span>
               </label>
             }
           </div>
@@ -72,6 +73,17 @@
                   }
                 </div>
               </div>
+            </div>
+
+            <div>
+              <span class="mb-1.5 block font-semibold">Prioridade</span>
+              <div class="flex max-w-md gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Prioridade">
+                @for (p of priorities; track p.value) {
+                  <button type="button" role="radio" [attr.aria-checked]="priority() === p.value" (click)="priority.set(p.value)"
+                          class="flex-1 rounded-full py-1.5 text-[13px] font-semibold" [class]="priority() === p.value ? (p.value === 'high' ? 'bg-raise text-later' : 'bg-raise') : 'text-mute hover:text-text'">{{ p.label }}</button>
+                }
+              </div>
+              <span class="mt-1 block text-[12.5px] text-mute">{{ priorityHint() }} Vale para todos os projetos: a fila é uma só.</span>
             </div>
 
             <div>

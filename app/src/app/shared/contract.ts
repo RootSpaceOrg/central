@@ -158,6 +158,21 @@ export interface RunDto {
   finished_at: string | null;
   /** o agente parou esperando o Gustavo (JSON: reason, fix, command); null = não está esperando */
   waiting?: string | null;
+  /** 0 alta, 1 normal, 2 baixa (do agente; "urgente" vira 0) */
+  priority?: number;
+  /** pausada pelo freio da cota (JSON: reason, until, at); continua na fila e volta sozinha */
+  paused?: string | null;
+  /** registro de construção (JSON: plano, etapa, quando) */
+  checkpoint?: string | null;
+  /** quem pediu: execução de outro agente (notify_agent) */
+  parent_run_id?: number | null;
+  /** assumiu o trabalho desta execução */
+  handoff_from?: number | null;
+  /** motivo da pausa, quando vai retomar na mesma sessão */
+  resume?: string | null;
+  /** etapa de quadro */
+  stage?: string | null;
+  board_id?: number | null;
 }
 
 export interface NewRunInput {
@@ -804,6 +819,7 @@ export interface AgentDto {
   room: string;
   /** aparência do boneco 3D (JSON: hair, acc, skin, outfit); '' = padrão */
   look: string;
+  priority: AgentPriority;
   builtin: boolean;
   created_at: string;
   chats: number;
@@ -824,7 +840,11 @@ export interface NewAgentInput {
   model?: string;
   room?: string;
   look?: string;
+  /** na fila e no freio da cota: high, normal, low */
+  priority?: AgentPriority;
 }
+
+export type AgentPriority = 'high' | 'normal' | 'low';
 
 export type AgentPatch = Partial<NewAgentInput>;
 
@@ -873,6 +893,10 @@ export interface Api {
   'runs:list': (slug: string | null) => RunDto[];
   'runs:start': (input: NewRunInput) => RunDto;
   'runs:kill': (id: number) => void;
+  /** tira a pausa do freio: volta assim que a cota e as vagas deixarem */
+  'runs:unpause': (id: number) => void;
+  /** outro agente (ou o mesmo, do zero) assume o trabalho parado, na mesma branch */
+  'runs:handoff': (id: number, agentId: number | null, note: string | null) => RunDto;
   /** o Gustavo resolveu o que o agente esperava: retoma a sessão da execução de onde parou (devolve a conversa) */
   'runs:resume': (id: number, note: string | null) => number;
   'runs:events': (id: number) => RunEventDto[];

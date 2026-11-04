@@ -35,6 +35,14 @@ export interface Run {
   finishedAt: Date | null;
   /** o agente parou esperando você (sessão AWS, login…): o que falta, o que fazer e o comando */
   waiting: RunWaiting | null;
+  /** pausada pelo freio da cota: volta sozinha (until = quando a cota renova; null = quando o freio deixar) */
+  paused: { reason: string; until: Date | null } | null;
+  /** 0 alta, 1 normal, 2 baixa */
+  priority: number;
+  /** pedida por outra execução (notify_agent) */
+  parentRunId: number | null;
+  /** assumiu o trabalho desta execução */
+  handoffFrom: number | null;
 }
 
 export interface RunWaiting { reason: string; fix: string; command: string | null }

@@ -33,7 +33,17 @@ const toRun = (d: RunDto): Run => ({
   startedAt: d.started_at ? new Date(d.started_at) : null,
   finishedAt: d.finished_at ? new Date(d.finished_at) : null,
   waiting: parseWaiting(d.waiting),
+  paused: parsePaused(d.paused),
+  priority: d.priority ?? 1,
+  parentRunId: d.parent_run_id ?? null,
+  handoffFrom: d.handoff_from ?? null,
 });
+
+function parsePaused(raw: string | null | undefined): Run['paused'] {
+  if (!raw) return null;
+  try { const p = JSON.parse(raw); return { reason: String(p.reason ?? ''), until: p.until ? new Date(p.until) : null }; }
+  catch { return null; }
+}
 
 function parseWaiting(raw: string | null | undefined): Run['waiting'] {
   if (!raw) return null;
@@ -48,7 +58,8 @@ export class RunsService {
   private readonly api = inject(RunsApiService);
 
   readonly runs = signal<Run[]>([]);
-  readonly active = computed(() => this.runs().filter(r => isActive(r.status)));
+  /** trabalhando ou na fila para trabalhar (pausada pelo freio não conta: está esperando a cota) */
+  readonly active = computed(() => this.runs().filter(r => isActive(r.status) && !r.paused));
   /** eventos por execução, só das que já foram abertas na tela */
   private readonly events = new Map<number, ReturnType<typeof signal<RunEvent[]>>>();
 
@@ -90,6 +101,14 @@ export class RunsService {
 
   kill(id: number): void {
     this.api.kill(id);
+  }
+
+  /** tira a pausa do freio (volta assim que a cota e as vagas deixarem) */
+  unpause(id: number): Promise<void> { return this.api.unpause(id).catch(e => { throw new Error(errorMessage(e)); }); }
+
+  /** outro agente (ou o mesmo, do zero) assume o trabalho parado, na mesma branch, com o registro do que foi feito */
+  async handoff(id: number, agentId: number | null, note: string | null): Promise<Run> {
+    try { return toRun(await this.api.handoff(id, agentId, note)); } catch (e) { throw new Error(errorMessage(e)); }
   }
 
   /** Execuções que pararam esperando você (já terminaram o processo). */

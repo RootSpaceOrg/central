@@ -43,6 +43,15 @@ export class UsageService {
   readonly session = computed(() => this.usage()?.limits.find(l => l.kind === 'session') ?? null);
   readonly weekly = computed(() => this.usage()?.limits.find(l => l.kind === 'weekly_all') ?? null);
   /** quanto da sessão ainda dá para gastar com agentes */
+  /** o freio da cota (mesmas faixas de electron/governor.ts): o que está segurando agora */
+  readonly brake = computed(() => {
+    const s = this.session()?.percent ?? 0, w = this.weekly()?.percent ?? 0;
+    if (s >= 95 || w >= 98) return 'Freio: pausando tudo';
+    if (s >= 90 || w >= 95) return 'Freio: nada começa';
+    if (s >= 80 || w >= 90) return 'Freio: só prioridade alta';
+    if (s >= 60 || w >= 80) return 'Freio: prioridade baixa espera';
+    return null;
+  });
   readonly sessionLeft = computed(() => (this.session() ? 100 - this.session()!.percent : null));
 
   constructor() {

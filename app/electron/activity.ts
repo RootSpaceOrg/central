@@ -148,6 +148,9 @@ export function track(scope: Scope, ref: number, describe: (name: string, input:
   return t;
 }
 
+/** O plano e a etapa atual de uma sessão (vai para o registro de construção da execução). */
+export const snapshot = (scope: Scope, ref: number) => live.get(`${scope}:${ref}`) ?? null;
+
 /** set_status do MCP: false se a sessão não está rodando. */
 export function setStatus(scope: Scope, ref: number, phase: Phase, doing: string, task: { id: number; title: string } | null): boolean {
   const t = trackers.get(`${scope}:${ref}`);

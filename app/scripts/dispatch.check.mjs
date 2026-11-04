@@ -12,7 +12,7 @@ writeFileSync(stub, `
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(':memory:');
 db.exec(\`
-  create table agents (id integer primary key, permission text, name text, builtin integer default 0);
+  create table agents (id integer primary key, permission text, name text, builtin integer default 0, priority text default 'normal');
   insert into agents (id, permission, name) values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
   create table projects (slug text primary key, status text, todo_agent_id integer, todo_parallel integer, todo_hours text);
   insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, ''), ('conteudo', 'active', null, 1, '');
@@ -28,7 +28,7 @@ db.exec(\`
   create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, color text, primary key (board_id, key));
   create table task_boards (task_id integer, board_id integer, stage text, position integer default 0, updated_at text, primary key (task_id, board_id));
   create table deliveries (pr_url text, title text, task_id integer);
-  insert into agents values (1, 'edits', 'Central', 1);
+  insert into agents (id, permission, name, builtin) values (1, 'edits', 'Central', 1);
   create table ideas (id integer primary key, title text, body text, project_slug text, status text, author text, triaged_at text);
   insert into ideas (id, title, body, project_slug, status, author) values (1, 'Solta', 'texto', null, 'new', 'gustavo'),
     (2, 'Com projeto', null, 'kultivai', 'new', 'gustavo'), (3, 'De agente', null, null, 'new', 'agente'), (4, 'Velha', null, null, 'approved', 'gustavo');
@@ -135,6 +135,14 @@ bd.saveColumns(solto.id, [{ key: 'ideias', label: 'Ideias' }, { key: 'publicado'
 ok(bd.stagesOf().find(x => x.task_id === 10 && x.board_id === solto.id).stage === 'ideias', 'coluna removida: tarefa vai para a primeira');
 bd.deleteBoard(solto.id);
 ok(!bd.stagesOf().some(x => x.board_id === solto.id) && db.prepare('select count(*) n from tasks where id = 10').get().n === 1, 'apagar quadro mantém a tarefa');
+
+// prioridade: com a sessão em 85% só o agente de prioridade alta pega
+db.exec("insert into agents (id, permission, name, priority) values (20, 'edits', 'Suporte', 'high'), (21, 'edits', 'Dev', 'normal')");
+db.exec("insert into projects values ('pri-a', 'active', 20, 1, ''), ('pri-b', 'active', 21, 1, '')");
+db.exec("insert into tasks values (30, 'pri-a', 'todo', 'Bug urgente', null, null, 0, 0, null, null, null), (31, 'pri-b', 'todo', 'Feature', null, null, 0, 0, null, null, null)");
+started = [];
+await d.dispatchTodo({ ...deps(85), now: () => new Date('2026-11-04T13:00:00Z') });
+ok(started.some(x => x.task_id === 30) && !started.some(x => x.task_id === 31), 'em 85% só prioridade alta despacha');
 
 // agente de triagem
 const tStarted = [];

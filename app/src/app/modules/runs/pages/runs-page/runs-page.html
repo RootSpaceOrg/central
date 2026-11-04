@@ -24,7 +24,7 @@
           <span class="min-w-0 flex-1">
             <span class="line-clamp-2 leading-snug">{{ r.title }}</span>
             <span class="mt-1 block truncate text-[12.5px] text-mute">
-              {{ statusLabel[r.status] }}, {{ r.scope === 'project' ? 'projeto inteiro' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}
+              {{ r.paused ? 'Pausada' : statusLabel[r.status] }}, {{ r.scope === 'project' ? 'projeto inteiro' : r.scope === 'workspace' ? 'pasta do agente' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}
             </span>
           </span>
         </button>
@@ -41,12 +41,13 @@
 @if (selected(); as r) {
   <section class="flex min-h-0 flex-col" aria-label="Execução">
     <header class="border-b border-edge px-8 pt-6 pb-5">
-      <div class="flex items-start gap-4">
-        <div class="min-w-0 flex-1">
-          <p class="flex items-center gap-2 text-[13px]">
+      <div class="flex flex-wrap items-start gap-x-4 gap-y-3">
+        <div class="min-w-[min(100%,320px)] flex-1">
+          <p class="flex flex-wrap items-center gap-2 text-[13px]">
             <span class="flex items-center gap-1.5 rounded-full bg-raise px-2.5 py-0.5 font-semibold">
-              <span class="size-1.5 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>{{ statusLabel[r.status] }}
+              <span class="size-1.5 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status) && !r.paused"></span>{{ r.paused ? 'Pausada' : statusLabel[r.status] }}
             </span>
+            @if (r.priority === 0) { <span class="rounded-full bg-later/15 px-2.5 py-0.5 font-semibold text-later">Prioridade alta</span> }
             @if (agent(r.agentId); as a) {
               <a routerLink="/agentes" [queryParams]="{ agente: a.id }" class="flex items-center gap-1.5 font-semibold hover:underline" [style.color]="a.color">
                 <app-project-avatar [project]="a" [size]="16" />{{ a.name }}</a>
@@ -61,6 +62,8 @@
         <div class="flex shrink-0 gap-2">
           @if (r.prUrl) { <button type="button" class="btn btn-primary btn-sm" (click)="openPr(r)"><app-icon name="pr" [size]="14" />Ver PR</button> }
           @if (r.worktreePath) { <button type="button" class="btn btn-sm" (click)="openWorktree(r)"><app-icon name="code" [size]="14" />Abrir no VS Code</button> }
+          @if (canHandoff(r)) { <button type="button" class="btn btn-sm" (click)="handingOff.set(!handingOff())" [attr.aria-expanded]="handingOff()"
+                                        title="Outro agente continua na mesma branch, com o registro do que já foi feito"><app-icon name="agent" [size]="14" />Passar adiante</button> }
           @if (isActive(r.status)) { <button type="button" class="btn btn-sm !text-no" (click)="runs.kill(r.id)"><app-icon name="stop" [size]="13" />Interromper</button> }
           @else if (r.sessionId) { <button type="button" class="btn btn-sm" (click)="continueChat(r)" title="Conversar com o agente sobre o que ele fez, na mesma sessão">
             <app-icon name="central" [size]="14" />Continuar conversa</button> }
@@ -68,11 +71,30 @@
         @if (chatError()) { <p role="alert" class="text-[13px] text-no">{{ chatError() }}</p> }
       </div>
 
+      @if (r.paused; as p) {
+        <div class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-later/40 bg-later/10 px-4 py-3" role="status">
+          <app-icon name="timer" [size]="18" class="text-later" />
+          <p class="min-w-0 flex-1 text-[14px]"><span class="font-semibold text-later">Pausada:</span> {{ p.reason }}.
+            {{ p.until ? 'Volta sozinha, na mesma sessão, quando a cota renovar (' + at(p.until) + ').' : 'Volta sozinha, na mesma sessão, assim que o freio deixar.' }}</p>
+          <button type="button" class="btn btn-sm" (click)="unpause(r)">Retomar agora</button>
+        </div>
+      }
+      @if (handingOff()) {
+        <div class="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-frost/40 bg-night p-3">
+          <span class="text-[13.5px] text-mute">Quem continua?</span>
+          <app-agent-select class="w-64" [compact]="true" [hideCentral]="true" [value]="handoffAgent()" (valueChange)="handoffAgent.set($event)" noneLabel="O mesmo agente, do zero" />
+          <input class="field min-w-0 flex-1 !py-1.5 text-[13px]" placeholder="Observação (opcional)" [value]="handoffNote()" (input)="handoffNote.set($any($event.target).value)">
+          <button type="button" class="btn btn-sm btn-primary" (click)="handoff(r)">Passar</button>
+        </div>
+      }
+
       <dl class="mt-4 flex flex-wrap gap-x-7 gap-y-2 text-[13px]">
-        <div><dt class="text-faint">Onde</dt><dd>{{ r.scope === 'project' ? 'Projeto inteiro' : 'Repositório ' + r.repoName }}</dd></div>
+        <div><dt class="text-faint">Onde</dt><dd>{{ r.scope === 'project' ? 'Projeto inteiro' : r.scope === 'workspace' ? 'Pasta do agente' : 'Repositório ' + r.repoName }}</dd></div>
         @if (r.routineId) { <div><dt class="text-faint">Origem</dt><dd><a routerLink="/rotinas" class="text-frost hover:underline">Rotina</a></dd></div> }
         @if (r.branch) { <div class="min-w-0 max-w-full"><dt class="text-faint">Branch</dt><dd class="font-mono text-[12px] [overflow-wrap:anywhere] selectable">{{ r.branch }} → {{ r.baseBranch }}</dd></div> }
         <div><dt class="text-faint">Liberdade</dt><dd>{{ r.permission === 'full' ? 'Total' : 'Segura' }}</dd></div>
+        @if (r.parentRunId) { <div><dt class="text-faint">Pedida por</dt><dd><a [routerLink]="[]" [queryParams]="{ run: r.parentRunId }" class="text-frost hover:underline">{{ runAgentName(r.parentRunId) }} (#{{ r.parentRunId }})</a></dd></div> }
+        @if (r.handoffFrom) { <div><dt class="text-faint">Assumiu de</dt><dd><a [routerLink]="[]" [queryParams]="{ run: r.handoffFrom }" class="text-frost hover:underline">#{{ r.handoffFrom }}</a></dd></div> }
         <div [title]="r.costUsd != null ? 'Equivalente em API: US$ ' + r.costUsd.toFixed(2) + '. Não é cobrado: sai da cota do seu plano.' : 'Sai da cota do seu plano do Claude.'">
           <dt class="text-faint">Consumo</dt>
           <dd class="tabular-nums">{{ r.sessionUsed != null ? '≈ ' + r.sessionUsed + '% da sessão' : (isActive(r.status) ? 'medindo…' : 'cota do plano') }}</dd></div>

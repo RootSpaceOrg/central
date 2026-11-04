@@ -40,6 +40,9 @@ function lastGood(): UsageLimitDto[] {
   try { return JSON.parse(getSetting('usage:last') ?? '[]'); } catch { return []; }
 }
 
+/** o último uso conhecido, sem consultar (a fila decide na hora; o freio atualiza a cada 30 s) */
+export const usageNow = () => cache?.limits ?? lastGood();
+
 export async function getUsage(force: boolean): Promise<UsageDto> {
   const nowMs = Date.now();
   const fresh = cache && nowMs - lastFetch < (force ? MIN_FORCE : TTL);

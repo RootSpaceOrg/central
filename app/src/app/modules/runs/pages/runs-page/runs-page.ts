@@ -8,6 +8,7 @@ import { RUN_STATUS_LABEL, Run, RunStatus, isActive } from '../../../../shared/s
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
+import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
@@ -19,7 +20,7 @@ const DOT: Record<RunStatus, string> = {
 
 @Component({
   selector: 'app-runs-page',
-  imports: [RouterLink, Icon, AgoPipe, MdLitePipe, ProjectAvatar],
+  imports: [RouterLink, Icon, AgoPipe, MdLitePipe, ProjectAvatar, AgentSelect],
   templateUrl: './runs-page.html',
   host: { class: 'grid h-full grid-cols-[360px_minmax(0,1fr)]' },
 })
@@ -75,6 +76,32 @@ export class RunsPage {
   }
 
   protected agent(id: number | null) { return id ? this.agents.byId().get(id) ?? null : null; }
+  /** quando a pausa acaba: "às 15:00" (ou dia e hora, se não for hoje) */
+  protected at(d: Date): string {
+    const today = d.toDateString() === new Date().toDateString();
+    return today ? `às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : d.toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  protected runAgentName(runId: number): string { return this.agent(this.runs.runs().find(x => x.id === runId)?.agentId ?? null)?.name ?? 'execução'; }
+
+  /** passar adiante: pausada, que falhou ou foi interrompida, e que ninguém assumiu ainda */
+  protected readonly handingOff = signal(false);
+  protected readonly handoffAgent = signal('');
+  protected readonly handoffNote = signal('');
+  protected canHandoff(r: Run): boolean {
+    return (!!r.paused || r.status === 'failed' || r.status === 'killed') && !this.runs.runs().some(x => x.handoffFrom === r.id);
+  }
+  protected async unpause(r: Run): Promise<void> {
+    this.chatError.set(null);
+    try { await this.runs.unpause(r.id); } catch (e) { this.chatError.set((e as Error).message); }
+  }
+  protected async handoff(r: Run): Promise<void> {
+    this.chatError.set(null);
+    try {
+      const n = await this.runs.handoff(r.id, Number(this.handoffAgent()) || null, this.handoffNote().trim() || null);
+      this.handingOff.set(false); this.handoffNote.set(''); this.handoffAgent.set('');
+      this.select(n);
+    } catch (e) { this.chatError.set((e as Error).message); }
+  }
 
   /** Continua a sessão desta execução como conversa, na tela Agentes. */
   protected async continueChat(r: Run): Promise<void> {

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
 import { DB_PATH, DEV_ROOT, all, get, run } from './db';
-import { dto as runDto, killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, watchTurns } from './agents';
+import { dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
@@ -136,6 +136,8 @@ function registerIpc(): void {
   handle('runs:list', slug => listRuns(slug));
   handle('runs:start', input => startRun(input, emitRun));
   handle('runs:kill', id => killRun(id, emitRun));
+  handle('runs:unpause', id => unpauseRun(id, emitRun));
+  handle('runs:handoff', (id, agentId, note) => handoffRun(id, agentId, note, emitRun));
   handle('runs:events', id => listEvents(id));
 
   handle('fs:list', dir => listDir(dir));
@@ -315,6 +317,8 @@ app.whenReady().then(() => {
   createWindow();
   if (!CAPTURE) setupTray(() => win, navigate);
   watchTurns(emitRun);
+  // freio da cota: pausa perto do limite e retoma quando renova (testes só com --dispatch)
+  if (!CAPTURE || process.argv.includes('--dispatch')) watchQuota(emitRun);
   watchRoutines({ ...emitRun, changed: () => { emitRun.changed(); routinesChanged(); } });
   // índice de código: um processo à parte indexa os projetos e acompanha as mudanças
   startContext(slug => contextChanged(slug));

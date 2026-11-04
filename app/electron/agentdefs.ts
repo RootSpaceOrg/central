@@ -50,6 +50,13 @@ Como o trabalho anda:
 - Toda execução termina com uma nota de entrega (list_deliveries): o que mudou, por quê, como testar. Quem mexeu em código entra
   na fila de revisão do Gustavo; "o que aconteceu desde X" é what_happened.
 - Agente que precisa de algo que só o Gustavo resolve (sessão AWS, login) para e espera; ele retoma pelo Início.
+- Cota do plano: cada agente tem prioridade (alta, normal, baixa; update_agent priority). A fila de todos os projetos anda por ela
+  e o freio fecha por faixa da sessão: baixa para em 60%, normal em 80%, alta em 90%; a semana também freia. Perto de 95% a Central
+  pausa quem está rodando e retoma sozinha, na mesma sessão do Claude, quando a cota renovar (list_agent_runs mostra as pausadas).
+- Agente avisando agente: notify_agent (ex.: suporte recebe bug urgente → monitoração → tech lead). Vai um resumo, não o texto de
+  fora; no máximo 3 saltos e sem repetir agente. take_over passa uma execução parada para outro agente continuar na mesma branch.
+- Produção: quem pode subir (e o quê, ex.: hotfix pequeno) está nas instruções ou memórias de cada agente. Sem permissão, crítico
+  ou na dúvida: decisão para o Gustavo.
 Regras:
 - Trabalho com mais de um passo: declare seu plano na lista de tarefas (TaskCreate) e vá marcando (TaskUpdate). O Gustavo acompanha
   no Escritório da Central para onde cada agente está indo. Ao começar cada etapa, chame set_status (fase + o que, curto; task_id se
@@ -84,6 +91,7 @@ function validate(i: Partial<NewAgentInput>): void {
   if (i.icon_kind && !ICONS.includes(i.icon_kind)) throw new Error('Tipo de ícone inválido.');
   if (i.room && !ROOMS.includes(i.room)) throw new Error('Sala inválida.');
   if ((i.look?.length ?? 0) > 500) throw new Error('Aparência inválida.');
+  if (i.priority && !['high', 'normal', 'low'].includes(i.priority)) throw new Error('Prioridade inválida.');
   if ((i.icon_value?.length ?? 0) > 560_000) throw new Error('Imagem grande demais (máximo 400 KB).');
 }
 
@@ -92,10 +100,10 @@ export function createAgent(i: NewAgentInput): AgentDto {
   if (!i.name?.trim()) throw new Error('Dê um nome ao agente.');
   let slug = slugify(i.name) || 'agente';
   for (let n = 2; get('select 1 from agents where slug = ?', slug); n++) slug = `${slugify(i.name)}-${n}`;
-  const { lastInsertRowid } = run(`insert into agents (slug, name, description, color, icon_kind, icon_value, project_slug, instructions, tools, permission, model, room, look)
-      values (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  const { lastInsertRowid } = run(`insert into agents (slug, name, description, color, icon_kind, icon_value, project_slug, instructions, tools, permission, model, room, look, priority)
+      values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     slug, i.name.trim(), i.description?.trim() || null, i.color ?? '#7FA2FF', i.icon_kind ?? 'letter', i.icon_value ?? null,
-    i.project_slug || null, i.instructions?.trim() ?? '', (i.tools ?? []).join(','), i.permission ?? 'edits', i.model ?? '', i.room ?? '', i.look ?? '');
+    i.project_slug || null, i.instructions?.trim() ?? '', (i.tools ?? []).join(','), i.permission ?? 'edits', i.model ?? '', i.room ?? '', i.look ?? '', i.priority ?? 'normal');
   return getAgent(Number(lastInsertRowid))!;
 }
 
@@ -103,7 +111,7 @@ export function updateAgent(id: number, patch: AgentPatch): void {
   const cur = getAgent(id);
   if (!cur) throw new Error('Agente não encontrado.');
   validate(patch);
-  const cols = ['name', 'description', 'color', 'icon_kind', 'icon_value', 'project_slug', 'instructions', 'permission', 'model', 'room', 'look'] as const;
+  const cols = ['name', 'description', 'color', 'icon_kind', 'icon_value', 'project_slug', 'instructions', 'permission', 'model', 'room', 'look', 'priority'] as const;
   const fields: [string, string | null][] = cols.filter(k => k in patch).map(k => [k, ((patch[k] as string | null | undefined) ?? null)]);
   if (cur.builtin) for (const k of ['name', 'project_slug']) { const i = fields.findIndex(f => f[0] === k); if (i >= 0) fields.splice(i, 1); }
   if ('tools' in patch) fields.push(['tools', (patch.tools ?? []).join(',')]);

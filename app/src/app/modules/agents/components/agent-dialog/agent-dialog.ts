@@ -47,6 +47,13 @@ export class AgentDialog {
   protected readonly tools = signal<string[]>([]);
   protected readonly toolInput = signal('');
   protected readonly permission = signal<RunPermission>('edits');
+  protected readonly priority = signal<'high' | 'normal' | 'low'>('normal');
+  protected readonly priorities = [
+    { value: 'high' as const, label: 'Alta', hint: 'Passa à frente na fila e segue trabalhando até 90% da sessão. Para quem atende urgência (suporte, incidentes).' },
+    { value: 'normal' as const, label: 'Normal', hint: 'Ordem de chegada; para de começar em 80% da sessão.' },
+    { value: 'low' as const, label: 'Baixa', hint: 'Só quando sobra cota: para de começar em 60% da sessão.' },
+  ];
+  protected readonly priorityHint = () => this.priorities.find(p => p.value === this.priority())!.hint;
   protected readonly model = signal('');
   protected readonly room = signal('');
   protected readonly rooms = ROOM_CHOICES;
@@ -101,7 +108,7 @@ export class AgentDialog {
       const saved = await this.agents.save(this.agent()?.id ?? null, {
         name: this.name().trim(), description: this.description().trim() || null, color: this.color(), iconKind: this.iconKind(),
         iconValue: this.iconValue(), projectSlug: this.projectSlug() || null, instructions: this.instructions(), tools: this.tools(),
-        permission: this.permission(), model: this.model(), room: this.room(), look: this.look(),
+        permission: this.permission(), priority: this.priority(), model: this.model(), room: this.room(), look: this.look(),
       });
       this.closed.emit(saved.id);
     } catch (err) {
@@ -127,7 +134,7 @@ export class AgentDialog {
   private fill(a: Agent | null): void {
     this.name.set(a?.name ?? ''); this.description.set(a?.description ?? ''); this.color.set(a?.color ?? '#7FA2FF');
     this.iconKind.set(a?.iconKind ?? 'emoji'); this.iconValue.set(a ? a.iconValue : '🤖'); this.projectSlug.set(a?.projectSlug ?? '');
-    this.instructions.set(a?.instructions ?? ''); this.tools.set(a?.tools ?? []); this.permission.set(a?.permission ?? 'edits');
+    this.instructions.set(a?.instructions ?? ''); this.tools.set(a?.tools ?? []); this.permission.set(a?.permission ?? 'edits'); this.priority.set(a?.priority ?? 'normal');
     this.model.set(a?.model ?? ''); this.room.set(a?.room ?? ''); this.look.set(a?.look ?? LOOK_DEFAULT); this.tab.set('papel'); this.toolInput.set(''); this.confirmDelete.set(false); this.error.set(null); this.busy.set(false);
   }
 }

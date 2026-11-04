@@ -376,6 +376,9 @@ for (const [table, column, type] of [
   ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['runs', 'board_id', 'integer'], ['board_cols', 'color', 'text'], ['tasks', 'color', 'text'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['ideas', 'triaged_at', 'text'], ['ideas', 'triage', 'text'],
+  ['agents', 'priority', "text not null default 'normal'"], ['runs', 'priority', 'integer not null default 1'],
+  ['runs', 'paused', 'text'], ['runs', 'resume', 'text'], ['runs', 'checkpoint', 'text'],
+  ['runs', 'parent_run_id', 'integer'], ['runs', 'depth', 'integer not null default 0'], ['runs', 'handoff_from', 'integer'],
   ['milestones', 'author', "text not null default 'gustavo'"], ['milestones', 'note', 'text'],
   ['projects', 'autopilot_brief', "text not null default ''"], ['projects', 'autopilot_mode', "text not null default 'tasks'"],
 ]) {
@@ -510,9 +513,16 @@ export const get = <T>(sql: string, ...params: SQLInputValue[]) => db.prepare(sq
 export const run = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).run(...params);
 export const now = () => new Date().toISOString();
 
-// Execuções que estavam rodando quando o app fechou não têm mais processo.
+// Execuções que estavam rodando quando o app fechou não têm mais processo. Com sessão do Claude, ficam pausadas e a
+// Central retoma sozinha na mesma sessão; sem sessão (nem chegou a começar), falham como antes. A fila continua na fila.
+for (const { id } of db.prepare(`select id from runs where status = 'running' and session_id is not null`).all() as { id: number }[]) {
+  db.prepare('insert into run_events (run_id, at, kind, text) values (?,?,?,?)').run(id, now(), 'system', 'A Central fechou no meio: pausada, volta sozinha na mesma sessão.');
+}
+run(`update runs set status = 'queued', resume = 'a Central fechou no meio da execução',
+       paused = json_object('reason', 'a Central fechou no meio da execução', 'until', null, 'at', ?)
+     where status = 'running' and session_id is not null`, now());
 run(`update runs set status = 'failed', result = coalesce(result, 'App fechado durante a execução.'), finished_at = ?
-     where status in ('queued','preparing','running')`, now());
+     where status in ('preparing','running')`, now());
 
 seed();
 

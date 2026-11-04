@@ -5,8 +5,8 @@
  * de 80% e não insiste numa tarefa que não terminou nas últimas 12 h (volta para A fazer e ficaria em laço).
  */
 import { all, get, run } from './db';
+import { PRIORITY_OF, Priority, canStart } from './governor';
 
-const QUOTA_CEILING = 80;
 const RETRY_AFTER_H = 12;
 
 /** "08-22" (ou "22-06", virando a noite); vazio = qualquer hora. */
@@ -29,24 +29,26 @@ let lastSkip = '';
 export const dispatchSkip = () => lastSkip;
 
 export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
-  const owners = all<{ slug: string; agent: number; parallel: number; hours: string; permission: 'edits' | 'full' }>(
-    `select p.slug, p.todo_agent_id agent, p.todo_parallel parallel, p.todo_hours hours, a.permission
+  const owners = all<{ slug: string; agent: number; parallel: number; hours: string; permission: 'edits' | 'full'; priority: string }>(
+    `select p.slug, p.todo_agent_id agent, p.todo_parallel parallel, p.todo_hours hours, a.permission, a.priority
      from projects p join agents a on a.id = p.todo_agent_id where p.status <> 'dead'
 `);
   // quadros: cada coluna com agente pega o que entra nela (o agente pode ser de qualquer projeto)
-  const stages = all<{ board: number; bname: string; key: string; label: string; agent: number; parallel: number; hours: string; instruction: string | null; permission: 'edits' | 'full'; next: string | null }>(
-    `select c.board_id board, bd.name bname, c.key, c.label, c.agent_id agent, c.parallel, c.hours, c.instruction, a.permission,
+  const stages = all<{ board: number; bname: string; key: string; label: string; agent: number; parallel: number; hours: string; instruction: string | null; permission: 'edits' | 'full'; next: string | null; priority: string }>(
+    `select c.board_id board, bd.name bname, c.key, c.label, c.agent_id agent, c.parallel, c.hours, c.instruction, a.permission, a.priority,
        coalesce(n.label, (select x.label from board_cols x where x.board_id = c.board_id and x.position > c.position order by x.position limit 1)) next
      from board_cols c join boards bd on bd.id = c.board_id join agents a on a.id = c.agent_id
      left join board_cols n on n.board_id = c.board_id and n.key = c.next_key`);
   if (!owners.length && !stages.length) return 0;
   const used = await deps.quota();
-  if (used !== null && used >= QUOTA_CEILING) { lastSkip = `cota da sessão em ${used}%`; return 0; }
-  lastSkip = '';
+  // freio por prioridade do agente: baixa para antes, alta vai até perto do limite (governor.ts)
+  const allowed = (p: string) => canStart((PRIORITY_OF[p] ?? 1) as Priority, { session: used, week: null, sessionReset: null, weekReset: null });
+  lastSkip = used !== null && ![...owners, ...stages].some(x => allowed(x.priority)) ? `cota da sessão em ${used}%` : '';
+  if (lastSkip) return 0;
   const now = deps.now?.() ?? new Date();
   let started = 0;
   for (const o of owners) {
-    if (!withinHours(o.hours, now)) continue;
+    if (!withinHours(o.hours, now) || !allowed(o.priority)) continue;
     const busy = get<{ n: number }>(`select count(*) n from runs where project_slug = ? and agent_id = ? and status in ('queued','preparing','running')`, o.slug, o.agent)!.n;
     const slots = Math.max(0, (o.parallel || 1) - busy);
     if (!slots) continue;
@@ -62,7 +64,7 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
     }
   }
   for (const s of stages) {
-    if (!withinHours(s.hours, now)) continue;
+    if (!withinHours(s.hours, now) || !allowed(s.priority)) continue;
     const busy = get<{ n: number }>(`select count(*) n from runs where board_id = ? and stage = ? and status in ('queued','preparing','running')`, s.board, s.key)!.n;
     const slots = Math.max(0, (s.parallel || 1) - busy);
     if (!slots) continue;
@@ -100,14 +102,15 @@ export async function dispatchTriage(deps: Pick<DispatchDeps, 'quota' | 'now'> &
   const mode = (deps.setting('triage:mode') ?? 'no_project') as TriageMode;
   if (mode === 'off') return 0;
   const agent = Number(deps.setting('triage:agent')) || get<{ id: number }>('select id from agents where builtin = 1')?.id;
-  if (!agent || !get('select 1 from agents where id = ?', agent)) return 0;
+  const priority = agent ? get<{ p: string }>('select priority p from agents where id = ?', agent)?.p : null;
+  if (!agent || !priority) return 0;
   if (get(`select 1 from runs where prompt like ? and status in ('queued','preparing','running')`, `${TRIAGE_HEAD}%`)) return 0;
   const ideas = all<{ id: number; title: string; body: string | null; project_slug: string | null }>(
     `select id, title, body, project_slug from ideas where status = 'new' and triaged_at is null and author = 'gustavo'
        ${mode === 'no_project' ? 'and project_slug is null' : ''} order by id limit ?`, TRIAGE_BATCH);
   if (!ideas.length) return 0;
   const used = await deps.quota();
-  if (used !== null && used >= QUOTA_CEILING) return 0;
+  if (!canStart((PRIORITY_OF[priority] ?? 1) as Priority, { session: used, week: null, sessionReset: null, weekReset: null })) return 0;
   const at = (deps.now?.() ?? new Date()).toISOString();
   for (const i of ideas) run('update ideas set triaged_at = ? where id = ?', at, i.id);
   deps.start({ agent_id: agent, prompt: triagePrompt(ideas) });
