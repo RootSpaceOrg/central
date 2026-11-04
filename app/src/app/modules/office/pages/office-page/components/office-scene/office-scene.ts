@@ -2,9 +2,9 @@ import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, i
 
 import { Icon } from '../../../../../../shared/ui/icon';
 import { ROOMS, RoomId, place } from '../../../../office-map';
-import type { OfficeWorld, Person } from '../../../../office-world';
+import type { OfficeWorld, Person, Talk } from '../../../../office-world';
 
-export type { Person };
+export type { Person, Talk };
 
 /**
  * O andar em 3D. O three.js só carrega com esta tela (import dinâmico) e é descartado quando ela sai.
@@ -51,6 +51,8 @@ export class OfficeScene {
   readonly milestones = input<string[]>([]);
   /** nomes dos agentes por sala (a legenda mostra quem senta onde) */
   readonly members = input<Partial<Record<RoomId, string[]>>>({});
+  /** agentes que avisaram outros há pouco (notify_agent): viram conversa no andar */
+  readonly talks = input<Talk[]>([]);
   readonly pick = output<string | null>();
   readonly open = output<string>();
 
@@ -90,6 +92,7 @@ export class OfficeScene {
   private sync(): void {
     const people = this.people(), placed = this.placed(), selected = this.selected(), milestones = this.milestones();
     this.world?.sync(people, placed, selected, milestones);
+    this.world?.talk(this.talks());
   }
 
   protected key(e: KeyboardEvent): void {

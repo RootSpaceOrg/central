@@ -63,7 +63,7 @@
   <!-- o andar -->
   @if (map3d()) {
     <div class="office-sky mt-6 overflow-hidden rounded-3xl border border-edge shadow-[0_24px_60px_-30px_rgb(0_0_0/0.9)]">
-      <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [members]="members()" [people]="people()" [selected]="selected()" [milestones]="nowColors()"
+      <app-office-scene class="h-[min(72vh,780px)] min-h-[420px] outline-none" [members]="members()" [people]="people()" [selected]="selected()" [milestones]="nowColors()" [talks]="talks()"
                         (pick)="pick($event)" (open)="openKey($event)" />
     </div>
   }

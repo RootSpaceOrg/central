@@ -13,7 +13,7 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { AvatarSource, ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { Icon } from '../../../../shared/ui/icon';
 import { ROOM, RoomId, inferRoom } from '../../office-map';
-import { OfficeScene, Person } from './components/office-scene/office-scene';
+import { OfficeScene, Person, Talk } from './components/office-scene/office-scene';
 
 /** Alguém trabalhando agora: uma mesa no escritório. */
 interface Worker {
@@ -189,6 +189,23 @@ export class OfficePage {
       out.push({ key: `a${a.id}`, room: 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', look: a.look, working: false, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
     }
     return out;
+  });
+
+  /**
+   * Avisos entre agentes de agora (até 45 s) (execução pedida por outra, notify_agent): no 3D quem recebe vai até quem
+   * avisou e os dois conversam. O texto é o começo da mensagem.
+   */
+  protected readonly talks = computed<Talk[]>(() => {
+    const since = Date.now() - 45_000, runs = this.runs.runs();
+    const keys = new Set(this.people().map(p => p.key));
+    return runs.filter(r => r.parentRunId && r.agentId && r.createdAt.getTime() > since).flatMap(r => {
+      const parent = runs.find(x => x.id === r.parentRunId);
+      if (!parent?.agentId || parent.agentId === r.agentId || !keys.has(`a${parent.agentId}`) || !keys.has(`a${r.agentId}`)) return [];
+      const urgent = r.prompt.startsWith('URGENTE');
+      const body = r.prompt.split('\n\n')[1] ?? r.prompt;
+      const text = body.replace(/\s+/g, ' ').trim();
+      return [{ id: r.id, from: `a${parent.agentId}`, to: `a${r.agentId}`, text: `${urgent ? '🚨 ' : ''}${text.length > 110 ? `${text.slice(0, 108)}…` : text}`, reply: urgent ? 'Já vou ver!' : 'Deixa comigo.' }];
+    });
   });
 
   protected readonly selected = signal<string | null>(null);

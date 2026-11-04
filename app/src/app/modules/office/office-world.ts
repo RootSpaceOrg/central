@@ -34,7 +34,11 @@ export interface Person {
   look?: AvatarLook;
 }
 
+/** Um agente avisou outro (notify_agent): quem recebe vai até a mesa de quem avisou, os dois conversam e cada um volta. */
+export interface Talk { id: number; from: string; to: string; text: string; reply: string }
+
 const WALL_H = 2.4;
+const TALK_S = 8; // segundos de conversa depois que chega
 const SPEED = 2.6; // ladrilhos por segundo
 const SUB_SPOTS: [number, number][] = [[1.25, -0.55], [1.35, 0.35], [-0.95, 0.2]]; // estagiários, em relação a quem está sentado
 const SUB_HAIR = ['#3b2a20', '#e2c072', '#7a3b2e'];
@@ -132,6 +136,14 @@ interface Actor {
   leaving: boolean;
   hidden: boolean;
   subs: { av: Avatar; label: CSS2DObject }[];
+  name: string;
+  /** numa conversa: não sai do lugar até acabar; next = para onde vai depois */
+  hold: number;
+  next: Placement | null;
+  /** o que fala no balão durante a conversa */
+  saying: string | null;
+  /** indo conversar: com quem, e o que cada um diz ao chegar */
+  visit: { with: string; text: string; reply: string } | null;
 }
 
 const angleTo = (from: number, to: number) => { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
@@ -350,12 +362,14 @@ export class OfficeWorld {
         a = this.spawn(p);
         if (this.first) a.pos.set(to.x, to.y);
         else { a.pos.set(ELEVATOR[0], ELEVATOR[1]); a.path = route(null, to).slice(1).map(([x, y]) => new Vector2(x, y)); }
+      } else if (a.hold) {
+        a.next = to; // conversando: vai depois
       } else if (a.leaving || !a.at || a.at.seat !== to.seat) {
         a.path = route(a.leaving ? null : a.at, to).slice(1).map(([x, y]) => new Vector2(x, y));
         a.leaving = false;
       }
       if (JSON.stringify(p.look ?? null) !== a.lookKey) this.restyle(a, p);
-      a.at = to;
+      if (!a.hold) a.at = to;
       a.working = p.working;
       a.hidden = !!p.hidden;
       a.av.root.visible = !a.hidden;
@@ -368,7 +382,7 @@ export class OfficeWorld {
     }
     // quem saiu vai embora pelo elevador
     for (const a of this.actors.values()) {
-      if (seen.has(a.key) || a.leaving) continue;
+      if (seen.has(a.key) || a.leaving || a.hold) continue;
       a.leaving = true;
       a.working = false;
       this.setSubs(a, 0);
@@ -408,6 +422,7 @@ export class OfficeWorld {
     const a: Actor = {
       key: p.key, av, label, el: { root, say, nick }, ring, pos: new Vector2(), path: [], at: null, working: p.working,
       facing: Math.random() * Math.PI * 2, lookKey: JSON.stringify(p.look ?? null), turnAt: 0, phase: Math.random() * 10, leaving: false, hidden: false, subs: [],
+      hold: 0, next: null, saying: null, visit: null, name: p.name,
     };
     this.actors.set(p.key, a);
     return a;
@@ -434,12 +449,58 @@ export class OfficeWorld {
     a.el.root.classList.toggle('idle', !p.working);
     const nick = `${p.name}${p.working ? '' : ' · zz'}`;
     if (a.el.nick.textContent !== nick) a.el.nick.textContent = nick;
+    if (a.saying) return;
     a.el.say.hidden = !p.working;
     if (p.working) {
       const line = `${p.doing ?? 'pensando…'}${p.plan ? `  ${p.plan[0]}/${p.plan[1]}` : ''}`;
       const html = `${p.tag ? `<small>${esc(p.tag)}</small>` : ''}${esc(line)}`;
       if (a.el.say.innerHTML !== html) a.el.say.innerHTML = html;
     }
+  }
+
+  /** já coreografadas (cada aviso conversa uma vez) */
+  private readonly talked = new Set<number>();
+
+  /** Começa as conversas novas: quem recebe anda até quem avisou (os dois ficam parados até acabar). */
+  talk(talks: Talk[]): void {
+    for (const t of talks) {
+      if (this.talked.has(t.id)) continue;
+      const from = this.actors.get(t.from), to = this.actors.get(t.to);
+      if (!from || !to || from === to || from.hidden || to.hidden || to.visit || from.hold) continue;
+      this.talked.add(t.id);
+      // ao lado de quem avisou, um passo à frente (sentado: ao lado da cadeira)
+      // onde quem avisou está (ou para onde está indo: o encontro é lá, não no meio do caminho)
+      const base = from.at ?? { room: 'copa' as RoomId, seat: '', x: from.pos.x, y: from.pos.y, seated: false };
+      const spot: Placement = { room: base.room, seat: `visit:${t.id}`, x: base.x + 1.5, y: base.y + (base.seated ? 0.2 : 0.9), seated: false };
+      from.hold = to.hold = Infinity;
+      to.next = to.at;
+      to.path = route(to.at, spot).slice(1).map(([x, y]) => new Vector2(x, y));
+      to.at = spot;
+      to.visit = { with: t.from, text: t.text, reply: t.reply };
+      this.say(to, null);
+      this.moving = performance.now() + 30_000;
+    }
+  }
+
+  private say(a: Actor, html: string | null): void {
+    a.saying = html;
+    a.el.say.hidden = !html;
+    a.el.say.classList.toggle('o3-talk', !!html);
+    if (html) a.el.say.innerHTML = html;
+  }
+
+  /** acabou a conversa: cada um volta para onde a tela manda agora */
+  private release(a: Actor): void {
+    a.hold = 0;
+    this.say(a, null);
+    const to = a.next ?? a.at;
+    if (to && a.at && to.seat !== a.at.seat) a.path = route(a.at, to).slice(1).map(([x, y]) => new Vector2(x, y));
+    if (to) a.at = to;
+    a.next = null;
+    // o balão de "fazendo" volta no próximo sync (o texto da conversa sai)
+    a.el.say.innerHTML = '';
+    a.el.say.hidden = true;
+    this.moving = performance.now() + 15_000;
   }
 
   private setSubs(a: Actor, n: number): void {
@@ -568,12 +629,31 @@ export class OfficeWorld {
       else a.pos.add(d.multiplyScalar(step / len));
       if (len > 0.01) a.facing = Math.atan2(target.x - a.pos.x, target.y - a.pos.y);
       if (!a.path.length && a.leaving) { this.remove(a); return; }
-    } else if (a.at?.seated) {
+    } else if (a.at?.seated && !a.saying) {
       a.facing = Math.PI; // de frente para o monitor
-    } else if (s > a.turnAt) {
+    } else if (s > a.turnAt && !a.hold) {
       // parado em pé: vira de vez em quando (conversa na copa)
       a.facing = Math.random() * Math.PI * 2;
       a.turnAt = s + 3 + Math.random() * 6;
+    }
+    // conversa: chegou perto de quem avisou → os dois se viram e falam; o tempo acaba → cada um volta
+    if (a.visit && !walking) {
+      const other = this.actors.get(a.visit.with);
+      if (other) {
+        const end = s + TALK_S;
+        a.hold = other.hold = end;
+        a.facing = Math.atan2(other.pos.x - a.pos.x, other.pos.y - a.pos.y);
+        if (!other.at?.seated) other.facing = Math.atan2(a.pos.x - other.pos.x, a.pos.y - other.pos.y);
+        this.say(other, `<small>para ${esc(a.name)}</small>${esc(a.visit.text)}`);
+        const reply = a.visit.reply;
+        setTimeout(() => { if (a.hold === end) this.say(a, esc(reply)); }, 2200);
+      } else a.hold = s;
+      a.visit = null;
+    }
+    if (a.hold && a.hold !== Infinity && s > a.hold) this.release(a);
+    if (a.saying && !walking && a.visit === null && a.hold && a.hold !== Infinity) {
+      const other = [...this.actors.values()].find(o => o !== a && o.hold === a.hold);
+      if (other && (!a.at?.seated || a.at.seat.startsWith('visit'))) a.facing = Math.atan2(other.pos.x - a.pos.x, other.pos.y - a.pos.y);
     }
     av.root.position.set(a.pos.x, 0, a.pos.y);
     av.root.rotation.y += angleTo(av.root.rotation.y, a.facing) * Math.min(1, dt * 8);

@@ -208,3 +208,7 @@
 }
 .o3-say small { display: block; font-size: 10.5px; font-weight: 700; opacity: .6; }
 .o3-say[hidden] { display: none; }
+.o3-say.o3-talk { background: #fffdf5; border-color: var(--c, #7FA2FF); box-shadow: 0 2px 0 var(--c, #7FA2FF), 0 0 14px color-mix(in srgb, var(--c, #7FA2FF) 45%, transparent); max-width: 240px; white-space: normal; text-align: left; animation: o3-pop .25s ease-out; }
+.o3-say.o3-talk small { color: #6b5a2a; opacity: 1; }
+@keyframes o3-pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .o3-say.o3-talk { animation: none; } }
