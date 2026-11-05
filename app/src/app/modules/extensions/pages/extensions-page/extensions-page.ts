@@ -96,7 +96,7 @@ export function formatPhone(n: string): string {
               }
 
               <h3 class="mt-7 font-semibold">Quem pode conversar com os agentes</h3>
-              <p class="mt-0.5 text-[13px] text-mute">Estas pessoas falam com o agente de cada número, com tudo o que ele pode fazer. Mensagens de outros números ficam registradas abaixo e não acionam agente.</p>
+              <p class="mt-0.5 text-[13px] text-mute">Estas pessoas falam com o agente de cada número, com tudo o que ele pode fazer. Os números conectados acima já contam (um pode falar com o outro). Mensagens de outros números ficam registradas abaixo e não acionam agente.</p>
               <div class="mt-3 flex flex-wrap gap-2">
                 @for (a of accounts(); track a.account) { @if (a.me) { <span class="rounded-full bg-frost/12 px-3 py-1 text-[13px] text-frost">Você mesmo ({{ fmt(a.me.phone) }})</span> } }
                 @for (o of owners(); track o) {

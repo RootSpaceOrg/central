@@ -30,8 +30,14 @@ if (existsSync(join(dataDir, 'auth'))) {
  * laço respondendo a si mesmo) e fila de envio (uma mensagem a cada ~1,2 s, com "digitando" antes: menos cara de robô).
  */
 const accounts = new Map();
+/**
+ * Tudo que a Central mandou, por qualquer número (id → quando). Mensagem com um desses ids nunca vira entrada: nem o eco
+ * no próprio número, nem a chegada em outro número conectado (senão dois agentes ficariam respondendo um ao outro).
+ */
+const sentIds = new Map();
+const markSent = id => { sentIds.set(id, Date.now()); for (const [k, at] of sentIds) if (Date.now() - at > 30 * 60_000) sentIds.delete(k); };
 const acc = id => {
-  if (!accounts.has(id)) accounts.set(id, { id, sock: null, state: { state: 'disconnected', me: null, code: null }, pairing: null, sent: new Set(), queue: Promise.resolve() });
+  if (!accounts.has(id)) accounts.set(id, { id, sock: null, state: { state: 'disconnected', me: null, code: null }, pairing: null, queue: Promise.resolve() });
   return accounts.get(id);
 };
 const authOf = id => join(accountsDir, id, 'auth');
@@ -74,7 +80,7 @@ async function connect(a) {
     for (const m of messages) {
       const jid = m.key.remoteJid ?? '';
       if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue; // grupos e status ficam de fora
-      if (a.sent.has(m.key.id)) { a.sent.delete(m.key.id); continue; }
+      if (sentIds.has(m.key.id)) continue;
       const text = m.message?.conversation ?? m.message?.extendedTextMessage?.text ?? m.message?.imageMessage?.caption ?? null;
       if (!text?.trim()) continue;
       const pn = jid.endsWith('@s.whatsapp.net') ? jid : m.key.remoteJidAlt ?? m.key.senderPn ?? null;
@@ -125,7 +131,7 @@ const calls = {
       await a.sock.sendPresenceUpdate('composing', jid).catch(() => {});
       await sleep(Math.min(600 + text.length * 15, 2500));
       const r = await a.sock.sendMessage(jid, { text: String(text) });
-      if (r?.key?.id) a.sent.add(r.key.id);
+      if (r?.key?.id) markSent(r.key.id);
       await a.sock.sendPresenceUpdate('paused', jid).catch(() => {});
       await sleep(1200);
       return { id: r?.key?.id ?? null, jid };

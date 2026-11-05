@@ -91,7 +91,9 @@ function touch(phone: string, m: WaMessage | null, dir: 'in' | 'out'): void {
 export function inbound(m: WaMessage): void {
   // o que você mandou do celular para outras pessoas não é conversa com a Central
   if (m.fromMe && !m.self) return;
-  const owner = m.self || (!!m.phone && owners().includes(m.phone));
+  // da casa: os donos cadastrados e os números conectados na própria Central (falar de um para o outro funciona)
+  const house = [...owners(), ...opened().map(a => a.me?.phone).filter((p): p is string => !!p)];
+  const owner = m.self || (!!m.phone && house.includes(m.phone));
   if (!owner) { if (m.phone) touch(m.phone, m, 'in'); deps.changed(); return; }
   talk(m.account ?? 'main', m.self ? 'self' : m.phone!, m.chat, m.text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`);
 }
