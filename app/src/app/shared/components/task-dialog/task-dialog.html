@@ -17,19 +17,14 @@
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Projeto</span>
           <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" />
         </div>
-        <label class="block">
+        <div>
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Repositório</span>
-          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
-            <option value="" [selected]="!(repoPath())">Decidir depois</option>
-            @for (r of repos(); track r.path) { <option [value]="r.path" [selected]="(r.path) === (repoPath())">{{ r.name }}</option> }
-          </select>
-        </label>
-        <label class="block">
+          <app-select [options]="repoOptions()" [value]="repoPath()" (valueChange)="repoPath.set($event)" label="Repositório" />
+        </div>
+        <div>
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Coluna</span>
-          <select class="field" [value]="column()" (change)="column.set($any($event.target).value)">
-            @for (c of columns; track c.id) { <option [value]="c.id" [selected]="(c.id) === (column())">{{ c.label }}</option> }
-          </select>
-        </label>
+          <app-select [options]="columns" [value]="column()" (valueChange)="column.set($any($event))" label="Coluna" />
+        </div>
         <div>
           <span class="mb-1.5 block text-[13px] font-semibold text-mute">Prioridade</span>
           <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Prioridade">
@@ -69,18 +64,15 @@
                 <div class="flex items-center gap-2 rounded-xl border border-edge bg-night px-3 py-1.5 text-[13px]">
                   <app-icon name="workflow" [size]="13" class="text-[#C6A6FF]" />
                   <a [routerLink]="['/quadros', b.id]" (click)="close()" class="min-w-0 flex-1 truncate hover:underline">{{ b.name }}</a>
-                  <select class="field !w-44 !py-1 text-[12.5px]" [attr.aria-label]="'Coluna em ' + b.name" (change)="boards.place(t.id, b.id, $any($event.target).value)">
-                    @for (c of b.columns; track c.key) { <option [value]="c.key" [selected]="p.stage === c.key">{{ c.label }}</option> }
-                  </select>
+                  <app-select class="w-44" [compact]="true" [options]="stageOptions().get(b.id) ?? []" [value]="p.stage" (valueChange)="boards.place(t.id, b.id, $event)"
+                              [label]="'Coluna em ' + b.name" [minWidth]="200" />
                   <button type="button" class="rounded p-1 text-faint hover:text-no" (click)="boards.unplace(t.id, b.id)" title="Tirar deste quadro" aria-label="Tirar deste quadro"><app-icon name="close" [size]="13" /></button>
                 </div>
               }
             }
             @if (otherBoards().length) {
-              <select class="field !py-1.5 text-[13px]" aria-label="Pôr em um quadro" (change)="addToBoard(t.id, $any($event.target).value); $any($event.target).value = ''">
-                <option value="">+ Pôr num quadro…</option>
-                @for (b of otherBoards(); track b.id) { <option [value]="b.id">{{ b.name }}</option> }
-              </select>
+              <app-select [compact]="true" [action]="true" [options]="otherBoardOptions()" (picked)="addToBoard(t.id, $event)"
+                          placeholder="Pôr num quadro…" label="Pôr em um quadro" />
             }
           </div>
         </div>

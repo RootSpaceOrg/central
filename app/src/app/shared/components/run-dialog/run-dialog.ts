@@ -10,12 +10,13 @@ import { ProjectsService } from '../../services/projects/projects.service';
 import { RunPermission, RunSize, SIZES } from '../../services/runs/runs.model';
 import { RunsService } from '../../services/runs/runs.service';
 import { UsageService, untilReset } from '../../services/usage/usage.service';
-import { AgoPipe } from '../../ui/ago.pipe';
+import { ago } from '../../ui/ago.pipe';
 import { Icon } from '../../ui/icon';
+import { Select, SelectOption } from '../../ui/select';
 
 @Component({
   selector: 'app-run-dialog',
-  imports: [Icon, AgoPipe, AgentSelect, ProjectSelect],
+  imports: [Icon, AgentSelect, ProjectSelect, Select],
   templateUrl: './run-dialog.html',
 })
 export class RunDialog {
@@ -35,6 +36,8 @@ export class RunDialog {
   protected readonly repos = signal<Repo[]>([]);
   /** '' = projeto inteiro */
   protected readonly repoPath = signal('');
+  protected readonly repoOptions = computed<SelectOption[]>(() => [{ value: '', label: 'Projeto inteiro (sem worktree)' },
+    ...this.repos().map(r => ({ value: r.path, label: `Repositório ${r.name}${r.lastCommitAt ? ' · ' + ago(r.lastCommitAt) : ''}` }))]);
   protected readonly prompt = signal('');
   protected readonly size = signal<RunSize>('medium');
   protected readonly permission = signal<RunPermission>('edits');

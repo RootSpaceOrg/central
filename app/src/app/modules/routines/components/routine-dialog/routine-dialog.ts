@@ -4,6 +4,7 @@ import { Repo } from '../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { RunPermission, RunSize, SIZES } from '../../../../shared/services/runs/runs.model';
 import { Icon } from '../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../shared/ui/select';
 import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -14,7 +15,7 @@ export type RoutineDialogState = { routine: Routine | null; draft?: Partial<Rout
 
 @Component({
   selector: 'app-routine-dialog',
-  imports: [Icon, AgentSelect, ProjectSelect],
+  imports: [Icon, AgentSelect, ProjectSelect, Select],
   templateUrl: './routine-dialog.html',
 })
 export class RoutineDialog {
@@ -35,6 +36,8 @@ export class RoutineDialog {
   protected readonly projectSlug = signal('');
   protected readonly repos = signal<Repo[]>([]);
   protected readonly repoPath = signal<string>('');
+  protected readonly repoOptions = computed<SelectOption[]>(() =>
+    [{ value: '', label: 'Projeto inteiro (sem worktree)' }, ...this.repos().map(r => ({ value: r.path, label: `Repositório ${r.name}` }))]);
   protected readonly prompt = signal('');
   protected readonly permission = signal<RunPermission>('edits');
   protected readonly size = signal<RunSize>('small');

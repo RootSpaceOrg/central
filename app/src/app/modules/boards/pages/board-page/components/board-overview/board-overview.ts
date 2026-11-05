@@ -2,12 +2,11 @@ import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } fro
 import { Component, ElementRef, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { TaskColumn } from '../../../../../../shared/contract';
+import { AgentSelect } from '../../../../../../shared/components/pickers/agent-select';
 import { ProjectSelect } from '../../../../../../shared/components/pickers/project-select';
-import { AgentsService } from '../../../../../../shared/services/agents/agents.service';
 import { Board, BoardColumn, BoardService, COLORS, KIND_LABEL, blankColumn } from '../../../../../../shared/services/board/board.service';
-import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../../../shared/ui/select';
 
 /**
  * Visão geral do quadro: nome, projeto, descrição e todas as colunas numa tabela (uma linha cada: nome, agente, depois,
@@ -15,7 +14,7 @@ import { Icon } from '../../../../../../shared/ui/icon';
  */
 @Component({
   selector: 'app-board-overview',
-  imports: [Icon, ProjectSelect, ProjectAvatar, CdkDropList, CdkDrag, CdkDragHandle],
+  imports: [Icon, ProjectSelect, AgentSelect, Select, CdkDropList, CdkDrag, CdkDragHandle],
   template: `
     <dialog #dlg (close)="closed.emit()" aria-labelledby="bo-title" class="m-auto w-[min(860px,94vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
       <form class="flex h-[min(720px,92vh)] flex-col" (submit)="save($event)">
@@ -45,21 +44,11 @@ import { Icon } from '../../../../../../shared/ui/icon';
                   <div class="grid grid-cols-[28px_1.3fr_1.2fr_1.1fr_1fr_56px] items-center gap-2 px-3 py-2">
                     <span cdkDragHandle class="cursor-grab text-faint" title="Arraste para reordenar"><app-icon name="grip" [size]="14" /></span>
                     <input class="field !py-1 text-[13px] font-semibold" [value]="c.label" (input)="set(i, { label: $any($event.target).value })" aria-label="Nome da coluna">
-                    <span class="flex min-w-0 items-center gap-1.5">
-                      @if (agentOf(c.agentId); as a) { <app-project-avatar [project]="a" [size]="22" class="shrink-0" /> }
-                      <select class="field min-w-0 !py-1 text-[12.5px]" aria-label="Agente" (change)="set(i, { agentId: $any($event.target).value ? +$any($event.target).value : null })">
-                        <option value="" [selected]="!c.agentId">—</option>
-                        @for (a of agentList(); track a.id) { <option [value]="a.id" [selected]="c.agentId === a.id">{{ a.name }}</option> }
-                      </select>
-                    </span>
-                    <select class="field !py-1 text-[12.5px]" aria-label="Depois vai para" [disabled]="!c.agentId" (change)="set(i, { nextKey: $any($event.target).value || null })">
-                      <option value="" [selected]="!c.nextKey">a próxima</option>
-                      @for (o of cols(); track $index; let j = $index) { @if (j !== i && o.key) { <option [value]="o.key" [selected]="c.nextKey === o.key">{{ o.label }}</option> } }
-                    </select>
-                    <select class="field !py-1 text-[12.5px]" aria-label="No backlog principal" (change)="set(i, { kind: $any($event.target).value || null })">
-                      <option value="" [selected]="!c.kind">não muda</option>
-                      @for (k of kinds; track k.id) { <option [value]="k.id" [selected]="c.kind === k.id">{{ k.label }}</option> }
-                    </select>
+                    <app-agent-select class="min-w-0" [compact]="true" [hideCentral]="true" [value]="c.agentId ? '' + c.agentId : ''" noneLabel="—"
+                                      (valueChange)="set(i, { agentId: $event ? +$event : null })" />
+                    <app-select class="min-w-0" [compact]="true" [options]="nextOptions()[i]" [value]="c.nextKey ?? ''" [disabled]="!c.agentId"
+                                (valueChange)="set(i, { nextKey: $event || null })" label="Depois vai para" />
+                    <app-select class="min-w-0" [compact]="true" [options]="kinds" [value]="c.kind ?? ''" (valueChange)="set(i, { kind: $any($event) || null })" label="No backlog principal" />
                     <span class="flex justify-end gap-0.5">
                       <button type="button" class="rounded p-1 text-faint hover:text-text" (click)="toggle(i)" [attr.aria-expanded]="open().has(i)" title="Detalhes" aria-label="Detalhes">
                         <app-icon name="chevron" [size]="14" [class.rotate-90]="open().has(i)" /></button>
@@ -79,9 +68,9 @@ import { Icon } from '../../../../../../shared/ui/icon';
                       </div>
                       @if (c.agentId) {
                         <textarea class="field h-16 resize-y !py-1 text-[12.5px]" placeholder="O que o agente faz nesta etapa" [value]="c.instruction ?? ''" (input)="set(i, { instruction: $any($event.target).value || null })" aria-label="Instrução"></textarea>
-                        <label class="flex items-center gap-1.5 self-start text-mute">até
-                          <select class="field !w-14 !py-1 text-[12.5px]" (change)="set(i, { parallel: +$any($event.target).value })" aria-label="Quantas por vez">
-                            @for (n of [1, 2, 3, 4]; track n) { <option [value]="n" [selected]="c.parallel === n">{{ n }}</option> } </select> por vez</label>
+                        <span class="flex items-center gap-1.5 self-start text-mute">até
+                          <app-select class="w-16" [compact]="true" [options]="parallels" [value]="'' + c.parallel" (valueChange)="set(i, { parallel: +$event })"
+                                      label="Quantas por vez" [minWidth]="80" /> por vez</span>
                         <input class="field !w-28 self-start !py-1 text-center text-[12.5px]" placeholder="qualquer hora" [value]="c.hours" (input)="set(i, { hours: $any($event.target).value.trim() })" aria-label="Horário (08-22)">
                       }
                     </div>
@@ -112,17 +101,15 @@ import { Icon } from '../../../../../../shared/ui/icon';
 })
 export class BoardOverview {
   private readonly boards = inject(BoardService);
-  private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
   private readonly dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
 
   readonly board = input.required<Board>();
   readonly closed = output<void>();
 
-  protected readonly kinds = Object.entries(KIND_LABEL).map(([id, label]) => ({ id: id as TaskColumn, label }));
-  protected readonly agentList = computed(() => this.agents.agents().filter(a => !a.builtin));
+  protected readonly kinds: SelectOption[] = [{ value: '', label: 'não muda' }, ...Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))];
+  protected readonly parallels: SelectOption[] = [1, 2, 3, 4].map(n => ({ value: String(n), label: String(n) }));
   protected readonly colors = COLORS;
-  protected agentOf(id: number | null) { return id ? this.agents.byId().get(id) ?? null : null; }
   protected readonly name = signal('');
   protected readonly description = signal('');
   protected readonly project = signal('');
@@ -131,6 +118,9 @@ export class BoardOverview {
   protected readonly busy = signal(false);
   protected readonly confirmDelete = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** "depois vai para" de cada linha: a próxima ou outra coluna (com chave) */
+  protected readonly nextOptions = computed(() => this.cols().map((_, i) =>
+    [{ value: '', label: 'a próxima' }, ...this.cols().filter((o, j) => j !== i && o.key).map(o => ({ value: o.key, label: o.label }))]));
 
   constructor() {
     afterNextRender(() => {

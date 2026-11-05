@@ -167,9 +167,7 @@
                       <span class="text-later">◆ {{ factLabel[f.kind] }}</span> {{ f.text }}</p>
                   }
                   <div class="flex gap-1.5">
-                    <select class="field !w-28 !py-1 text-[12px]" aria-label="Tipo do fato" [value]="noteKind()" (change)="noteKind.set($any($event.target).value)">
-                      @for (k of kinds; track k) { <option [value]="k" [selected]="noteKind() === k">{{ factLabel[k] }}</option> }
-                    </select>
+                    <app-select class="w-28 shrink-0" [compact]="true" [options]="kinds" [value]="noteKind()" (valueChange)="noteKind.set($any($event))" label="Tipo do fato" [minWidth]="160" />
                     <input class="field flex-1 !py-1 text-[12.5px]" placeholder="Lembrar algo sobre isto…" aria-label="Novo fato" [value]="noteText()"
                            (input)="noteText.set($any($event.target).value)" (keydown.enter)="remember([d.key])" />
                   </div>
@@ -208,9 +206,7 @@
             <button type="button" class="btn btn-sm shrink-0" (click)="importMemory()"><img src="file-icons/claude.svg" alt="" class="size-3.5" />Importar memória do Claude</button>
           </div>
           <div class="mt-4 flex gap-2">
-            <select class="field !w-36" aria-label="Tipo do fato" [value]="noteKind()" (change)="noteKind.set($any($event.target).value)">
-              @for (k of kinds; track k) { <option [value]="k" [selected]="noteKind() === k">{{ factLabel[k] }}</option> }
-            </select>
+            <app-select class="w-36 shrink-0" [options]="kinds" [value]="noteKind()" (valueChange)="noteKind.set($any($event))" label="Tipo do fato" [minWidth]="160" />
             <input class="field flex-1" placeholder="Ex.: Lambdas usam o Logger do powertools; nada de print." aria-label="Novo fato" [value]="noteText()"
                    (input)="noteText.set($any($event.target).value)" (keydown.enter)="remember([])" />
             <button type="button" class="btn btn-primary" (click)="remember([])" [disabled]="!noteText().trim()">Guardar</button>
@@ -254,9 +250,7 @@
         <p class="mt-1 text-[13.5px] text-mute">A Central junta o mapa do código (ranqueado para a tarefa) e a memória do projeto no prompt de cada agente e sessão. Escreva uma tarefa para ver o recorte.</p>
         <div class="mt-4 flex gap-2">
           <input class="field flex-1" placeholder="Ex.: corrigir o timeout do Instagram no publicador" aria-label="Tarefa de exemplo" [value]="focusText()" (input)="focusText.set($any($event.target).value)" />
-          <select class="field !w-40" aria-label="Orçamento" [value]="budget()" (change)="budget.set(+$any($event.target).value)">
-            @for (b of [1000, 1500, 2000, 4000, 8000]; track b) { <option [value]="b" [selected]="budget() === b">{{ b }} tokens</option> }
-          </select>
+          <app-select class="w-40 shrink-0" [options]="budgets" [value]="'' + budget()" (valueChange)="budget.set(+$event)" label="Orçamento" [minWidth]="160" />
         </div>
         <p class="mt-2 text-[12px] text-faint">≈ {{ blockTokens() }} tokens. Depois do primeiro turno, este bloco vai para o cache do Claude e custa cerca de 10%.</p>
         <pre class="mt-3 min-h-0 flex-1 overflow-auto rounded-2xl border border-edge bg-night p-4 font-mono text-[11.5px] leading-relaxed text-mute selectable">{{ block() || 'Índice vazio para este projeto.' }}</pre>

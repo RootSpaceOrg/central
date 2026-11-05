@@ -10,11 +10,12 @@ import { TasksService } from '../../services/tasks/tasks.service';
 import { TurnsService } from '../../services/turns/turns.service';
 import { UsageService, untilReset } from '../../services/usage/usage.service';
 import { Icon } from '../../ui/icon';
+import { Select, SelectOption } from '../../ui/select';
 
 /** "Deixar evoluindo": escolhe tarefas, até que horas e quanto pode gastar. */
 @Component({
   selector: 'app-turn-dialog',
-  imports: [Icon, ProjectSelect],
+  imports: [Icon, ProjectSelect, Select],
   templateUrl: './turn-dialog.html',
 })
 export class TurnDialog {
@@ -29,6 +30,7 @@ export class TurnDialog {
   protected readonly state = this.dialogs.turn;
   protected readonly projectSlug = signal('');
   protected readonly repos = signal<Repo[]>([]);
+  protected readonly repoOptions = computed<SelectOption[]>(() => this.repos().map(r => ({ value: r.path, label: r.name })));
   /** tarefa → repositório escolhido; ausente = não vai no turno */
   protected readonly picked = signal<Record<number, string>>({});
   protected readonly until = signal('07:00');

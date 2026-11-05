@@ -14,6 +14,7 @@ import { ProposalsService } from '../../../../shared/services/proposals/proposal
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
+import { Select, SelectOption } from '../../../../shared/ui/select';
 import { BoardOverview } from './components/board-overview/board-overview';
 
 import { AskService } from '../../../../shared/services/ask/ask.service';
@@ -24,7 +25,7 @@ import { AskService } from '../../../../shared/services/ask/ask.service';
  */
 @Component({
   selector: 'app-board-page',
-  imports: [RouterLink, Icon, ProjectAvatar, AgentSelect, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, BoardOverview],
+  imports: [RouterLink, Icon, ProjectAvatar, AgentSelect, CdkDropList, CdkDrag, CdkDragHandle, CdkDragPlaceholder, BoardOverview, Select],
   templateUrl: './board-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -71,6 +72,14 @@ export class BoardPage {
     const slug = this.board()?.projectSlug;
     return this.tasks.tasks().filter(t => !here.has(t.id) && t.column !== 'done').sort((a, b) => Number(b.projectSlug === slug) - Number(a.projectSlug === slug)).slice(0, 80);
   });
+  protected readonly outsideOptions = computed<SelectOption[]>(() =>
+    this.outside().map(t => ({ value: String(t.id), label: `${this.projectOf(t.projectSlug)?.name ?? 'sem projeto'} · ${t.title}` })));
+  /** "depois vai para" de cada coluna: a próxima ou qualquer outra */
+  protected readonly nextOptions = computed(() => {
+    const cols = this.board()?.columns ?? [];
+    return new Map(cols.map(c => [c.key, [{ value: '', label: 'a próxima coluna' }, ...cols.filter(o => o.key !== c.key).map(o => ({ value: o.key, label: o.label }))]]));
+  });
+  protected readonly parallels: SelectOption[] = [1, 2, 3, 4].map(n => ({ value: String(n), label: String(n) }));
 
   protected agentOf(id: number | null) { return id ? this.agents.byId().get(id) ?? null : null; }
 

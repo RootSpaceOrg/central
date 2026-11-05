@@ -1,6 +1,6 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 
-import { Prefs } from '../../contract';
+import { GovLimits, Prefs } from '../../contract';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { errorMessage } from '../../services/ipc/ipc.service';
 import { PrefsApiService } from '../../services/prefs/prefs-api.service';
@@ -9,6 +9,15 @@ import { UpdateService } from '../../services/update/update.service';
 import { UsageService } from '../../services/usage/usage.service';
 import { Icon, IconName } from '../../ui/icon';
 import { CHAT_WIDTHS, ChatPrefsService, FONT_MAX, FONT_MIN } from '../../services/chat-prefs/chat-prefs.service';
+
+/** Presets do freio. Com 100%, só para quando a cota acaba de fato. */
+const PRESETS: { id: string; label: string; hint: string; limits: GovLimits }[] = [
+  { id: 'off', label: 'Sem freio', hint: 'Agentes trabalham até a cota acabar. Sem folga para você.', limits: { session: [100, 100, 100], week: [100, 100, 100], pause: { session: 100, week: 100 } } },
+  { id: 'push', label: 'Acelerado', hint: 'Usa quase tudo; sobra um pouco para você.', limits: { session: [95, 90, 80], week: [98, 95, 90], pause: { session: 98, week: 99 } } },
+  { id: 'default', label: 'Equilibrado', hint: 'O padrão: baixa prioridade para cedo, alta vai longe.', limits: { session: [90, 80, 60], week: [95, 90, 80], pause: { session: 95, week: 98 } } },
+  { id: 'saver', label: 'Econômico', hint: 'Deixa boa parte da cota para você usar fora da Central.', limits: { session: [75, 60, 40], week: [85, 75, 60], pause: { session: 90, week: 95 } } },
+  { id: 'urgent', label: 'Só o urgente', hint: 'Só agentes de prioridade alta começam trabalho.', limits: { session: [85, 0, 0], week: [90, 0, 0], pause: { session: 95, week: 98 } } },
+];
 
 type Tab = 'general' | 'chat' | 'quota' | 'about';
 const TABS: { id: Tab; label: string; icon: IconName; hint: string }[] = [
@@ -100,10 +109,24 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
       </section>
               }
               @case ('quota') {
-<section class="rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-gov">
+                <!-- presets: um clique ajusta a tabela toda -->
+                <div class="grid grid-cols-2 gap-2 lg:grid-cols-3" role="radiogroup" aria-label="Preset do freio">
+                  @for (p of presets; track p.id) {
+                    <button type="button" role="radio" [attr.aria-checked]="preset() === p.id" (click)="applyPreset(p.limits)"
+                            class="rounded-2xl border-2 px-4 py-3 text-left transition-colors" [class]="preset() === p.id ? 'border-frost bg-frost/10' : 'border-edge hover:border-faint'">
+                      <span class="flex items-center gap-2 font-semibold">{{ p.label }}@if (preset() === p.id) { <app-icon name="check" [size]="14" class="ml-auto text-frost" /> }</span>
+                      <span class="mt-0.5 block text-[12.5px] leading-snug text-mute">{{ p.hint }}</span>
+                    </button>
+                  }
+                  @if (!preset()) {
+                    <div class="rounded-2xl border-2 border-frost bg-frost/10 px-4 py-3" role="radio" aria-checked="true">
+                      <span class="block font-semibold">Personalizado</span><span class="mt-0.5 block text-[12.5px] text-mute">Ajustado à mão na tabela abaixo.</span></div>
+                  }
+                </div>
+                @if (error()) { <p role="alert" class="mt-3 text-[13px] text-no">{{ error() }}</p> }
+<section class="mt-5 rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-gov">
         <div class="flex items-baseline justify-between">
-          <h3 id="st-gov" class="font-semibold">Freio da cota do Claude</h3>
-          <button type="button" class="text-[12px] text-faint hover:text-text" (click)="resetLimits()">Padrão</button>
+          <h3 id="st-gov" class="font-semibold">Ajuste fino</h3>
         </div>
         <p class="text-[13px] text-mute">Até quanto da cota cada prioridade de agente ainda <b class="text-text">começa</b> trabalho novo. A prioridade é de cada agente (aba Trabalho).</p>
         @let l = usage.limits();
@@ -164,9 +187,10 @@ export class SettingsDialog {
     l.pause[kind] = Number(v);
     this.usage.saveLimits(l).catch(e => this.error.set(errorMessage(e)));
   }
-  protected resetLimits(): void {
-    this.usage.saveLimits({ session: [90, 80, 60], week: [95, 90, 80], pause: { session: 95, week: 98 } }).catch(e => this.error.set(errorMessage(e)));
-  }
+  protected readonly presets = PRESETS;
+  /** preset que bate com os limites atuais (null = personalizado) */
+  protected readonly preset = computed(() => PRESETS.find(p => JSON.stringify(p.limits) === JSON.stringify(this.usage.limits()))?.id ?? null);
+  protected applyPreset(l: GovLimits): void { this.usage.saveLimits(structuredClone(l)).catch(e => this.error.set(errorMessage(e))); }
   protected readonly chat = inject(ChatPrefsService);
   protected readonly widths = CHAT_WIDTHS;
   protected readonly fontMin = FONT_MIN;

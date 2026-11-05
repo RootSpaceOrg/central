@@ -116,13 +116,11 @@
               <span class="mt-1.5 block text-[12.5px] text-mute">Servidores MCP (Sentry, Supabase…) precisam estar configurados e autorizados no seu Claude Code.</span>
             </div>
 
-            <label class="block">
+            <div>
               <span class="mb-1.5 block font-semibold">Sala no Escritório</span>
-              <select class="field w-full" [value]="room()" (change)="room.set($any($event.target).value)">
-                @for (r of rooms; track r.id) { <option [value]="r.id" [selected]="room() === r.id">{{ r.label }}</option> }
-              </select>
+              <app-select [options]="rooms" [value]="room()" (valueChange)="room.set($event)" label="Sala no Escritório" />
               <span class="mt-1 block text-[12.5px] text-mute">Onde ele senta quando está trabalhando. Automática deduz pelo papel.</span>
-            </label>
+            </div>
           </div>
         }
 

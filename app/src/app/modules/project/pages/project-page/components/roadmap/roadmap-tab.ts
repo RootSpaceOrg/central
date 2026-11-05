@@ -8,6 +8,7 @@ import { Project } from '../../../../../../shared/services/projects/projects.mod
 import { HORIZONS, MilestoneEvent, RoadmapService } from '../../../../../../shared/services/roadmap/roadmap.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon, IconName } from '../../../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../../../shared/ui/select';
 import { RoadmapPanel } from './roadmap-panel';
 
 const KINDS = [
@@ -44,7 +45,7 @@ No fim, um resumo curto: marcos criados, movidos e concluídos, ideias sugeridas
  */
 @Component({
   selector: 'app-roadmap-tab',
-  imports: [RoadmapPanel, Icon, AgoPipe],
+  imports: [RoadmapPanel, Icon, AgoPipe, Select],
   host: { class: 'block h-full overflow-y-auto' },
   template: `
     @let p = project();
@@ -65,10 +66,8 @@ No fim, um resumo curto: marcos criados, movidos e concluídos, ideias sugeridas
                   <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold" [class]="i.status === 'new' ? 'bg-later/15 text-later' : 'bg-yes/15 text-yes'">{{ i.status === 'new' ? 'para triar' : 'aprovada' }}</span>
                   <span class="min-w-0 flex-1 truncate text-[13.5px]" [title]="i.body ?? i.title">{{ i.title }}</span>
                   @if (i.author !== 'gustavo') { <span class="shrink-0 text-[11.5px] text-faint">de {{ i.author }}</span> }
-                  <select class="field shrink-0 !w-52 !py-1 text-[12.5px]" [attr.aria-label]="'Ligar ' + i.title + ' a um marco'" (change)="link(i.id, $any($event.target).value)">
-                    <option value="" selected>Ligar a um marco…</option>
-                    @for (m of open(); track m.id) { <option [value]="m.id">{{ horizonLabel(m.horizon) }} · {{ m.title }}</option> }
-                  </select>
+                  <app-select class="w-52 shrink-0" [compact]="true" [action]="true" [options]="openOptions()" (picked)="link(i.id, $event)"
+                              placeholder="Ligar a um marco…" [label]="'Ligar ' + i.title + ' a um marco'" [minWidth]="300" />
                 </li>
               }
             </ul>
@@ -158,6 +157,7 @@ export class RoadmapTab {
 
   protected readonly open = computed(() => this.roadmap.of(this.project().slug).filter(m => m.horizon !== 'done')
     .sort((a, b) => HORIZONS.findIndex(h => h.id === a.horizon) - HORIZONS.findIndex(h => h.id === b.horizon) || a.position - b.position));
+  protected readonly openOptions = computed<SelectOption[]>(() => this.open().map(m => ({ value: String(m.id), label: `${this.horizonLabel(m.horizon)} · ${m.title}` })));
   protected readonly loose = computed(() => this.ideas.ideas().filter(i =>
     i.projectSlug === this.project().slug && !i.milestoneId && (i.status === 'new' || i.status === 'approved')));
 

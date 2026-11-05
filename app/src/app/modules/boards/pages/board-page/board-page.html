@@ -11,10 +11,8 @@
       </p>
     </div>
     <span class="flex-1"></span>
-    <select class="field !w-64 !py-1.5 text-[13px]" aria-label="Trazer uma tarefa existente para este quadro" (change)="bring($any($event.target).value); $any($event.target).value = ''">
-      <option value="">Trazer tarefa existente…</option>
-      @for (t of outside(); track t.id) { <option [value]="t.id">{{ projectOf(t.projectSlug)?.name ?? 'sem projeto' }} · {{ t.title }}</option> }
-    </select>
+    <app-select class="w-64" [compact]="true" [action]="true" [options]="outsideOptions()" (picked)="bring($event)"
+                placeholder="Trazer tarefa existente…" label="Trazer uma tarefa existente para este quadro" [minWidth]="360" />
     <button type="button" class="btn btn-sm" (click)="overview.set(true)" title="Todas as colunas numa tabela"><app-icon name="settings" [size]="15" />Visão geral</button>
   </header>
   @if (error()) { <p role="alert" class="mx-8 mb-2 text-[13px] text-no">{{ error() }}</p> }
@@ -66,15 +64,13 @@
               @if (c.agentId) {
                 <textarea class="field h-20 resize-y !py-1 text-[12.5px]" placeholder="O que ele faz nesta etapa" aria-label="Instrução"
                           [value]="c.instruction ?? ''" (change)="patchColumn(c.key, { instruction: $any($event.target).value.trim() || null })"></textarea>
-                <label class="flex items-center gap-2"><span class="shrink-0 text-mute">Depois vai para</span>
-                  <select class="field !py-1 text-[12.5px]" (change)="patchColumn(c.key, { nextKey: $any($event.target).value || null })">
-                    <option value="" [selected]="!c.nextKey">a próxima coluna</option>
-                    @for (o of b.columns; track o.key) { @if (o.key !== c.key) { <option [value]="o.key" [selected]="c.nextKey === o.key">{{ o.label }}</option> } }
-                  </select></label>
+                <div class="flex items-center gap-2"><span class="shrink-0 text-mute">Depois vai para</span>
+                  <app-select class="min-w-0 flex-1" [compact]="true" [options]="nextOptions().get(c.key) ?? []" [value]="c.nextKey ?? ''"
+                              (valueChange)="patchColumn(c.key, { nextKey: $event || null })" label="Depois vai para" /></div>
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-mute">
                   <span class="flex items-center gap-1.5 whitespace-nowrap">até
-                    <select class="field !w-14 !py-1 text-[12.5px]" (change)="patchColumn(c.key, { parallel: +$any($event.target).value })" aria-label="Quantas por vez">
-                      @for (n of [1, 2, 3, 4]; track n) { <option [value]="n" [selected]="c.parallel === n">{{ n }}</option> } </select> por vez</span>
+                    <app-select class="w-16" [compact]="true" [options]="parallels" [value]="'' + c.parallel" (valueChange)="patchColumn(c.key, { parallel: +$event })"
+                                label="Quantas por vez" [minWidth]="80" /> por vez</span>
                   <span class="flex items-center gap-1.5 whitespace-nowrap">horário
                     <input class="field !w-[88px] !py-1 text-center text-[12.5px]" placeholder="sempre" [value]="c.hours" aria-label="Horário (08-22)"
                            (change)="patchColumn(c.key, { hours: $any($event.target).value.trim() })" title="Ex.: 08-22. Vazio = qualquer hora." /></span>

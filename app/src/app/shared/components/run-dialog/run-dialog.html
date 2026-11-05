@@ -21,15 +21,10 @@
         </div>
       </div>
       @if (projectSlug()) {
-        <label class="block">
+        <div>
           <span class="mb-1.5 block font-semibold">Onde</span>
-          <select class="field" [value]="repoPath()" (change)="repoPath.set($any($event.target).value)">
-            <option value="" [selected]="!repoPath()">Projeto inteiro (sem worktree)</option>
-            @for (r of repos(); track r.path) {
-              <option [value]="r.path" [selected]="r.path === repoPath()">Repositório {{ r.name }}{{ r.lastCommitAt ? ' · ' + (r.lastCommitAt | ago) : '' }}</option>
-            }
-          </select>
-        </label>
+          <app-select [options]="repoOptions()" [value]="repoPath()" (valueChange)="repoPath.set($event)" label="Onde" />
+        </div>
       }
 
       <label class="block">

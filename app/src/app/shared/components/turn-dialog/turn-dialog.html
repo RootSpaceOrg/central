@@ -29,10 +29,7 @@
                 <span class="text-[12px] text-faint">{{ t.column === 'todo' ? 'A fazer' : 'Backlog' }}</span>
               </span>
               @if (on) {
-                <select class="field !w-52 !py-1.5 text-[13px]" [value]="picked()[t.id]" (change)="setRepo(t.id, $any($event.target).value)"
-                        aria-label="Repositório">
-                  @for (r of repos(); track r.path) { <option [value]="r.path" [selected]="(r.path) === (picked()[t.id])">{{ r.name }}</option> }
-                </select>
+                <app-select class="w-52 shrink-0" [compact]="true" [options]="repoOptions()" [value]="picked()[t.id]" (valueChange)="setRepo(t.id, $event)" label="Repositório" />
               }
             </li>
           } @empty {

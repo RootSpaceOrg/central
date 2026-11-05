@@ -4,6 +4,7 @@ import { AgentsService } from '../../../../../../shared/services/agents/agents.s
 import { Project } from '../../../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../../../shared/services/projects/projects.service';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../../../shared/ui/select';
 
 /**
  * Responsável pelo "A fazer" (barra do Backlog): o agente que pega sozinho cada tarefa que você põe em A fazer, com
@@ -11,21 +12,18 @@ import { Icon } from '../../../../../../shared/ui/icon';
  */
 @Component({
   selector: 'app-todo-owner',
-  imports: [Icon],
+  imports: [Icon, Select],
   host: { class: 'flex flex-wrap items-center gap-2 text-[13px]' },
   template: `
     @let p = project();
     <app-icon name="agent" [size]="15" class="text-mute" />
-    <label class="text-mute" for="todo-owner">Responsável pelo A fazer</label>
-    <select id="todo-owner" class="field !w-auto !py-1 text-[13px]" (change)="setAgent($any($event.target).value)">
-      <option value="" [selected]="!p.todoAgentId">ninguém (você dispara)</option>
-      @for (a of candidates(); track a.id) { <option [value]="a.id" [selected]="p.todoAgentId === a.id">{{ a.name }}</option> }
-    </select>
+    <span class="text-mute">Responsável pelo A fazer</span>
+    <app-select class="w-56" [compact]="true" [options]="candidates()" [value]="p.todoAgentId ? '' + p.todoAgentId : ''" (valueChange)="setAgent($event)"
+                label="Responsável pelo A fazer" />
     @if (p.todoAgentId) {
-      <label class="text-mute" for="todo-parallel">até</label>
-      <select id="todo-parallel" class="field !w-auto !py-1 text-[13px]" (change)="save({ parallel: +$any($event.target).value })">
-        @for (n of [1, 2, 3, 4]; track n) { <option [value]="n" [selected]="p.todoParallel === n">{{ n }}</option> }
-      </select>
+      <span class="text-mute">até</span>
+      <app-select class="w-16" [compact]="true" [options]="parallels" [value]="'' + p.todoParallel" (valueChange)="save({ parallel: +$event })"
+                  label="Quantas por vez" [minWidth]="80" />
       <span class="text-mute">por vez, das</span>
       <input class="field !w-24 !py-1 text-center text-[13px]" placeholder="qualquer hora" aria-label="Horário (ex.: 08-22)" [value]="p.todoHours"
              (change)="save({ hours: $any($event.target).value.trim() })" title="Ex.: 08-22, ou 22-06 para a madrugada. Vazio = qualquer hora." />
@@ -42,12 +40,14 @@ export class TodoOwner {
 
   protected readonly error = signal<string | null>(null);
   /** agentes do projeto (ou do projeto-pai) primeiro; depois os sem projeto */
-  protected readonly candidates = computed(() => {
+  protected readonly candidates = computed<SelectOption[]>(() => {
     const p = this.project();
     const mine = new Set([p.slug, p.parentSlug].filter(Boolean));
-    return this.agents.agents().filter(a => !a.builtin && (!a.projectSlug || mine.has(a.projectSlug)))
-      .sort((a, b) => Number(!mine.has(a.projectSlug ?? '')) - Number(!mine.has(b.projectSlug ?? '')));
+    return [{ value: '', label: 'ninguém (você dispara)' }, ...this.agents.agents().filter(a => !a.builtin && (!a.projectSlug || mine.has(a.projectSlug)))
+      .sort((a, b) => Number(!mine.has(a.projectSlug ?? '')) - Number(!mine.has(b.projectSlug ?? '')))
+      .map(a => ({ value: String(a.id), label: a.name, avatar: a }))];
   });
+  protected readonly parallels: SelectOption[] = [1, 2, 3, 4].map(n => ({ value: String(n), label: String(n) }));
 
   protected setAgent(value: string): void { this.save({ agentId: value ? Number(value) : null }); }
 

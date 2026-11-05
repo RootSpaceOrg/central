@@ -5,6 +5,9 @@ import { ContextMenuService } from '../../services/context-menu/context-menu.ser
 import { ProjectsService } from '../../services/projects/projects.service';
 import { QuickCommand, QuickCommandsService } from '../../services/quick-commands/quick-commands.service';
 import { Icon } from '../../ui/icon';
+import { Select, SelectOption } from '../../ui/select';
+import { AgentSelect } from '../pickers/agent-select';
+import { ProjectSelect } from '../pickers/project-select';
 
 const SHELLS: { id: QuickCommand['shell']; label: string }[] = [{ id: 'shell', label: 'PowerShell' }, { id: 'bash', label: 'Git Bash' }, { id: 'cmd', label: 'CMD' }];
 const blank = (): QuickCommand => ({ id: '', label: '', action: 'terminal', command: '', enter: true, project: null, shell: 'shell', agentId: null });
@@ -15,7 +18,7 @@ const blank = (): QuickCommand => ({ id: '', label: '', action: 'terminal', comm
  */
 @Component({
   selector: 'app-quick-bar',
-  imports: [Icon],
+  imports: [Icon, Select, AgentSelect, ProjectSelect],
   host: { class: 'no-drag flex min-w-0 items-center gap-1' },
   template: `
     @for (c of qc.commands(); track c.id) {
@@ -68,21 +71,13 @@ const blank = (): QuickCommand => ({ id: '', label: '', action: 'terminal', comm
               <summary class="cursor-pointer font-semibold">Avançado <span class="font-normal text-faint">· {{ whereLabel() }}</span></summary>
               <div class="mt-3 grid grid-cols-2 gap-3">
                 @if (d.action === 'terminal') {
-                  <label class="block"><span class="mb-1 block text-mute">Projeto (pasta do terminal)</span>
-                    <select class="field" (change)="patch({ project: $any($event.target).value || null })">
-                      <option value="" [selected]="!d.project">O projeto aberto na tela</option>
-                      @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="d.project === p.slug">{{ p.name }}</option> }
-                    </select></label>
-                  <label class="block"><span class="mb-1 block text-mute">Terminal</span>
-                    <select class="field" (change)="patch({ shell: $any($event.target).value })">
-                      @for (s of shells; track s.id) { <option [value]="s.id" [selected]="d.shell === s.id">{{ s.label }}</option> }
-                    </select></label>
+                  <div><span class="mb-1 block text-mute">Projeto (pasta do terminal)</span>
+                    <app-project-select [value]="d.project ?? ''" (valueChange)="patch({ project: $event || null })" noneLabel="O projeto aberto na tela" /></div>
+                  <div><span class="mb-1 block text-mute">Terminal</span>
+                    <app-select [options]="shells" [value]="d.shell" (valueChange)="patch({ shell: $any($event) })" label="Terminal" /></div>
                 } @else {
-                  <label class="block"><span class="mb-1 block text-mute">Agente</span>
-                    <select class="field" (change)="patch({ agentId: $any($event.target).value ? +$any($event.target).value : null })">
-                      <option value="" [selected]="!d.agentId">Central</option>
-                      @for (a of otherAgents(); track a.id) { <option [value]="a.id" [selected]="d.agentId === a.id">{{ a.name }}</option> }
-                    </select></label>
+                  <div><span class="mb-1 block text-mute">Agente</span>
+                    <app-agent-select [hideCentral]="true" [value]="d.agentId ? '' + d.agentId : ''" (valueChange)="patch({ agentId: $event ? +$event : null })" noneLabel="Central" /></div>
                 }
               </div>
             </details>
@@ -104,11 +99,10 @@ export class QuickBar {
   private readonly ctx = inject(ContextMenuService);
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
-  protected readonly shells = SHELLS;
+  protected readonly shells: SelectOption[] = SHELLS.map(s => ({ value: s.id, label: s.label }));
   protected readonly actions = [{ id: 'terminal', label: 'Terminal' }, { id: 'agent', label: 'Agente' }] as const;
   protected readonly draft = signal<QuickCommand | null>(null);
   protected readonly advanced = signal(false);
-  protected readonly otherAgents = computed(() => this.agents.agents().filter(a => !a.builtin));
   protected readonly whereLabel = computed(() => {
     const d = this.draft();
     if (!d) return '';

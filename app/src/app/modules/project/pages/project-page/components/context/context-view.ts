@@ -4,12 +4,12 @@ import { GraphDto, NodeDetailDto } from '../../../../../../shared/contract';
 import { SessionsService } from '../../../../../../shared/services/sessions/sessions.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../../../shared/ui/select';
 import { CodeHit, ContextService, FACT_LABEL, Fact, FactKind } from '../../../../services/context/context.service';
 import { CodeMap, Layer, Scope, placeOf } from './code-map';
 
 import { AskService } from '../../../../../../shared/services/ask/ask.service';
 type Pane = 'grafo' | 'memoria' | 'prompt';
-const KINDS = Object.keys(FACT_LABEL) as FactKind[];
 const EDGE_LEGEND = [
   { color: '#3B4559', label: 'importa / chama / injeta' },
   { color: '#B48CFF', label: 'front → rota → lambda → handler' },
@@ -22,7 +22,7 @@ const EDGE_LEGEND = [
  */
 @Component({
   selector: 'app-context-view',
-  imports: [Icon, AgoPipe, CodeMap],
+  imports: [Icon, AgoPipe, CodeMap, Select],
   templateUrl: './context-view.html',
   host: { class: 'grid h-full min-h-0 grid-cols-[290px_minmax(0,1fr)]' },
 })
@@ -54,7 +54,8 @@ export class ContextView {
   protected readonly noteKind = signal<FactKind>('convention');
   protected readonly error = signal<string | null>(null);
 
-  protected readonly kinds = KINDS;
+  protected readonly kinds: SelectOption[] = (Object.keys(FACT_LABEL) as FactKind[]).map(k => ({ value: k, label: FACT_LABEL[k] }));
+  protected readonly budgets: SelectOption[] = [1000, 1500, 2000, 4000, 8000].map(b => ({ value: String(b), label: `${b} tokens` }));
   protected readonly factLabel = FACT_LABEL;
   protected readonly legend = EDGE_LEGEND;
   protected readonly status = computed(() => this.ctx.status()[this.slug()] ?? null);

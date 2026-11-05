@@ -4,6 +4,7 @@ import { Agent } from '../../../../shared/services/agents/agents.service';
 import { MEMORY_KINDS, Memory, MemoriesService, MemoryKind } from '../../../../shared/services/memories/memories.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../shared/ui/select';
 
 import { AskService } from '../../../../shared/services/ask/ask.service';
 export type MemoryView = 'dele' | 'todos' | 'esquecidas';
@@ -14,7 +15,7 @@ export type MemoryView = 'dele' | 'todos' | 'esquecidas';
  */
 @Component({
   selector: 'app-memory-panel',
-  imports: [Icon, AgoPipe],
+  imports: [Icon, AgoPipe, Select],
   host: { class: 'block h-full overflow-y-auto' },
   template: `
     @let a = agent();
@@ -32,9 +33,7 @@ export type MemoryView = 'dele' | 'todos' | 'esquecidas';
           <textarea class="field h-16 w-full resize-none text-[13.5px]" [placeholder]="view() === 'todos' ? 'Ex.: Prefiro respostas curtas e em português.' : 'Ex.: Nos posts, sempre fechar com uma pergunta.'"
                     aria-label="Nova memória" [value]="text()" (input)="text.set($any($event.target).value)" (keydown.control.enter)="add($event)"></textarea>
           <div class="mt-2 flex items-center gap-2">
-            <select class="field !w-auto !py-1 text-[12.5px]" aria-label="Tipo" [value]="kind()" (change)="kind.set($any($event.target).value)">
-              @for (k of kinds; track k.id) { <option [value]="k.id" [selected]="kind() === k.id">{{ k.label }}</option> }
-            </select>
+            <app-select class="w-40" [compact]="true" [options]="kinds" [value]="kind()" (valueChange)="kind.set($any($event))" label="Tipo" [minWidth]="160" />
             <span class="flex-1 truncate text-[11.5px] text-faint">{{ kindHint() }}</span>
             <button type="submit" class="btn btn-sm btn-primary" [disabled]="!text().trim()">Lembrar</button>
           </div>
@@ -97,7 +96,7 @@ export class MemoryPanel {
   readonly agent = input.required<Agent>();
   readonly view = input<MemoryView>('dele');
 
-  protected readonly kinds = MEMORY_KINDS;
+  protected readonly kinds: SelectOption[] = MEMORY_KINDS.map(k => ({ value: k.id, label: k.label }));
   protected readonly text = signal('');
   protected readonly kind = signal<MemoryKind>('preferencia');
   protected readonly editing = signal<number | null>(null);

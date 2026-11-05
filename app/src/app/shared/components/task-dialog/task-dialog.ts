@@ -10,13 +10,14 @@ import { BoardService, COLORS } from '../../services/board/board.service';
 import { DeliveriesService } from '../../services/deliveries/deliveries.service';
 import { COLUMNS, PRIORITY, TaskColumn, TaskPriority, TasksService } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
+import { Select, SelectOption } from '../../ui/select';
 import { AgentsService } from '../../services/agents/agents.service';
 import { ChatService } from '../../services/chat/chat.service';
 
 import { AskService } from '../../services/ask/ask.service';
 @Component({
   selector: 'app-task-dialog',
-  imports: [Icon, ProjectSelect, RouterLink],
+  imports: [Icon, ProjectSelect, RouterLink, Select],
   templateUrl: './task-dialog.html',
 })
 export class TaskDialog {
@@ -32,6 +33,9 @@ export class TaskDialog {
   /** quadros em que a tarefa está */
   protected readonly placements = computed(() => { const t = this.editing(); return t ? this.boards.ofTask().get(t.id) ?? [] : []; });
   protected readonly otherBoards = computed(() => { const on = new Set(this.placements().map(p => p.boardId)); return this.boards.boards().filter(b => !on.has(b.id)); });
+  protected readonly otherBoardOptions = computed<SelectOption[]>(() => this.otherBoards().map(b => ({ value: String(b.id), label: b.name })));
+  /** colunas de cada quadro (para mudar a tarefa de coluna) */
+  protected readonly stageOptions = computed(() => new Map(this.boards.boards().map(b => [b.id, b.columns.map(c => ({ value: c.key, label: c.label }))])));
   protected readonly projects = inject(ProjectsService);
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
@@ -41,7 +45,7 @@ export class TaskDialog {
     return s?.mode === 'edit' ? this.tasks.tasks().find(t => t.id === s.id) ?? null : null;
   });
 
-  protected readonly columns = COLUMNS;
+  protected readonly columns: SelectOption[] = COLUMNS.map(c => ({ value: c.id, label: c.label }));
   protected readonly priorities = ([0, 1, 2, 3] as TaskPriority[]).map(p => ({ value: p, ...PRIORITY[p] }));
 
   protected readonly title = signal('');
@@ -49,6 +53,7 @@ export class TaskDialog {
   protected readonly projectSlug = signal('');
   protected readonly repoPath = signal('');
   protected readonly repos = signal<Repo[]>([]);
+  protected readonly repoOptions = computed<SelectOption[]>(() => [{ value: '', label: 'Decidir depois' }, ...this.repos().map(r => ({ value: r.path, label: r.name }))]);
   protected readonly column = signal<TaskColumn>('backlog');
   protected readonly priority = signal<TaskPriority>(2);
   /** "#21, #22" */

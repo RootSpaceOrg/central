@@ -9,13 +9,14 @@ import { ACCESSORIES, AvatarLook, HAIR_STYLES, LOOK_DEFAULT, SKINS } from '../..
 import type { AvatarPreview } from '../../../../shared/ui/avatar3d';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
+import { Select, SelectOption } from '../../../../shared/ui/select';
 
 /** null fechado; agent null = novo agente. */
 export type AgentDialogState = { agent: Agent | null; projectSlug?: string | null } | null;
 
 @Component({
   selector: 'app-agent-dialog',
-  imports: [Icon, IconPicker, ProjectSelect, ProjectAvatar],
+  imports: [Icon, IconPicker, ProjectSelect, ProjectAvatar, Select],
   templateUrl: './agent-dialog.html',
 })
 export class AgentDialog {
@@ -57,7 +58,7 @@ export class AgentDialog {
   protected readonly priorityHint = () => this.priorities.find(p => p.value === this.priority())!.hint;
   protected readonly model = signal('');
   protected readonly room = signal('');
-  protected readonly rooms = ROOM_CHOICES;
+  protected readonly rooms: SelectOption[] = ROOM_CHOICES.map(r => ({ value: r.id, label: r.label }));
   protected readonly confirmDelete = signal(false);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
