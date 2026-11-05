@@ -24,5 +24,12 @@ ok(f.splitReply('Uma frase só, sem parágrafos.').length === 1, 'sem parágrafo
 ok(f.splitReply('Opções:\n• uma\n• duas').length === 1, 'lista fica inteira');
 ok(f.splitReply(Array.from({ length: 12 }, (_, i) => `parágrafo ${i}`).join('\n\n')).length === 8, 'teto de 8 mensagens');
 
+// limite por hora: por chave (pessoa do grupo), 0 = sem limite, a janela anda
+const hit = f.hitLimiter();
+ok(hit('g:ana', 2, 0) && hit('g:ana', 2, 1) && !hit('g:ana', 2, 2), 'terceira da mesma pessoa na hora fica de fora');
+ok(hit('g:joao', 2, 2), 'outra pessoa do mesmo grupo tem a conta dela');
+ok(hit('g:ana', 2, 3_600_001), 'depois de uma hora volta');
+ok([1, 2, 3, 4].every(t => hit('x', 0, t)), '0 = sem limite');
+
 rmSync(dir, { recursive: true, force: true });
 console.log('whatsapp ok');

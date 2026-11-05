@@ -888,7 +888,9 @@ export interface SttStatusDto {
   hasKey: boolean;
   ext: { whisper: boolean; ffmpeg: boolean; models: { small: boolean; base: boolean }; progress: { name: string; done: number; total: number } | null; error: string | null } | null;
 }
-export interface WaChatCfg { account: string; chat: string; name: string; group: boolean; reply: 'inherit' | 'on' | 'off'; reply_agent: number | null; listen: boolean; listen_agent: number | null }
+export interface WaChatCfg { account: string; chat: string; name: string; group: boolean; reply: 'inherit' | 'on' | 'off'; reply_agent: number | null; listen: boolean; listen_agent: number | null;
+  /** limite por pessoa por hora nesta conversa; null = o padrão */
+  per_hour?: number | null }
 export interface WaChatDto extends WaChatCfg { pending: number; last_run: { id: number | null; at: string | null } | null }
 export interface WaContactDto { phone: string; chat?: string | null; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null; account: string | null }
 

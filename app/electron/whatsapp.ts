@@ -12,7 +12,7 @@ import { getSetting, onDecided, setSetting } from './backlog';
 import { sendChat } from './central-agent';
 import { all, get, now, run } from './db';
 import { callExtension, onExtensionEvent, running } from './extensions';
-import { digits, splitReply, toWhatsApp } from './wa-format';
+import { digits, hitLimiter, splitReply, toWhatsApp } from './wa-format';
 import { agentCwd, getAgent } from './agentdefs';
 import { analyzeVideo, mediaReady, transcribeFile } from './media';
 import { PRIORITY_OF, Priority, canStart, readUsage } from './governor';
@@ -50,15 +50,12 @@ export function setAccountOpen(account: string, on: boolean): void {
   if (on) m[account] = true; else delete m[account];
   setSetting('wa:open', JSON.stringify(m));
 }
-/** atendimento: no máximo N mensagens por pessoa por hora acionam o agente (o resto fica registrado) */
-const PER_HOUR = 20;
-const hits = new Map<string, number[]>();
-function allowHit(phone: string): boolean {
-  const now_ = Date.now(), list = (hits.get(phone) ?? []).filter(t => now_ - t < 3_600_000);
-  if (list.length >= PER_HOUR) { hits.set(phone, list); return false; }
-  hits.set(phone, [...list, now_]);
-  return true;
-}
+/** quem não é da casa (atendimento e grupos): no máximo N mensagens por pessoa por hora acionam o agente. 0 = sem limite. */
+export const perHour = () => Math.max(0, Math.min(1000, Math.round(Number(getSetting('wa:perHour') ?? 20) || 0)));
+const hourly = hitLimiter();
+const allowHit = (who: string, max = perHour()) => hourly(who, max);
+/** da casa: os donos cadastrados e os números conectados na própria Central */
+const isHouse = (phone: string | null | undefined) => !!phone && [...owners(), ...opened().map(a => a.me?.phone)].includes(phone);
 
 export const waStatus = () => ({
   installed: running(EXT) || getSetting(`ext:${EXT}:enabled`) === '1',
@@ -153,11 +150,13 @@ async function mediaText(m: WaMessage, agentId: number): Promise<string> {
 export function inbound(m: WaMessage): void {
   const account = m.account ?? 'main';
   const cfg = cfgOf(account, m.chat);
+  const max = cfg?.per_hour ?? perHour();
   // escuta: guarda (inclusive o que você mandou) para um agente ler depois; independe da resposta
   if (cfg?.listen) listen(m, cfg);
   if (m.group) {
-    // grupo com resposta ligada: o agente da conversa responde (o que você mesmo escreve no grupo não aciona)
-    if (cfg?.reply === 'on' && !m.fromMe && allowHit(m.chat)) {
+    // grupo com resposta ligada: o agente da conversa responde (o que você mesmo escreve no grupo não aciona).
+    // O limite é por pessoa do grupo (não o grupo todo junto); quem é da casa não conta.
+    if (cfg?.reply === 'on' && !m.fromMe && (isHouse(m.phone) || allowHit(`${m.chat}:${m.phone ?? m.name ?? ''}`, max))) {
       withMedia(m, account, text => soon(account, m.chat, m.chat, `${m.name ?? (m.phone ? `+${m.phone}` : 'alguém')}: ${text}`, cfg.name, true, cfg.reply_agent, true));
     }
     return;
@@ -166,12 +165,11 @@ export function inbound(m: WaMessage): void {
   // o que você mandou do celular para outras pessoas não é conversa com a Central
   if (m.fromMe && !m.self) return;
   // da casa: os donos cadastrados e os números conectados na própria Central (falar de um para o outro funciona)
-  const house = [...owners(), ...opened().map(a => a.me?.phone).filter((p): p is string => !!p)];
-  const owner = m.self || (!!m.phone && house.includes(m.phone));
+  const owner = m.self || isHouse(m.phone);
   if (cfg?.reply === 'on') {
     // resposta ligada nesta conversa: responde mesmo quem não é da casa (com limite por pessoa), com o agente escolhido
     if (!owner && m.phone) { touch(m.phone, m, 'in'); deps.changed(); }
-    if (owner || (m.phone && allowHit(m.phone))) {
+    if (owner || (m.phone && allowHit(m.phone, max))) {
       withMedia(m, account, text => soon(account, m.self ? 'self' : m.phone!, m.chat, text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`, !owner, cfg.reply_agent));
     }
     return;
@@ -180,7 +178,7 @@ export function inbound(m: WaMessage): void {
     if (m.phone) touch(m.phone, m, 'in');
     deps.changed();
     // número com "responder qualquer pessoa": quem escreveu conversa com o agente do número (com limite por pessoa)
-    if (openOf()[account] && m.phone && allowHit(m.phone)) withMedia(m, account, text => soon(account, m.phone!, m.chat, text, m.name ?? `+${m.phone}`, true));
+    if (openOf()[account] && m.phone && allowHit(m.phone, max)) withMedia(m, account, text => soon(account, m.phone!, m.chat, text, m.name ?? `+${m.phone}`, true));
     return;
   }
   withMedia(m, account, text => soon(account, m.self ? 'self' : m.phone!, m.chat, text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`));
@@ -328,7 +326,7 @@ export interface Listened { account: string; chat: string; name: string; group: 
  * responde aqui, mesmo em grupo ou com quem não é da casa; off = nunca responde) e escutar (um agente lê os trechos e
  * registra ideias/decisões). Os dois podem estar ligados, com agentes iguais ou diferentes.
  */
-export interface ChatCfg { account: string; chat: string; name: string; group: boolean; reply: 'inherit' | 'on' | 'off'; reply_agent: number | null; listen: boolean; listen_agent: number | null }
+export interface ChatCfg { account: string; chat: string; name: string; group: boolean; reply: 'inherit' | 'on' | 'off'; reply_agent: number | null; listen: boolean; listen_agent: number | null; per_hour?: number | null }
 export function chatCfgs(): ChatCfg[] {
   const raw = getSetting('wa:chats');
   if (raw) { try { return JSON.parse(raw); } catch { return []; } }
@@ -342,6 +340,8 @@ export function setChatCfgs(list: ChatCfg[]): void {
     account: c.account, chat: c.chat, name: c.name, group: !!c.group,
     reply: (['inherit', 'on', 'off'].includes(c.reply) ? c.reply : 'inherit') as ChatCfg['reply'], reply_agent: c.reply_agent ?? null,
     listen: !!c.listen, listen_agent: c.listen_agent ?? null,
+    // limite por pessoa por hora só desta conversa; null = o padrão
+    per_hour: c.per_hour === null || c.per_hour === undefined || !Number.isFinite(Number(c.per_hour)) ? null : Math.max(0, Math.min(1000, Math.round(Number(c.per_hour)))),
   }));
   setSetting('wa:chats', JSON.stringify(clean));
   syncListened();

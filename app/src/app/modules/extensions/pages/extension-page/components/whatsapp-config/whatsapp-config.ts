@@ -57,7 +57,7 @@ type Tab = 'numbers' | 'chats' | 'people' | 'replies';
                   <app-agent-select class="mt-1.5 block" [value]="a.agent_id ? '' + a.agent_id : ''" (valueChange)="setAgent(a.account, $event)" noneLabel="A Central" />
                   <div class="mt-4 border-t border-edge pt-4">
                     <app-switch [checked]="a.open" (changed)="setOpen(a.account, $event)" label="Responder qualquer pessoa"
-                                [hint]="'Atendimento: quem não é da casa também conversa com ' + agentName(a.agent_id) + ' (até 20 mensagens por pessoa por hora). Desligado, só registra o contato.'" />
+                                [hint]="'Atendimento: quem não é da casa também conversa com ' + agentName(a.agent_id) + ' (com o limite por hora da aba Como responder). Desligado, só registra o contato.'" />
                     @if (a.open && !isRestricted(a.agent_id)) {
                       <p class="mt-2 rounded-xl bg-no/10 px-3 py-2 text-[13px] text-no">{{ agentName(a.agent_id) }} não tem atuação restrita: qualquer pessoa estaria falando com um agente que mexe na Central. Ligue "Atuação restrita" no agente (aba Trabalho).</p>
                     }
@@ -130,6 +130,15 @@ type Tab = 'numbers' | 'chats' | 'people' | 'replies';
                   } @else {
                     <p class="mt-1.5 text-[12px] text-faint">{{ c.reply === 'off' ? 'Ninguém responde nesta conversa.' : c.group ? 'Grupos não têm resposta por padrão.' : 'Segue o padrão do número.' }}</p>
                   }
+                  @if (c.reply !== 'off' && !(c.group && c.reply === 'inherit')) {
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-[12.5px] text-mute">
+                      <span>Limite por pessoa</span>
+                      <input type="number" min="0" max="1000" class="field !w-20 !py-1 text-center" [placeholder]="'' + perHour()" [value]="c.per_hour ?? ''"
+                             (change)="setChatLimit(c, $any($event.target).value)" [attr.aria-label]="'Mensagens por pessoa por hora em ' + c.name">
+                      <span>por hora</span>
+                      <span class="text-faint">{{ c.per_hour === null || c.per_hour === undefined ? '(padrão: ' + (perHour() || 'sem limite') + ')' : c.per_hour === 0 ? '(sem limite)' : '' }}</span>
+                    </div>
+                  }
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
@@ -199,6 +208,12 @@ type Tab = 'numbers' | 'chats' | 'people' | 'replies';
             <label class="rounded-2xl bg-night/60 p-4"><span class="text-[13px] text-mute">Até, se a pessoa ainda estiver digitando</span>
               <span class="mt-1.5 flex items-center gap-2"><input type="number" min="0" max="300" class="field !w-20 !py-1 text-center" [value]="waitMax()" (change)="setWaitMax($any($event.target).value)"> segundos</span></label>
           </div>
+          <label class="mt-4 flex flex-wrap items-center gap-2 rounded-2xl bg-night/60 p-4 text-[13.5px]">
+            <span class="text-mute">Padrão: quem não é da casa (atendimento e grupos) aciona o agente até</span>
+            <input type="number" min="0" max="1000" class="field !w-20 !py-1 text-center" [value]="perHour()" (change)="setPerHour($any($event.target).value)" aria-label="Mensagens por pessoa por hora">
+            <span class="text-mute">mensagens por pessoa por hora</span>
+            <span class="w-full text-[12px] text-faint">Passando disso, a mensagem fica registrada mas o agente não responde até a hora virar. 0 = sem limite (cuidado: alguém pode gastar a sua cota). Cada conversa pode ter o seu na aba Conversas.</span>
+          </label>
           <p class="mt-3 text-[12.5px] leading-relaxed text-faint">Mensagens seguidas ("oi, tudo bem?" + "preciso da sua ajuda") viram uma resposta só, e quem ainda está escrevendo não é interrompido. 0 e 0 respondem na hora.</p>
           <div class="mt-4 border-t border-edge pt-4">
             <app-switch [checked]="split()" (changed)="setSplit($event)" label="Responder em mensagens curtas"
@@ -242,6 +257,7 @@ export class WhatsappConfig {
   protected readonly waitMax = signal(60);
   protected readonly split = signal(true);
   protected readonly listenDelay = signal(10);
+  protected readonly perHour = signal(20);
   /** contatos recentes que ainda não têm configuração própria */
   protected readonly contactChats = computed(() => this.contacts().filter(c => !this.chats().some(l => l.chat === (c.chat ?? `${c.phone}@s.whatsapp.net`))));
   /** o que dá para configurar: grupos dos números conectados e contatos recentes ainda sem configuração */
@@ -272,6 +288,7 @@ export class WhatsappConfig {
     this.settings.get('wa:wait').then(v => this.wait.set(v === null ? 8 : Number(v) || 0));
     this.settings.get('wa:waitMax').then(v => this.waitMax.set(v === null ? 60 : Number(v) || 0));
     this.settings.get('wa:split').then(v => this.split.set(v !== '0'));
+    this.settings.get('wa:perHour').then(v => this.perHour.set(v === null ? 20 : Number(v) || 0));
   }
 
   private async load(): Promise<void> {
@@ -304,7 +321,7 @@ export class WhatsappConfig {
   }
   private saveChats(list: WaChatCfg[]): void {
     this.chats.set(list.map(c => ({ pending: 0, last_run: null, ...this.chats().find(x => x.account === c.account && x.chat === c.chat), ...c })));
-    this.run(() => this.ipc.invoke('wa:setChats', list.map(({ account, chat, name, group, reply, reply_agent, listen, listen_agent }) => ({ account, chat, name, group, reply, reply_agent, listen, listen_agent }))));
+    this.run(() => this.ipc.invoke('wa:setChats', list.map(({ account, chat, name, group, reply, reply_agent, listen, listen_agent, per_hour }) => ({ account, chat, name, group, reply, reply_agent, listen, listen_agent, per_hour: per_hour ?? null }))));
   }
   /** grupo entra escutando e sem resposta; contato entra escutando e com o padrão do número */
   protected addChat(v: string): void {
@@ -319,6 +336,8 @@ export class WhatsappConfig {
   protected replyOptions(c: WaChatCfg) {
     return [{ id: 'inherit' as const, label: c.group ? 'Não (padrão)' : 'Padrão do número' }, { id: 'on' as const, label: 'Sim' }, { id: 'off' as const, label: 'Não' }].filter(o => !(c.group && o.id === 'off'));
   }
+  /** vazio = volta ao padrão */
+  protected setChatLimit(c: WaChatCfg, v: string): void { this.patchChat(c, { per_hour: v.trim() === '' ? null : Math.max(0, Math.min(1000, Math.round(Number(v) || 0))) }); }
   protected digestNow(c: WaChatCfg): void { this.run(() => this.ipc.invoke('wa:digestNow', c.account, c.chat)); }
   protected setListenDelay(v: string): void { const n = Math.max(1, Math.min(240, Math.round(Number(v) || 10))); this.listenDelay.set(n); this.settings.set('wa:listenDelay', String(n)); }
 
@@ -337,6 +356,7 @@ export class WhatsappConfig {
   protected setAny(v: boolean): void { this.any.set(v); this.settings.set('wa:any', v ? '1' : '0'); }
   protected setWait(v: string): void { const n = Math.max(0, Math.min(120, Math.round(Number(v) || 0))); this.wait.set(n); this.settings.set('wa:wait', String(n)); }
   protected setWaitMax(v: string): void { const n = Math.max(0, Math.min(300, Math.round(Number(v) || 0))); this.waitMax.set(n); this.settings.set('wa:waitMax', String(n)); }
+  protected setPerHour(v: string): void { const n = Math.max(0, Math.min(1000, Math.round(Number(v) || 0))); this.perHour.set(n); this.settings.set('wa:perHour', String(n)); }
   protected setSplit(v: boolean): void { this.split.set(v); this.settings.set('wa:split', v ? '1' : '0'); }
   protected setNotify(v: boolean): void { this.notifyOn.set(v); this.settings.set('wa:notify', v ? '1' : '0'); }
 }
