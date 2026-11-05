@@ -74,7 +74,23 @@ const dispatchNow = () => {
     quota, setting: getSetting,
     start: input => startRun({ ...input, project_slug: null, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun),
   }).then(n => { if (n) send('backlog:changed', null); }, () => {});
+  wakeAtReset();
 };
+/**
+ * Freado pela cota: em vez de esperar a próxima conferência (até 1 min), acorda 5 s depois da renovação que a API
+ * informa, com o uso atualizado, e despacha na hora.
+ */
+let resetTimer: { at: string; t: ReturnType<typeof setTimeout> } | null = null;
+function wakeAtReset(): void {
+  const u = readUsage(usageNow()), l = getLimits();
+  const bySession = (u.session ?? 0) >= Math.min(...l.session), byWeek = (u.week ?? 0) >= Math.min(...l.week);
+  const at = bySession ? u.sessionReset : byWeek ? u.weekReset : null;
+  if (!at || resetTimer?.at === at) return;
+  const ms = Date.parse(at) - Date.now() + 5000;
+  if (!(ms > 0 && ms < 8 * 3_600_000)) return;
+  if (resetTimer) clearTimeout(resetTimer.t);
+  resetTimer = { at, t: setTimeout(() => { resetTimer = null; getUsage(true).finally(dispatchNow); }, ms) };
+}
 const contextChanged = (project: string) => send('context:changed', { project });
 const factProject = (id: number) => get<{ p: string }>('select project_slug p from facts where id = ?', id)?.p ?? '';
 const navigate = (route: string) => send('app:navigate', route);
