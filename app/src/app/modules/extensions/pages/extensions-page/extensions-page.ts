@@ -1,7 +1,7 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 
-import { ExtensionDto, SttStatusDto, WaContactDto, WaListenDto, WaStatusDto } from '../../../../shared/contract';
+import { ExtensionDto, SttStatusDto, WaChatCfg, WaChatDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
@@ -128,26 +128,61 @@ export function formatPhone(n: string): string {
                 </form>
               </div>
 
-              <h3 class="mt-7 font-semibold">Escutar conversas (sem responder)</h3>
-              <p class="mt-0.5 text-[13px] text-mute">Contatos ou grupos que a Central só lê. A cada trecho de conversa, o agente escolhido vê se algo impacta os projetos e registra ideias ou decisões (sem duplicar o que já existe). Ninguém recebe resposta.</p>
+              <h3 class="mt-7 font-semibold">Conversas</h3>
+              <p class="mt-0.5 text-[13px] text-mute">Controle por conversa (contato ou grupo), por cima do padrão do número. <b class="text-text">Responder</b>: quem responde ali (ou ninguém).
+                <b class="text-text">Escutar</b>: um agente lê os trechos da conversa e registra o que impacta os projetos como ideias ou decisões. Os dois podem ficar ligados, com agentes iguais ou diferentes.</p>
               <div class="mt-3 space-y-2">
-                @for (l of listen(); track l.account + l.chat) {
-                  <div class="flex flex-wrap items-center gap-3 rounded-xl border border-edge bg-night/60 px-3 py-2.5">
-                    <span class="rounded-full px-2 py-0.5 text-[11.5px] font-semibold" [class]="l.group ? 'bg-frost/15 text-frost' : 'bg-raise text-mute'">{{ l.group ? 'grupo' : 'contato' }}</span>
-                    <span class="min-w-0 flex-1 truncate">{{ l.name }}
-                      <span class="text-[12px] text-faint"> · {{ l.pending ? l.pending + (l.pending === 1 ? ' mensagem esperando leitura' : ' mensagens esperando leitura') : 'nada novo' }}</span></span>
-                    <span class="text-[12.5px] text-mute">Quem lê</span>
-                    <app-agent-select class="w-52" [compact]="true" [value]="l.agent_id ? '' + l.agent_id : ''" (valueChange)="setListenAgent(l, $event)" noneLabel="A Central" />
-                    <button type="button" class="btn btn-sm" [disabled]="!l.pending" (click)="digestNow(l)" title="Ler agora o que acumulou, sem esperar o intervalo">Ler agora</button>
-                    <button type="button" class="grid size-7 place-items-center rounded-lg text-faint hover:bg-raise hover:text-no" (click)="unlisten(l)" [attr.aria-label]="'Parar de escutar ' + l.name"><app-icon name="close" [size]="14" /></button>
+                @for (c of chats(); track c.account + c.chat) {
+                  <div class="rounded-xl border border-edge bg-night/60 px-3 py-3">
+                    <div class="flex items-center gap-2">
+                      <span class="rounded-full px-2 py-0.5 text-[11.5px] font-semibold" [class]="c.group ? 'bg-frost/15 text-frost' : 'bg-raise text-mute'">{{ c.group ? 'grupo' : 'contato' }}</span>
+                      <span class="min-w-0 flex-1 truncate font-semibold">{{ c.name }}</span>
+                      <button type="button" class="grid size-7 place-items-center rounded-lg text-faint hover:bg-raise hover:text-no" (click)="removeChat(c)" [attr.aria-label]="'Tirar ' + c.name + ' da lista'" title="Tirar da lista (volta ao padrão do número)"><app-icon name="close" [size]="14" /></button>
+                    </div>
+                    <div class="mt-2.5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                      <!-- responder -->
+                      <div class="rounded-lg border border-edge px-3 py-2.5">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="w-20 text-[13px] font-semibold">Responder</span>
+                          <div class="flex rounded-lg border border-edge p-0.5" role="radiogroup" [attr.aria-label]="'Responder em ' + c.name">
+                            @for (o of replyOptions(c); track o.id) {
+                              <button type="button" role="radio" [attr.aria-checked]="c.reply === o.id" (click)="patchChat(c, { reply: o.id })"
+                                      class="rounded-md px-2.5 py-1 text-[12.5px]" [class]="c.reply === o.id ? 'bg-raise font-semibold text-text' : 'text-mute hover:text-text'">{{ o.label }}</button>
+                            }
+                          </div>
+                        </div>
+                        @if (c.reply === 'on') {
+                          <div class="mt-2 flex items-center gap-2"><span class="w-20 text-[12.5px] text-mute">Quem</span>
+                            <app-agent-select class="min-w-0 flex-1" [compact]="true" [value]="c.reply_agent ? '' + c.reply_agent : ''" (valueChange)="patchChat(c, { reply_agent: num($event) })" noneLabel="O agente do número" /></div>
+                          @if (!isRestricted(c.reply_agent ?? accountAgent(c.account))) {
+                            <p class="mt-1.5 text-[12px] text-no">{{ agentName(c.reply_agent ?? accountAgent(c.account)) }} não tem atuação restrita: {{ c.group ? 'quem está no grupo' : 'essa pessoa' }} falaria com um agente que mexe na Central.</p>
+                          }
+                        } @else {
+                          <p class="mt-1.5 text-[12px] text-faint">{{ c.reply === 'off' ? 'Ninguém responde nesta conversa.' : c.group ? 'Grupos não têm resposta por padrão.' : 'Segue o padrão do número (quem responde lá, e só para quem pode conversar com os agentes).' }}</p>
+                        }
+                      </div>
+                      <!-- escutar -->
+                      <div class="rounded-lg border border-edge px-3 py-2.5">
+                        <label class="flex cursor-pointer items-center gap-2">
+                          <span class="w-20 text-[13px] font-semibold">Escutar</span>
+                          <input type="checkbox" class="accent-frost" [checked]="c.listen" (change)="patchChat(c, { listen: $any($event.target).checked })">
+                          <span class="text-[12.5px] text-mute">{{ c.listen ? (c.pending ? c.pending + (c.pending === 1 ? ' mensagem esperando leitura' : ' mensagens esperando leitura') : 'nada novo') : 'desligado' }}</span>
+                          @if (c.listen) { <button type="button" class="btn btn-sm ml-auto" [disabled]="!c.pending" (click)="digestNow(c)" title="Ler agora o que acumulou">Ler agora</button> }
+                        </label>
+                        @if (c.listen) {
+                          <div class="mt-2 flex items-center gap-2"><span class="w-20 text-[12.5px] text-mute">Quem lê</span>
+                            <app-agent-select class="min-w-0 flex-1" [compact]="true" [value]="c.listen_agent ? '' + c.listen_agent : ''" (valueChange)="patchChat(c, { listen_agent: num($event) })" noneLabel="A Central" /></div>
+                        }
+                      </div>
+                    </div>
                   </div>
                 } @empty {
-                  <p class="text-[13px] text-faint">Nenhuma conversa escutada.</p>
+                  <p class="text-[13px] text-faint">Nenhuma conversa configurada: vale o padrão do número.</p>
                 }
               </div>
               <div class="mt-3 flex flex-wrap items-center gap-2">
-                <select class="field !w-80 !py-1.5 text-[13px]" aria-label="Conversa para escutar" (focus)="loadGroups()" (change)="pickListen($any($event.target).value); $any($event.target).value = ''">
-                  <option value="">+ Escutar um grupo ou contato…</option>
+                <select class="field !w-80 !py-1.5 text-[13px]" aria-label="Configurar uma conversa" (focus)="loadGroups()" (change)="addChat($any($event.target).value); $any($event.target).value = ''">
+                  <option value="">+ Configurar um grupo ou contato…</option>
                   @if (groups().length) {
                     <optgroup label="Grupos">
                       @for (g of groups(); track g.account + g.id) { <option [value]="'g|' + g.account + '|' + g.id + '|' + g.name">{{ g.name }} ({{ g.size }})</option> }
@@ -159,7 +194,7 @@ export function formatPhone(n: string): string {
                     </optgroup>
                   }
                 </select>
-                <span class="flex items-center gap-2 text-[13px]">Ler depois de
+                <span class="flex items-center gap-2 text-[13px]">Escuta lê depois de
                   <input type="number" min="1" max="240" class="field !w-16 !py-1 text-center" aria-label="Minutos de conversa antes de ler" [value]="listenDelay()" (change)="setListenDelay($any($event.target).value)">
                   minutos de conversa</span>
               </div>
@@ -319,11 +354,11 @@ export class ExtensionsPage {
   protected readonly any = signal(false);
   protected readonly notifyOn = signal(true);
   protected readonly wait = signal(8);
-  protected readonly listen = signal<WaListenDto[]>([]);
+  protected readonly chats = signal<WaChatDto[]>([]);
   protected readonly groups = signal<{ account: string; id: string; name: string; size: number }[]>([]);
   protected readonly listenDelay = signal(10);
   /** contatos recentes que ainda não são escutados */
-  protected readonly contactChats = computed(() => this.contacts().filter(c => !this.listen().some(l => l.chat === (c.chat ?? `${c.phone}@s.whatsapp.net`))));
+  protected readonly contactChats = computed(() => this.contacts().filter(c => !this.chats().some(l => l.chat === (c.chat ?? `${c.phone}@s.whatsapp.net`))));
   protected readonly waitMax = signal(60);
   protected readonly split = signal(true);
   protected readonly phone = signal('');
@@ -354,7 +389,7 @@ export class ExtensionsPage {
     if (this.waInstalled()) {
       this.wa.set(await this.ipc.invoke('wa:status'));
       this.contacts.set(await this.ipc.invoke('wa:contacts'));
-      this.listen.set(await this.ipc.invoke('wa:listen'));
+      this.chats.set(await this.ipc.invoke('wa:chats'));
     }
   }
 
@@ -383,20 +418,28 @@ export class ExtensionsPage {
   protected async loadGroups(): Promise<void> {
     const open = (this.wa()?.accounts ?? []).filter(a => a.state === 'open');
     const all = await Promise.all(open.map(a => this.ipc.invoke('wa:groups', a.account).then(gs => gs.map(g => ({ ...g, account: a.account })), () => [])));
-    this.groups.set(all.flat().filter(g => !this.listen().some(l => l.chat === g.id)));
+    this.groups.set(all.flat().filter(g => !this.chats().some(l => l.chat === g.id)));
   }
-  private saveListen(list: WaListenDto[]): void {
-    this.run(() => this.ipc.invoke('wa:setListen', list.map(l => ({ account: l.account, chat: l.chat, name: l.name, group: l.group, agent_id: l.agent_id }))));
+  private saveChats(list: WaChatCfg[]): void {
+    this.chats.set(list.map(c => ({ pending: 0, last_run: null, ...this.chats().find(x => x.account === c.account && x.chat === c.chat), ...c })));
+    this.run(() => this.ipc.invoke('wa:setChats', list.map(({ account, chat, name, group, reply, reply_agent, listen, listen_agent }) => ({ account, chat, name, group, reply, reply_agent, listen, listen_agent }))));
   }
-  protected pickListen(v: string): void {
+  /** grupo entra escutando e sem resposta; contato entra escutando e com o padrão do número */
+  protected addChat(v: string): void {
     if (!v) return;
     const [kind, account, chat, ...name] = v.split('|');
-    this.saveListen([...this.listen(), { account, chat, name: name.join('|'), group: kind === 'g', agent_id: null, pending: 0, last_run: null }]);
+    const group = kind === 'g';
+    this.saveChats([...this.chats(), { account, chat, name: name.join('|'), group, reply: group ? 'off' : 'inherit', reply_agent: null, listen: true, listen_agent: null }]);
     this.groups.update(g => g.filter(x => x.id !== chat));
   }
-  protected unlisten(l: WaListenDto): void { this.saveListen(this.listen().filter(x => !(x.account === l.account && x.chat === l.chat))); }
-  protected setListenAgent(l: WaListenDto, id: string): void { this.saveListen(this.listen().map(x => (x === l ? { ...x, agent_id: Number(id) || null } : x))); }
-  protected digestNow(l: WaListenDto): void { this.run(() => this.ipc.invoke('wa:digestNow', l.account, l.chat)); }
+  protected removeChat(c: WaChatCfg): void { this.saveChats(this.chats().filter(x => !(x.account === c.account && x.chat === c.chat))); }
+  protected patchChat(c: WaChatCfg, patch: Partial<WaChatCfg>): void { this.saveChats(this.chats().map(x => (x.account === c.account && x.chat === c.chat ? { ...x, ...patch } : x))); }
+  protected replyOptions(c: WaChatCfg) {
+    return [{ id: 'inherit' as const, label: c.group ? 'Não (padrão)' : 'Padrão do número' }, { id: 'on' as const, label: 'Sim' }, { id: 'off' as const, label: 'Não' }].filter(o => !(c.group && o.id === 'off'));
+  }
+  protected readonly num = (v: string) => Number(v) || null;
+  protected accountAgent(account: string): number | null { return this.wa()?.accounts.find(a => a.account === account)?.agent_id ?? null; }
+  protected digestNow(c: WaChatCfg): void { this.run(() => this.ipc.invoke('wa:digestNow', c.account, c.chat)); }
   protected setListenDelay(v: string): void { const n = Math.max(1, Math.min(240, Math.round(Number(v) || 10))); this.listenDelay.set(n); this.settings.set('wa:listenDelay', String(n)); }
   protected setOpen(account: string, on: boolean): void { this.run(() => this.ipc.invoke('wa:setOpen', account, on)); }
   protected agentName(id: number | null): string { return id ? this.agents.byId().get(id)?.name ?? 'o agente' : 'a Central'; }

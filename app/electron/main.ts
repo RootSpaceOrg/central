@@ -23,7 +23,7 @@ import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
 import { getUsage, usageNow } from './usage';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
 import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
-import { inbound as waInbound, testPresence as waPresence, initWhatsApp, digestListened, listContacts, listGroups, listenStatus, pairAccount, setAccountAgent, setAccountOpen, setListened, setSender as waSetSender, waStatus } from './whatsapp';
+import { inbound as waInbound, testPresence as waPresence, initWhatsApp, chatsStatus, digestListened, listContacts, listGroups, pairAccount, setAccountAgent, setAccountOpen, setChatCfgs, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -299,10 +299,10 @@ function registerIpc(): void {
   handle('wa:setOpen', (account, on) => { setAccountOpen(account, on); send('ext:changed', null); });
   handle('wa:contacts', () => listContacts());
   handle('wa:groups', account => listGroups(account));
-  handle('wa:listen', () => listenStatus());
-  handle('wa:setListen', list => { setListened(list); send('ext:changed', null); });
+  handle('wa:chats', () => chatsStatus());
+  handle('wa:setChats', list => { setChatCfgs(list); send('ext:changed', null); });
   // ler agora o que acumulou numa conversa escutada (sem esperar o intervalo)
-  handle('wa:digestNow', (account, chat) => { const l = listenStatus().find(x => x.account === account && x.chat === chat); return l ? digestListened(l) : null; });
+  handle('wa:digestNow', (account, chat) => { const c = chatsStatus().find(x => x.account === account && x.chat === chat && x.listen); return c ? digestListened({ account: c.account, chat: c.chat, name: c.name, group: c.group, agent_id: c.listen_agent }) : null; });
   handle('stt:status', () => sttStatus());
   handle('stt:config', patch => { setSttConfig(patch); });
   handle('stt:prepare', async () => { await prepareLocal(); });

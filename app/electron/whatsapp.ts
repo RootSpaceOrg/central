@@ -151,15 +151,31 @@ async function mediaText(m: WaMessage, agentId: number): Promise<string> {
 }
 
 export function inbound(m: WaMessage): void {
-  // conversa em modo escuta: só guarda (inclusive o que você mandou nela) para um agente ler depois; nunca responde
-  if (listen(m)) return;
-  if (m.group) return; // grupo que não é escutado
+  const account = m.account ?? 'main';
+  const cfg = cfgOf(account, m.chat);
+  // escuta: guarda (inclusive o que você mandou) para um agente ler depois; independe da resposta
+  if (cfg?.listen) listen(m, cfg);
+  if (m.group) {
+    // grupo com resposta ligada: o agente da conversa responde (o que você mesmo escreve no grupo não aciona)
+    if (cfg?.reply === 'on' && !m.fromMe && allowHit(m.chat)) {
+      withMedia(m, account, text => soon(account, m.chat, m.chat, `${m.name ?? (m.phone ? `+${m.phone}` : 'alguém')}: ${text}`, cfg.name, true, cfg.reply_agent, true));
+    }
+    return;
+  }
+  if (cfg?.reply === 'off') { if (!m.fromMe && m.phone) { touch(m.phone, m, 'in'); deps.changed(); } return; }
   // o que você mandou do celular para outras pessoas não é conversa com a Central
   if (m.fromMe && !m.self) return;
   // da casa: os donos cadastrados e os números conectados na própria Central (falar de um para o outro funciona)
   const house = [...owners(), ...opened().map(a => a.me?.phone).filter((p): p is string => !!p)];
   const owner = m.self || (!!m.phone && house.includes(m.phone));
-  const account = m.account ?? 'main';
+  if (cfg?.reply === 'on') {
+    // resposta ligada nesta conversa: responde mesmo quem não é da casa (com limite por pessoa), com o agente escolhido
+    if (!owner && m.phone) { touch(m.phone, m, 'in'); deps.changed(); }
+    if (owner || (m.phone && allowHit(m.phone))) {
+      withMedia(m, account, text => soon(account, m.self ? 'self' : m.phone!, m.chat, text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`, !owner, cfg.reply_agent));
+    }
+    return;
+  }
   if (!owner) {
     if (m.phone) touch(m.phone, m, 'in');
     deps.changed();
@@ -195,9 +211,9 @@ export const waitSettings = () => ({
   base: Math.max(0, Math.min(120, Number(getSetting('wa:wait') ?? 8) || 0)),
   max: Math.max(0, Math.min(300, Number(getSetting('wa:waitMax') ?? 60) || 0)),
 });
-function soon(account: string, who: string, chat: string, text: string, name: string, outside = false): void {
+function soon(account: string, who: string, chat: string, text: string, name: string, outside = false, agentId: number | null = null, group = false): void {
   const { base, max } = waitSettings();
-  if (!base && !max) return talk(account, who, chat, text, name, outside);
+  if (!base && !max) return talk(account, who, chat, text, name, outside, agentId, group);
   const k = `${account}:${who}`;
   const g = gathering.get(k) ?? { texts: [], last: 0 };
   clearTimeout(g.timer);
@@ -207,15 +223,15 @@ function soon(account: string, who: string, chat: string, text: string, name: st
   const fire = () => {
     if (typing(account, chat) && Date.now() - g.last < Math.max(base, max) * 1000) { g.timer = setTimeout(fire, 2000); return; }
     gathering.delete(k);
-    talk(account, who, chat, g.texts.join('\n'), name, outside);
+    talk(account, who, chat, g.texts.join('\n'), name, outside, agentId, group);
   };
   g.timer = setTimeout(fire, base * 1000);
   gathering.set(k, g);
 }
 
 /** Dono escreveu: segue a conversa dele com o agente do número; o que chega enquanto ele responde vai junto depois. */
-function talk(account: string, who: string, chat: string, text: string, name: string, outside = false): void {
-  const agentId = agentFor(account);
+function talk(account: string, who: string, chat: string, text: string, name: string, outside = false, agentOverride: number | null = null, group = false): void {
+  const agentId = agentOverride ?? agentFor(account);
   const key = `${account}:${agentId}:${who}`;
   // conversa de antes dos vários números (v0.28): a "você mesmo" com a Central continua a mesma
   const legacy = account === 'main' && agentId === deps.centralId() ? Number(getSetting(`wa:chat:${who}`)) || null : null;
@@ -239,11 +255,13 @@ function talk(account: string, who: string, chat: string, text: string, name: st
       for (const part of splitOn() ? splitReply(reply) : [reply]) sendOut(account, chat, part).catch(() => {});
       const queued = waiting.get(key) ?? [];
       waiting.delete(key);
-      if (queued.length) talk(account, who, chat, queued.join('\n\n'), name, outside);
+      if (queued.length) talk(account, who, chat, queued.join('\n\n'), name, outside, agentOverride, group);
     }
   };
   try {
-    const first = outside ? `(Mensagem de ${name} (+${who}), uma pessoa de fora, pelo WhatsApp.${bubbles()} Responda como no WhatsApp: curto e educado.)` : intro(name);
+    const first = group
+      ? `(Conversa no grupo "${name}" pelo WhatsApp. Cada mensagem vem com o nome de quem falou; tem gente de fora. Responda ao grupo só o que fizer sentido, curto e educado.${bubbles()})`
+      : outside ? `(Mensagem de ${name} (+${who}), uma pessoa de fora, pelo WhatsApp.${bubbles()} Responda como no WhatsApp: curto e educado.)` : intro(name);
     const id = sendChat(chatId, agentId, chatId ? text : `${first}\n\n${text}`, notify, deps.changed);
     if (!chatId) {
       const phone = accounts.get(account)?.me?.phone;
@@ -304,18 +322,39 @@ export const listContacts = () => all<{ phone: string; chat: string | null; name
  * agente lê o trecho e vê se tem impacto nos projetos (ideias e decisões, sem duplicar o que já existe).
  */
 export interface Listened { account: string; chat: string; name: string; group: boolean; agent_id: number | null }
-export const listened = (): Listened[] => { try { return JSON.parse(getSetting('wa:listen') ?? '[]'); } catch { return []; } };
+
+/**
+ * Cada conversa configurada tem dois controles independentes: responder (inherit = o padrão do número; on = este agente
+ * responde aqui, mesmo em grupo ou com quem não é da casa; off = nunca responde) e escutar (um agente lê os trechos e
+ * registra ideias/decisões). Os dois podem estar ligados, com agentes iguais ou diferentes.
+ */
+export interface ChatCfg { account: string; chat: string; name: string; group: boolean; reply: 'inherit' | 'on' | 'off'; reply_agent: number | null; listen: boolean; listen_agent: number | null }
+export function chatCfgs(): ChatCfg[] {
+  const raw = getSetting('wa:chats');
+  if (raw) { try { return JSON.parse(raw); } catch { return []; } }
+  // antes (v0.38) só havia a escuta: cada conversa escutada vira "escutar sim, responder não" (como funcionava)
+  let old: Listened[] = [];
+  try { old = JSON.parse(getSetting('wa:listen') ?? '[]'); } catch { /* nada */ }
+  return old.map(l => ({ account: l.account, chat: l.chat, name: l.name, group: !!l.group, reply: 'off', reply_agent: null, listen: true, listen_agent: l.agent_id ?? null }));
+}
+export function setChatCfgs(list: ChatCfg[]): void {
+  const clean = list.map(c => ({
+    account: c.account, chat: c.chat, name: c.name, group: !!c.group,
+    reply: (['inherit', 'on', 'off'].includes(c.reply) ? c.reply : 'inherit') as ChatCfg['reply'], reply_agent: c.reply_agent ?? null,
+    listen: !!c.listen, listen_agent: c.listen_agent ?? null,
+  }));
+  setSetting('wa:chats', JSON.stringify(clean));
+  syncListened();
+}
+const cfgOf = (account: string, chat: string) => chatCfgs().find(c => c.account === account && c.chat === chat) ?? null;
+export const listened = (): Listened[] => chatCfgs().filter(c => c.listen).map(c => ({ account: c.account, chat: c.chat, name: c.name, group: c.group, agent_id: c.listen_agent }));
 const listenDelay = () => Math.max(1, Math.min(240, Number(getSetting('wa:listenDelay') ?? 10) || 10));
 export const LISTEN_HEAD = '[escuta]';
 
-export function setListened(list: Listened[]): void {
-  setSetting('wa:listen', JSON.stringify(list.map(l => ({ account: l.account, chat: l.chat, name: l.name, group: !!l.group, agent_id: l.agent_id ?? null }))));
-  syncListened();
-}
-/** a extensão só lê os grupos escutados (os outros nem baixam mídia) */
-export const syncListened = () => callExtension(EXT, 'listen', { chats: listened().map(l => l.chat) }).catch(() => {});
+/** a extensão só lê os grupos configurados (escutados ou com resposta ligada); os outros nem baixam mídia */
+export const syncListened = () => callExtension(EXT, 'listen', { chats: chatCfgs().filter(c => c.listen || c.reply === 'on').map(c => c.chat) }).catch(() => {});
 
-export const listenStatus = () => listened().map(l => ({
+export const chatsStatus = () => chatCfgs().map(l => ({
   ...l,
   pending: get<{ n: number }>('select count(*) n from wa_feed where account = ? and chat = ? and run_id is null', l.account, l.chat)!.n,
   last_run: get<{ id: number; at: string }>('select max(run_id) id, max(at) at from wa_feed where account = ? and chat = ? and run_id is not null', l.account, l.chat) ?? null,
@@ -323,9 +362,8 @@ export const listenStatus = () => listened().map(l => ({
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
-function listen(m: WaMessage): boolean {
-  const l = listened().find(x => x.account === (m.account ?? 'main') && x.chat === m.chat);
-  if (!l) return false;
+function listen(m: WaMessage, c: ChatCfg): void {
+  const l: Listened = { account: c.account, chat: c.chat, name: c.name, group: c.group, agent_id: c.listen_agent };
   const agentId = l.agent_id ?? deps.centralId();
   const who = m.fromMe ? 'Gustavo' : m.name ?? (m.phone ? `+${m.phone}` : 'alguém');
   const save = (text: string) => {
@@ -335,7 +373,6 @@ function listen(m: WaMessage): boolean {
   };
   if (m.media) mediaText(m, agentId).then(save, () => save(m.text || '[mídia]'));
   else if (m.text) save(m.text);
-  return true;
 }
 
 /** o trecho acumula por um intervalo e então vai para o agente (um por vez por conversa) */
