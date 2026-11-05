@@ -849,14 +849,17 @@ export type AgentPriority = 'high' | 'normal' | 'low';
 export type AgentPatch = Partial<NewAgentInput>;
 
 export interface ExtensionDto { id: string; name: string; version: string; description: string; warning?: string; installed: boolean; running: boolean }
-export interface WaStatusDto {
+export interface WaAccountDto {
+  account: string;
   state: 'disconnected' | 'pairing' | 'connecting' | 'open';
   me: { id: string; lid: string | null; phone: string; name: string | null } | null;
   /** código de pareamento para digitar no celular */
   code: string | null;
-  installed: boolean;
+  /** quem responde nesse número; null = a Central */
+  agent_id: number | null;
 }
-export interface WaContactDto { phone: string; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null }
+export interface WaStatusDto { installed: boolean; accounts: WaAccountDto[] }
+export interface WaContactDto { phone: string; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null; account: string | null }
 
 export interface UpdateInfoDto {
   current: string;
@@ -999,9 +1002,12 @@ export interface Api {
   'ext:install': (id: string) => void;
   'ext:uninstall': (id: string) => void;
   'wa:status': () => WaStatusDto;
-  /** vincula o número: o código de 8 letras chega pelo status */
-  'wa:pair': (phone: string) => void;
-  'wa:logout': () => void;
+  /** vincula um número (account null = número novo): o código de 8 letras chega pelo status; devolve a conta */
+  'wa:pair': (account: string | null, phone: string) => string;
+  /** desconecta e esquece o número */
+  'wa:logout': (account: string) => void;
+  /** quem responde nesse número (null = a Central) */
+  'wa:setAgent': (account: string, agentId: number | null) => void;
   'wa:contacts': () => WaContactDto[];
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];

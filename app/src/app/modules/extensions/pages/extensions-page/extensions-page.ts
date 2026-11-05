@@ -3,6 +3,7 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ExtensionDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
+import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 
@@ -20,7 +21,7 @@ export function formatPhone(n: string): string {
  */
 @Component({
   selector: 'app-extensions-page',
-  imports: [Icon, AgoPipe],
+  imports: [Icon, AgoPipe, AgentSelect],
   host: { class: 'block h-full overflow-y-auto' },
   template: `
     <div class="mx-auto max-w-[980px] px-10 pt-9 pb-16">
@@ -47,40 +48,57 @@ export function formatPhone(n: string): string {
           </div>
 
           @if (e.id === 'whatsapp' && e.installed) {
-            @let s = wa();
             <div class="mt-6 border-t border-edge pt-5">
-              @switch (s?.state) {
-                @case ('open') {
-                  <p class="flex flex-wrap items-center gap-2"><span class="size-2.5 rounded-full bg-yes"></span>
-                    Conectado em <b>{{ fmt(s!.me!.phone) }}</b>{{ s!.me!.name ? ' (' + s!.me!.name + ')' : '' }}
-                    <button type="button" class="btn btn-sm btn-ghost ml-auto" (click)="logout()">Desconectar</button></p>
+              <h3 class="font-semibold">Números conectados</h3>
+              <p class="mt-0.5 text-[13px] text-mute">Cada número tem quem responde nele. Na conversa "você mesmo" de cada número, também responde o agente dele.</p>
+              <div class="mt-3 space-y-3">
+                @for (a of accounts(); track a.account) {
+                  <div class="rounded-2xl border border-edge bg-night/60 p-4">
+                    @switch (a.state) {
+                      @case ('open') {
+                        <div class="flex flex-wrap items-center gap-3">
+                          <span class="size-2.5 rounded-full bg-yes"></span>
+                          <span class="min-w-0 flex-1"><b class="font-mono">{{ fmt(a.me!.phone) }}</b>{{ a.me!.name ? ' · ' + a.me!.name : '' }}</span>
+                          <span class="text-[13px] text-mute">Quem responde</span>
+                          <app-agent-select class="w-60" [compact]="true" [value]="a.agent_id ? '' + a.agent_id : ''" (valueChange)="setAgent(a.account, $event)" noneLabel="A Central" />
+                          <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="logout(a.account)">Desconectar</button>
+                        </div>
+                      }
+                      @case ('connecting') { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-later"></span>{{ a.me ? fmt(a.me.phone) + ': ' : '' }}reconectando…</p> }
+                      @case ('pairing') {
+                        @if (a.code) {
+                          <p class="text-[14px] text-mute">No celular do número, abra o WhatsApp → <b class="text-text">Dispositivos conectados</b> → <b class="text-text">Conectar dispositivo</b> →
+                            <b class="text-text">Conectar com número de telefone</b> e digite:</p>
+                          <p class="mt-3 font-mono text-[34px] font-bold tracking-[0.25em] text-frost selectable" aria-live="polite">{{ a.code.slice(0, 4) }}-{{ a.code.slice(4) }}</p>
+                          <p class="mt-2 flex items-center gap-3 text-[12.5px] text-faint">Fica válido por alguns minutos. Quando conectar, esta tela muda sozinha.
+                            <button type="button" class="btn btn-sm btn-ghost ml-auto" (click)="logout(a.account)">Cancelar</button></p>
+                        } @else { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-frost"></span>Pedindo o código ao WhatsApp…</p> }
+                      }
+                      @default {
+                        <p class="flex items-center gap-2 text-mute"><span class="size-2.5 rounded-full bg-faint"></span>Desconectado
+                          <button type="button" class="btn btn-sm btn-ghost ml-auto" (click)="logout(a.account)">Remover</button></p>
+                      }
+                    }
+                  </div>
                 }
-                @case ('connecting') { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-later"></span>Reconectando…</p> }
-                @case ('pairing') {
-                  @if (s!.code) {
-                    <div class="rounded-2xl border border-frost/40 bg-night p-5">
-                      <p class="text-[14px] text-mute">No celular do número, abra o WhatsApp → <b class="text-text">Dispositivos conectados</b> → <b class="text-text">Conectar dispositivo</b> →
-                        <b class="text-text">Conectar com número de telefone</b> e digite:</p>
-                      <p class="mt-3 font-mono text-[34px] font-bold tracking-[0.25em] text-frost selectable" aria-live="polite">{{ s!.code!.slice(0, 4) }}-{{ s!.code!.slice(4) }}</p>
-                      <p class="mt-2 flex items-center gap-3 text-[12.5px] text-faint">Fica válido por alguns minutos. Quando conectar, esta tela muda sozinha.
-                        <button type="button" class="btn btn-sm btn-ghost ml-auto" (click)="logout()">Cancelar</button></p>
-                    </div>
-                  } @else { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-frost"></span>Pedindo o código ao WhatsApp…</p> }
-                }
-                @default {
-                  <form class="flex flex-wrap items-end gap-3" (submit)="$event.preventDefault(); pair()">
-                    <label class="min-w-64 flex-1"><span class="mb-1.5 block font-semibold">Número para conectar</span>
-                      <input class="field font-mono" inputmode="tel" autocomplete="off" placeholder="55 11 99999-8888" [value]="phone()" (input)="phone.set($any($event.target).value)"></label>
-                    <button class="btn btn-primary" [disabled]="digits(phone()).length < 12">Gerar código</button>
-                    <p class="w-full text-[12.5px] text-faint">Com DDI e DDD. Pode ser o seu número (aí você fala com a Central na conversa "você mesmo") ou um número só da Central, como o do atendimento.</p>
-                  </form>
-                }
+              </div>
+
+              @if (adding() || !accounts().length) {
+                <form class="mt-3 flex flex-wrap items-end gap-3" (submit)="$event.preventDefault(); pair()">
+                  <label class="min-w-64 flex-1"><span class="mb-1.5 block font-semibold">{{ accounts().length ? 'Outro número' : 'Número para conectar' }}</span>
+                    <input class="field font-mono" inputmode="tel" autocomplete="off" placeholder="55 11 99999-8888" [value]="phone()" (input)="phone.set($any($event.target).value)"></label>
+                  <button class="btn btn-primary" [disabled]="digits(phone()).length < 12 || busy()">Gerar código</button>
+                  @if (accounts().length) { <button type="button" class="btn btn-ghost" (click)="adding.set(false)">Cancelar</button> }
+                  <p class="w-full text-[12.5px] text-faint">Com DDI e DDD. Pode ser o seu número (você fala com o agente na conversa "você mesmo") ou um número só da Central, como o do atendimento.</p>
+                </form>
+              } @else {
+                <button type="button" class="btn btn-sm mt-3" (click)="adding.set(true)"><app-icon name="plus" [size]="14" />Conectar outro número</button>
               }
 
-              <h3 class="mt-7 font-semibold">Quem conversa com a Central</h3>
-              <p class="mt-0.5 text-[13px] text-mute">Estes números falam com o agente principal, com tudo o que ele pode fazer. Mensagens de outros números ficam registradas abaixo e não acionam agente.</p>
+              <h3 class="mt-7 font-semibold">Quem pode conversar com os agentes</h3>
+              <p class="mt-0.5 text-[13px] text-mute">Estas pessoas falam com o agente de cada número, com tudo o que ele pode fazer. Mensagens de outros números ficam registradas abaixo e não acionam agente.</p>
               <div class="mt-3 flex flex-wrap gap-2">
-                @if (s?.me) { <span class="rounded-full bg-frost/12 px-3 py-1 text-[13px] text-frost">Você mesmo ({{ fmt(s!.me!.phone) }})</span> }
+                @for (a of accounts(); track a.account) { @if (a.me) { <span class="rounded-full bg-frost/12 px-3 py-1 text-[13px] text-frost">Você mesmo ({{ fmt(a.me.phone) }})</span> } }
                 @for (o of owners(); track o) {
                   <span class="flex items-center gap-1.5 rounded-full bg-raise px-3 py-1 font-mono text-[13px]">{{ fmt(o) }}
                     <button type="button" (click)="removeOwner(o)" [attr.aria-label]="'Remover ' + fmt(o)" class="text-faint hover:text-no"><app-icon name="close" [size]="12" /></button></span>
@@ -128,6 +146,8 @@ export class ExtensionsPage {
 
   protected readonly list = signal<ExtensionDto[]>([]);
   protected readonly wa = signal<WaStatusDto | null>(null);
+  protected readonly accounts = computed(() => this.wa()?.accounts ?? []);
+  protected readonly adding = signal(false);
   protected readonly contacts = signal<WaContactDto[]>([]);
   protected readonly owners = signal<string[]>([]);
   protected readonly any = signal(false);
@@ -166,8 +186,9 @@ export class ExtensionsPage {
 
   protected install(e: ExtensionDto): void { this.run(() => this.ipc.invoke('ext:install', e.id)); }
   protected uninstall(e: ExtensionDto): void { this.run(() => this.ipc.invoke('ext:uninstall', e.id)); }
-  protected pair(): void { this.run(() => this.ipc.invoke('wa:pair', digits(this.phone()))); }
-  protected logout(): void { this.run(() => this.ipc.invoke('wa:logout')); }
+  protected pair(): void { this.run(async () => { await this.ipc.invoke('wa:pair', null, digits(this.phone())); this.phone.set(''); this.adding.set(false); }); }
+  protected logout(account: string): void { this.run(() => this.ipc.invoke('wa:logout', account)); }
+  protected setAgent(account: string, id: string): void { this.run(() => this.ipc.invoke('wa:setAgent', account, Number(id) || null)); }
 
   private saveOwners(list: string[]): void {
     this.owners.set(list);

@@ -289,11 +289,11 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
       budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: a.task_id ?? null, urgent: !!a.urgent, parent_run_id: parent }, h.emit);
     return `${target.name} foi avisado e vai trabalhar nisso (execução #${r.id}${runDto(r.id).status === 'queued' ? ', na fila' : ''}).`;
   }, h.backlog);
-  tool('whatsapp_send', 'Manda uma mensagem de WhatsApp pelo número conectado na Central (extensão WhatsApp). to = número com DDI e DDD (ex.: 5511999998888). Para quem nunca falou com vocês, a Central pede aprovação ao Gustavo antes (a não ser que ele tenha liberado qualquer número). Texto curto, sem markdown pesado.', {
-    to: z.string(), text: z.string().max(4000),
+  tool('whatsapp_send', 'Manda uma mensagem de WhatsApp por um número conectado na Central (extensão WhatsApp). to = número com DDI e DDD (ex.: 5511999998888). Sai pelo número em que você responde (ou o primeiro conectado); from_number escolhe outro. Para quem nunca falou com vocês, a Central pede aprovação ao Gustavo antes (a não ser que ele tenha liberado qualquer número). Texto curto, sem markdown pesado.', {
+    to: z.string(), text: z.string().max(4000), from_number: z.string().optional().describe('número conectado por onde sair, se houver mais de um'),
   }, async a => {
     const me = callerAgent(caller);
-    return agentSend(a.to, a.text, me ? listAgents().find(x => x.id === me)?.name ?? 'Um agente' : 'A Central');
+    return agentSend(a.to, a.text, { name: me ? listAgents().find(x => x.id === me)?.name ?? 'Um agente' : 'A Central', agentId: me }, a.from_number);
   }, h.backlog);
   tool('take_over', 'Passa uma execução parada (pausada pela cota, que falhou ou foi interrompida) para outro agente continuar na mesma branch, com o registro do que já foi feito. Sem agent_id, o mesmo agente recomeça com o registro.', {
     run_id: z.number().int(), agent_id: z.number().int().optional(), note: z.string().optional().describe('o que quem assume precisa saber'),

@@ -21,7 +21,7 @@ import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, set
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, startInstalled, uninstallExtension } from './extensions';
-import { inbound as waInbound, initWhatsApp, listContacts, setSender as waSetSender, waStatus } from './whatsapp';
+import { inbound as waInbound, initWhatsApp, listContacts, pairAccount, setAccountAgent, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -269,14 +269,15 @@ function registerIpc(): void {
   handle('ext:install', async id => { await installExtension(id); });
   handle('ext:uninstall', async id => { await uninstallExtension(id); });
   handle('wa:status', () => waStatus());
-  handle('wa:pair', async phone => { await callExtension('whatsapp', 'pair', { phone }); });
-  handle('wa:logout', async () => { await callExtension('whatsapp', 'logout'); });
+  handle('wa:pair', (account, phone) => pairAccount(account, phone));
+  handle('wa:logout', async account => { await callExtension('whatsapp', 'logout', { account }); });
+  handle('wa:setAgent', (account, agentId) => { setAccountAgent(account, agentId); send('ext:changed', null); });
   handle('wa:contacts', () => listContacts());
   // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp
   if (CAPTURE) ipcMain.handle('wa:test-inbound', async (_e, m: Record<string, unknown>) => {
-    const sent: { to: string; text: string }[] = [];
-    waSetSender(async (to, text) => { sent.push({ to, text }); return {}; });
-    waInbound({ id: 't', chat: '5511900000000@s.whatsapp.net', phone: null, name: null, fromMe: false, self: false, text: '', at: Date.now(), ...m });
+    const sent: { account: string; to: string; text: string }[] = [];
+    waSetSender(async (account, to, text) => { sent.push({ account, to, text }); return {}; });
+    waInbound({ account: 'main', id: 't', chat: '5511900000000@s.whatsapp.net', phone: null, name: null, fromMe: false, self: false, text: '', at: Date.now(), ...m });
     for (let i = 0; i < 240 && !sent.length; i++) await new Promise(r => setTimeout(r, 1000));
     return sent;
   });
