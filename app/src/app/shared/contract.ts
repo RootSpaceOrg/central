@@ -977,6 +977,8 @@ export interface Api {
   'boards:place': (taskId: number, boardId: number, stage: string, position: number) => void;
   'boards:remove': (taskId: number, boardId: number) => void;
   'deliveries:list': (since: string | null, status: DeliveryStatus | null) => DeliveryDto[];
+  /** tela Revisão: fila de revisão + a nota mais recente de cada tarefa em Revisão no backlog */
+  'deliveries:board': () => DeliveryDto[];
   'deliveries:review': (id: number, action: 'accepted' | 'adjusting' | 'discarded', note: string | null) => void;
   /** tudo o que aconteceu desde (ISO) */
   'digest:get': (since: string) => DigestDto;

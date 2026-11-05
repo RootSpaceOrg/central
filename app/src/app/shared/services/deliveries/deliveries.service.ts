@@ -68,6 +68,8 @@ export class DeliveriesService {
 
   /** fila de revisão: entregas que mexeram em código e esperam você */
   readonly queue = signal<Delivery[]>([]);
+  /** tela Revisão: a fila + a nota mais recente de cada tarefa em Revisão no backlog */
+  readonly board = signal<Delivery[]>([]);
   readonly error = signal<string | null>(null);
   /** muda a cada novidade (execução terminou, entrega, revisão): quem mostra o digest recarrega */
   readonly changed = signal(0);
@@ -77,7 +79,10 @@ export class DeliveriesService {
     this.api.onChanged(() => { this.load(); this.changed.update(n => n + 1); });
   }
 
-  load(): void { this.api.list(null, 'review').then(list => this.queue.set(list.map(toModel))); }
+  load(): void {
+    this.api.list(null, 'review').then(list => this.queue.set(list.map(toModel)));
+    this.api.board().then(list => this.board.set(list.map(toModel)));
+  }
 
   async digest(since: Date): Promise<Digest> { return toDigest(await this.api.digest(since.toISOString())); }
 
@@ -99,6 +104,7 @@ export class DeliveriesService {
 
   private review(d: Delivery, action: 'accepted' | 'adjusting' | 'discarded', note: string | null): void {
     this.queue.update(q => q.filter(x => x.id !== d.id));
+    this.board.update(q => q.filter(x => x.id !== d.id));
     this.api.review(d.id, action, note).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 }

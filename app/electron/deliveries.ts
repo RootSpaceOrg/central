@@ -19,6 +19,15 @@ const fromRow = (r: any): DeliveryDto => ({ ...r, explained: !!r.explained });
 export const listDeliveries = (since: string | null, status: string | null) =>
   all<any>(`${SELECT} where (? is null or d.created_at > ?) and (? is null or d.status = ?) order by d.id desc limit 200`, since, since, status, status).map(fromRow);
 
+/**
+ * Tela Revisão: tudo o que espera o olhar do Gustavo. Entregas na fila de revisão e, de cada tarefa na coluna Revisão do
+ * backlog, a nota mais recente (mesmo que a entrega já tenha sido vista antes).
+ */
+export const reviewBoard = () =>
+  all<any>(`${SELECT} where d.status = 'review'
+     or d.id in (select max(x.id) from deliveries x join tasks t on t.id = x.task_id where t."column" = 'review' and x.status <> 'discarded' group by x.task_id)
+     order by d.id desc limit 300`).map(fromRow);
+
 /** O agente conta a entrega (pode chamar mais de uma vez: a última vale). */
 export function reportDelivery(runId: number, i: { title: string; what: string; why?: string; how_to_test?: string; risks?: string }): void {
   const r = get<{ project_slug: string | null; agent_id: number | null; task_id: number | null }>('select project_slug, agent_id, task_id from runs where id = ?', runId);

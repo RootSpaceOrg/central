@@ -14,6 +14,7 @@ export const routes: Routes = [
   { path: 'agentes', title: 'Agentes', loadComponent: () => import('./modules/agents/pages/agents-page/agents-page').then(m => m.AgentsPage) },
   { path: 'execucoes', title: 'Execuções', loadComponent: () => import('./modules/runs/pages/runs-page/runs-page').then(m => m.RunsPage) },
   { path: 'extensoes', title: 'Extensões', loadComponent: () => import('./modules/extensions/pages/extensions-page/extensions-page').then(m => m.ExtensionsPage) },
+  { path: 'revisao', title: 'Revisão', loadComponent: () => import('./modules/review/pages/review-page/review-page').then(m => m.ReviewPage) },
   { path: 'rotinas', title: 'Rotinas', loadComponent: () => import('./modules/routines/pages/routines-page/routines-page').then(m => m.RoutinesPage) },
   {
     path: 'projetos/:slug',

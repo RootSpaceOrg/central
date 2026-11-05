@@ -17,7 +17,7 @@ import { closeSession, createSession, listSessions, updateSession } from './sess
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
-import { digest, listDeliveries, reviewDelivery } from './deliveries';
+import { digest, listDeliveries, reviewDelivery, reviewBoard } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
 import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
 import { getUsage, usageNow } from './usage';
@@ -251,6 +251,7 @@ function registerIpc(): void {
   handle('boards:place', (taskId, boardId, stage, position) => { setStage(taskId, boardId, stage, position); backlogChanged(); });
   handle('boards:remove', (taskId, boardId) => { removeFromBoard(taskId, boardId); backlogChanged(); });
   handle('deliveries:list', (since, status) => listDeliveries(since, status));
+  handle('deliveries:board', () => reviewBoard());
   handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); backlogChanged(); });
   handle('digest:get', since => digest(since));
   handle('release:status', (slug, refresh) => releaseStatus(slug, !!refresh));

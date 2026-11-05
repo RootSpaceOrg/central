@@ -17,6 +17,7 @@ import { UsageMeter } from './shared/components/usage-meter/usage-meter';
 import { UpdateService } from './shared/services/update/update.service';
 import { IdeasService } from './shared/services/ideas/ideas.service';
 import { TasksService } from './shared/services/tasks/tasks.service';
+import { DeliveriesService } from './shared/services/deliveries/deliveries.service';
 import { DialogsService } from './shared/services/dialogs/dialogs.service';
 import { Project, ProjectStatus } from './shared/services/projects/projects.model';
 import { ProjectsService } from './shared/services/projects/projects.service';
@@ -57,6 +58,7 @@ export class App {
   protected readonly dialogs = inject(DialogsService);
   protected readonly ideas = inject(IdeasService);
   protected readonly tasks = inject(TasksService);
+  private readonly deliveries = inject(DeliveriesService);
   protected readonly update = inject(UpdateService);
   protected readonly chat = inject(ChatService);
   private readonly menu = inject(ContextMenuService);
@@ -73,6 +75,7 @@ export class App {
     { path: '/visao-geral', label: 'Visão geral', icon: 'overview' },
     { path: '/triagem', label: 'Triagem (decisões e ideias novas)', icon: 'inbox' },
     { path: '/ideias', label: 'Ideias', icon: 'ideas' },
+    { path: '/revisao', label: 'Revisão (entregas esperando o seu olhar)', icon: 'pr' },
     { path: '/backlog', label: 'Backlog', icon: 'kanban' },
     { path: '/quadros', label: 'Quadros (workflows com agentes)', icon: 'workflow' },
     { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
@@ -88,8 +91,12 @@ export class App {
     const triage = this.proposals.inbox().length + this.ideas.fresh().length;
     if (path === '/triagem' && triage) return { n: triage, tone: 'bg-later text-night' };
     if (path === '/ideias' && this.ideas.waiting().length) return { n: this.ideas.waiting().length, tone: 'bg-edge text-text' };
-    const review = this.tasks.tasks().filter(t => t.column === 'review').length;
-    if (path === '/backlog' && review) return { n: review, tone: 'bg-frost text-night' };
+    // revisão: entregas na fila + tarefas em Revisão sem entrega (o mesmo que a tela Revisão lista)
+    if (path === '/revisao') {
+      const covered = new Set(this.deliveries.board().map(d => d.taskId));
+      const n = this.deliveries.board().length + this.tasks.tasks().filter(t => t.column === 'review' && !covered.has(t.id)).length;
+      return n ? { n, tone: 'bg-frost text-night' } : null;
+    }
     return null;
   }
 
