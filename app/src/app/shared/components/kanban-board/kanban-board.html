@@ -46,6 +46,10 @@
                 <a [routerLink]="['/quadros', p.boardId]" (click)="$event.stopPropagation()" class="flex max-w-full items-center gap-1 rounded-full bg-[#B48CFF]/12 px-2 py-0.5 text-[11.5px] text-[#C6A6FF] hover:underline"
                    [title]="'Neste quadro: ' + boards.label(p)"><app-icon name="workflow" [size]="11" /><span class="truncate">{{ boards.label(p) }}</span></a>
               }
+              @if (waitingFor(t); as w) {
+                <span class="flex items-center gap-1 text-[12px] text-mute" [title]="'Só começa quando estas forem entregues (Revisão, Em dev ou Feito)'">
+                  <app-icon name="timer" [size]="12" />depois da {{ w }}</span>
+              }
               @if (asking().get(t.id); as d) {
                 <a routerLink="/triagem" (click)="$event.stopPropagation()" class="flex items-center gap-1 text-later hover:underline" [title]="d.title">
                   <app-icon name="inbox" [size]="13" />decisão #{{ d.id }} esperando você</a>

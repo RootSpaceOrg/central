@@ -285,6 +285,8 @@ export interface TaskDto {
 
   /** cor do cartão (null = padrão) */
   color?: string | null;
+  /** JSON com ids das tarefas que precisam ser entregues antes desta (ex.: "[21,22]") */
+  depends_on?: string | null;
 }
 
 /** Uma coluna de um quadro (workflow). */
@@ -334,6 +336,8 @@ export interface NewTaskInput {
   body: string | null;
   column: TaskColumn;
   priority: TaskPriority;
+  /** tarefas que precisam ser entregues antes desta */
+  depends_on?: number[];
 }
 
 export interface TaskPatch {
@@ -348,6 +352,8 @@ export interface TaskPatch {
   milestone_id?: number | null;
   /** cor do cartão (null = padrão) */
   color?: string | null;
+  /** tarefas que precisam ser entregues antes desta ([] = nenhuma) */
+  depends_on?: number[];
 }
 
 export interface ImportResultDto {

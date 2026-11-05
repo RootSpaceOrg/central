@@ -25,6 +25,19 @@ export interface DispatchDeps {
 }
 
 let lastSkip = '';
+
+/**
+ * Uma tarefa que não consegue começar (ex.: repositório que não existe mais) vira uma decisão para o Gustavo, uma vez só,
+ * e o despacho segue com as outras (antes o erro parava o "A fazer" de todos os projetos, em silêncio).
+ */
+function stuck(taskId: number, slug: string | null, why: string): void {
+  lastSkip = `tarefa #${taskId}: ${why}`;
+  if (get(`select 1 from proposals where task_id = ? and status = 'proposed'`, taskId)) return;
+  const title = get<{ title: string }>('select title from tasks where id = ?', taskId)?.title ?? `#${taskId}`;
+  run(`insert into proposals (project_slug, title, body, next_action, tier, source, source_ref, task_id, status) values (?,?,?,?,?,?,?,?, 'proposed')`,
+    slug, `Não consegui começar a tarefa #${taskId}`, `"${title}" está em A fazer, mas não começou: ${why}`,
+    'Ajuste a tarefa (repositório, agente) e aprove para tentar de novo.', 1, 'dispatch', `dispatch-${taskId}-${Date.now()}`, taskId);
+}
 /** por que não disparou da última vez (para a tela explicar) */
 export const dispatchSkip = () => lastSkip;
 
@@ -57,10 +70,14 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
       `select t.id, t.title, t.body, t.repo_path from tasks t
        where t.project_slug = ? and t."column" = 'todo'
          and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.status = 'failed' and r.finished_at > ?)))
+         and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
+         and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
        order by t.priority, t.position, t.id limit ?`, o.slug, since, slots);
     for (const t of tasks) {
-      deps.start({ project_slug: o.slug, agent_id: o.agent, repo_path: t.repo_path, prompt: `${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: o.permission, task_id: t.id });
-      started++;
+      try {
+        deps.start({ project_slug: o.slug, agent_id: o.agent, repo_path: t.repo_path, prompt: `${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: o.permission, task_id: t.id });
+        started++;
+      } catch (e) { stuck(t.id, o.slug, (e as Error).message); }
     }
   }
   for (const s of stages) {
@@ -74,11 +91,14 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
        where x.board_id = ? and x.stage = ? and t."column" <> 'done'
          and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.board_id = ? and r.stage = ? and r.status = 'failed' and r.finished_at > ?) or r.waiting is not null))
          and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
+         and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
        order by t.priority, x.position, t.id limit ?`, s.board, s.key, s.board, s.key, since, slots);
     for (const t of tasks) {
       const head = `Etapa "${s.label}" do quadro ${s.bname}.${s.instruction ? `\n${s.instruction}` : ''}\nAo terminar bem, a Central leva a tarefa para ${s.next ? `"${s.next}"` : 'o fim do quadro'}; não mova você mesmo.`;
-      deps.start({ project_slug: t.project_slug, agent_id: s.agent, repo_path: t.repo_path, prompt: `${head}\n\n${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: s.permission, task_id: t.id, stage: s.key, board_id: s.board });
-      started++;
+      try {
+        deps.start({ project_slug: t.project_slug, agent_id: s.agent, repo_path: t.repo_path, prompt: `${head}\n\n${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: s.permission, task_id: t.id, stage: s.key, board_id: s.board });
+        started++;
+      } catch (e) { stuck(t.id, t.project_slug, (e as Error).message); }
     }
   }
   return started;

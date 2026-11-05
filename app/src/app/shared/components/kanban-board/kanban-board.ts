@@ -9,7 +9,7 @@ import { DialogsService } from '../../services/dialogs/dialogs.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { BoardService, COLORS } from '../../services/board/board.service';
 import { ProposalsService } from '../../services/proposals/proposals.service';
-import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService } from '../../services/tasks/tasks.service';
+import { COLUMNS, PRIORITY, Task, TaskColumn, TasksService, delivered } from '../../services/tasks/tasks.service';
 import { Icon } from '../../ui/icon';
 
 import { AskService } from '../../services/ask/ask.service';
@@ -52,6 +52,13 @@ export class KanbanBoard {
   /** decisão esperando você sobre a tarefa (o agente parou nela) */
   protected readonly asking = computed(() => new Map(this.proposals.inbox().filter(p => p.taskId).map(p => [p.taskId!, p])));
   protected readonly priority = PRIORITY;
+  /** dependências ainda não entregues: "#21, #22" (null = livre) */
+  protected waitingFor(t: Task): string | null {
+    if (!t.dependsOn.length || !['backlog', 'todo'].includes(t.column)) return null;
+    const byId = new Map(this.tasks.tasks().map(x => [x.id, x]));
+    const open = t.dependsOn.filter(id => !delivered(byId.get(id)));
+    return open.length ? open.map(id => `#${id}`).join(', ') : null;
+  }
   protected readonly byColumn = computed(() => {
     const slug = this.projectSlug();
     const living = new Set(this.projects.living().map(p => p.slug));

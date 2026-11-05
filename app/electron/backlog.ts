@@ -137,7 +137,7 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
 // ---------- tarefas ----------
 
 const TASK_SELECT = `
-  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.color, t.priority, t.position, t.pr_url,
+  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.color, t.priority, t.position, t.pr_url, t.depends_on,
          t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at,
          r.id run_id, r.status run_status
   from tasks t
@@ -150,6 +150,28 @@ export const listTasks = (slug: string | null) => all<TaskDto>(`${TASK_SELECT}
   where (? is null and coalesce(p.status, '') <> 'dead' or t.project_slug = ?)
   order by t.position, t.priority, t.created_at desc`, slug, slug);
 
+const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase() === b.replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase();
+/**
+ * Onde um agente trabalha nesta tarefa: um repositório do projeto, ou null (o projeto inteiro). A pasta do projeto vira
+ * null; outro caminho que não é do projeto é recusado (senão a tarefa nunca começaria).
+ */
+export function taskRepo(slug: string | null, path: string | null | undefined): string | null {
+  if (!path?.trim() || !slug) return null;
+  if (get('select 1 from repos where path = ? and project_slug = ?', path, slug)) return path;
+  const folder = get<{ folder: string }>('select folder from projects where slug = ?', slug)?.folder;
+  if (folder && samePath(folder, path)) return null;
+  const repo = all<{ path: string }>('select path from repos where project_slug = ?', slug).find(r => samePath(r.path, path));
+  if (repo) return repo.path;
+  throw new Error(`Esse repositório não é do projeto: ${path}. Use um dos repositórios do projeto (list_projects) ou deixe vazio para o projeto inteiro.`);
+}
+
+/** dependências: ids de tarefas que precisam ser entregues antes (em Revisão, Em dev ou Feito) */
+function dependsOn(id: number | null, deps: number[] | null | undefined): string | null {
+  const list = [...new Set((deps ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== id))];
+  for (const d of list) if (!get('select 1 from tasks where id = ?', d)) throw new Error(`Tarefa #${d} não existe.`);
+  return list.length ? JSON.stringify(list) : null;
+}
+
 export function createTask(input: NewTaskInput & { board_id?: number | null; stage?: string | null; proposal_id?: number | null; idea_id?: number | null; milestone_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Dê um título à tarefa.');
@@ -159,10 +181,11 @@ export function createTask(input: NewTaskInput & { board_id?: number | null; sta
   const top = get<{ p: number | null }>('select min(position) p from tasks where "column" = ?', column)!.p ?? 1;
   const { lastInsertRowid } = run(`insert into tasks (project_slug, repo_path, title, body, "column", priority, position, proposal_id, pr_url, source, source_ref)
     values (?,?,?,?,?,?,?,?,?,?,?)`,
-    input.project_slug || null, input.repo_path || null, title, input.body?.trim() || null, column,
+    input.project_slug || null, taskRepo(input.project_slug, input.repo_path), title, input.body?.trim() || null, column,
     Math.min(Math.max(Number(input.priority) || 0, 0), 3), top - 1,
     input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
   const id = Number(lastInsertRowid);
+  if (input.depends_on?.length) run('update tasks set depends_on = ? where id = ?', dependsOn(id, input.depends_on), id);
   // pedido feito num quadro: já entra na coluna dele (a primeira, ou a pedida)
   if (input.board_id) {
     const stage = (input.stage && resolveStage(input.board_id, input.stage)) || get<{ k: string }>('select key k from board_cols where board_id = ? order by position limit 1', input.board_id)?.k;
@@ -184,6 +207,8 @@ export function updateTask(id: number, input: TaskPatch): void {
   if (patch.column && !COLUMNS.includes(patch.column)) throw new Error('Coluna inválida.');
 
   if (patch.color !== undefined && patch.color !== null && !/^#[0-9a-fA-F]{6}$/.test(patch.color)) throw new Error('Cor inválida.');
+  if (patch.repo_path !== undefined) patch.repo_path = taskRepo(patch.project_slug ?? task.project_slug, patch.repo_path);
+  if (patch.depends_on !== undefined) run('update tasks set depends_on = ?, updated_at = ? where id = ?', dependsOn(id, patch.depends_on), now(), id);
   const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id', 'color'] as const).filter(k => k in patch && patch[k] !== undefined);
   if (simple.length) {
     run(`update tasks set ${simple.map(k => `${k} = ?`).join(', ')}, updated_at = ? where id = ?`,

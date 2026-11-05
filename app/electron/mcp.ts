@@ -133,13 +133,15 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('list_tasks', 'Lista tarefas do backlog. Filtros opcionais por projeto e coluna.', { project_slug: z.string().optional(), column: column.optional() }, a =>
     listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, boards: placements(t.id), priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status })));
   tool('create_task', 'Cria tarefa no backlog de um projeto (ou direto num quadro: board + stage; aí o projeto é opcional). priority: 0 prioritária, 1 alta, 2 normal, 3 baixa.', {
+    depends_on: z.array(z.number().int()).optional().describe('ids das tarefas que precisam ser entregues antes desta (o responsável só puxa quando elas estiverem em Revisão, Em dev ou Feito)'),
     project_slug: z.string().optional(), board: z.union([z.number().int(), z.string()]).optional().describe('quadro onde o pedido entra (id ou nome)'),
     stage: z.string().optional().describe('coluna do quadro (padrão: a primeira)'), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     repo_path: z.string().optional().describe('caminho do repositório, se já souber onde o trabalho acontece'),
     idea_id: z.number().int().optional().describe('ideia aprovada de onde a tarefa nasceu (a ideia passa para "em andamento")'),
     milestone_id: z.number().int().optional().describe('marco do roadmap que a tarefa avança'),
-  }, a => createTask({ project_slug: a.project_slug ?? null, board_id: a.board !== undefined ? resolveBoard(a.board) : null, stage: a.stage ?? null, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}` }), h.backlog);
+  }, a => createTask({ project_slug: a.project_slug ?? null, board_id: a.board !== undefined ? resolveBoard(a.board) : null, stage: a.stage ?? null, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}`, depends_on: a.depends_on }), h.backlog);
   tool('update_task', 'Edita ou move uma tarefa (coluna, prioridade, título, descrição, projeto, repositório).', {
+    depends_on: z.array(z.number().int()).optional().describe('tarefas que precisam ser entregues antes desta ([] limpa)'),
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     project_slug: z.string().optional(), repo_path: z.string().optional(), milestone_id: z.number().int().optional(),
   }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column ? 0 : undefined }), h.backlog);

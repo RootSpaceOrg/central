@@ -44,7 +44,9 @@ Como o trabalho anda:
 - Quadros (list_boards, create_board, move_on_board): fluxos com colunas e um agente por coluna, de um projeto ou soltos. Uma tarefa
   fica no backlog principal e pode estar em vários quadros; quando o agente de uma coluna termina bem, ela vai para a próxima.
   Pedidos podem nascer direto num quadro (create_task com board), até sem projeto.
-- Projeto com "responsável pelo A fazer": tarefa que entra em todo vira execução desse agente sozinha.
+- Projeto com "responsável pelo A fazer": tarefa que entra em todo vira execução desse agente sozinha, por prioridade e
+  posição. Tarefa que só pode começar depois de outra: depends_on (create_task/update_task); o responsável só a puxa
+  quando as anteriores estiverem em Revisão, Em dev ou Feito. Assim dá para pôr uma sequência inteira em todo.
 - Projeto com "pronto = produção": merge em develop leva a tarefa para dev; ela só vai para done quando o merge chega em main
   (a Central move sozinha). production_status mostra o que está em develop esperando main.
 - Toda execução termina com uma nota de entrega (list_deliveries): o que mudou, por quê, como testar. Quem mexeu em código entra

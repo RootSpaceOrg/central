@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 
 import type { NewRunInput, NewTurnInput, RunDto, RunEventDto, RunEventKind, TurnDto } from '../src/app/shared/contract';
 import { agentCwd, agentPromptFile, agentTools, getAgent } from './agentdefs';
-import { moveTaskForRun } from './backlog';
+import { moveTaskForRun, taskRepo } from './backlog';
 import { nextStage, setStage } from './board';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
@@ -60,12 +60,11 @@ function queueRun(input: NewRunInput & RunExtra, turnId: number | null, routineI
   const project = slug ? get<{ folder: string }>('select folder from projects where slug = ?', slug) : null;
   if (slug && !project) throw new Error('Projeto não encontrado.');
   if (!project && !agent) throw new Error('Escolha um projeto ou um agente.');
-  // repositório → worktree; projeto → pasta do projeto; só agente → pasta própria do agente
-  const scope = input.repo_path ? 'repo' : project ? 'project' : 'workspace';
-  if (scope === 'repo' && !get('select 1 from repos where path = ? and project_slug = ?', input.repo_path, slug)) {
-    throw new Error('Esse repositório não é do projeto.');
-  }
-  const where = input.repo_path ?? project?.folder ?? agentCwd(agent!);
+  // repositório → worktree; projeto → pasta do projeto; só agente → pasta própria do agente. Tarefa que aponta para a
+  // pasta do projeto (antes de os repositórios existirem) roda no projeto inteiro.
+  const repoPath = slug && input.repo_path ? taskRepo(slug, input.repo_path) : input.repo_path || null;
+  const scope = repoPath ? 'repo' : project ? 'project' : 'workspace';
+  const where = repoPath ?? project?.folder ?? agentCwd(agent!);
   const budget = Math.min(Math.max(Number(input.budget_usd) || 0, 0.5), MAX_BUDGET);
   const permission = input.permission === 'full' ? 'full' : 'edits';
   const { lastInsertRowid } = run(
@@ -80,7 +79,7 @@ function queueRun(input: NewRunInput & RunExtra, turnId: number | null, routineI
   if (input.proposal_id) run(`update proposals set status = 'running', updated_at = ? where id = ?`, now(), input.proposal_id);
   if (input.task_id && !input.stage) {
     moveTaskForRun(input.task_id, 'doing');
-    if (input.repo_path) run('update tasks set repo_path = coalesce(repo_path, ?) where id = ?', input.repo_path, input.task_id);
+    if (repoPath) run('update tasks set repo_path = coalesce(repo_path, ?) where id = ?', repoPath, input.task_id);
   }
   return Number(lastInsertRowid);
 }

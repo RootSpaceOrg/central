@@ -51,6 +51,8 @@ export class TaskDialog {
   protected readonly repos = signal<Repo[]>([]);
   protected readonly column = signal<TaskColumn>('backlog');
   protected readonly priority = signal<TaskPriority>(2);
+  /** "#21, #22" */
+  protected readonly deps = signal('');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -80,6 +82,7 @@ export class TaskDialog {
     const draft = {
       projectSlug: this.projectSlug(), repoPath: this.repoPath() || null, title: this.title().trim(), body: this.body().trim(),
       column: this.column(), priority: this.priority(),
+      dependsOn: [...this.deps().matchAll(/\d+/g)].map(m => Number(m[0])),
     };
     try {
       const t = this.editing();
@@ -137,10 +140,10 @@ export class TaskDialog {
     this.busy.set(false);
     const t = this.editing();
     if (t) {
-      this.title.set(t.title); this.body.set(t.body ?? ''); this.column.set(t.column); this.priority.set(t.priority);
+      this.title.set(t.title); this.body.set(t.body ?? ''); this.column.set(t.column); this.priority.set(t.priority); this.deps.set(t.dependsOn.map(id => `#${id}`).join(', '));
       this.selectProject(t.projectSlug ?? '', t.repoPath ?? '');
     } else if (s.mode === 'create') {
-      this.title.set(s.title ?? ''); this.body.set(s.body ?? ''); this.column.set(s.column ?? 'backlog'); this.priority.set(2);
+      this.title.set(s.title ?? ''); this.body.set(s.body ?? ''); this.column.set(s.column ?? 'backlog'); this.priority.set(2); this.deps.set('');
       this.selectProject(s.projectSlug ?? this.projects.defaultSlug());
     }
   }

@@ -42,6 +42,12 @@
         </div>
       </div>
 
+      <label class="block">
+        <span class="mb-1.5 block text-[13px] font-semibold text-mute">Depende de</span>
+        <input class="field" placeholder="ex.: #21, #22 (vazio = pode começar a qualquer hora)" [value]="deps()" (input)="deps.set($any($event.target).value)" aria-label="Tarefas que precisam ser entregues antes">
+        <span class="mt-1 block text-[12px] text-faint">O responsável pelo A fazer só puxa esta tarefa quando as anteriores estiverem em Revisão, Em dev ou Feito.</span>
+      </label>
+
       <!-- quadros (workflows) em que a tarefa está, além do backlog principal -->
       @if (editing(); as t) {
         <div>

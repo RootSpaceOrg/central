@@ -55,6 +55,14 @@ export class ActivityTracker {
    */
   private readonly background = new Map<string, { agentId: string | null; lastStep: number }>();
 
+  /** estagiário que apareceu sem o lançamento nesta sessão: entra como em segundo plano (termina pelo aviso ou 3 min parado) */
+  private adopt(id: string, description: string | null): boolean {
+    if (this.activity.subagents.some(s => s.id === id)) return false;
+    this.activity.subagents.push({ id, type: 'subagente', description: description ?? 'Estagiário', started_at: new Date().toISOString(), finished_at: null, step: null, steps: 0 });
+    this.background.set(id, { agentId: null, lastStep: Date.now() });
+    return true;
+  }
+
   private finish(sub: ActivityDto['subagents'][number]): void {
     sub.finished_at = new Date().toISOString();
     sub.step = null;
@@ -66,15 +74,20 @@ export class ActivityTracker {
   handle(msg: any): void {
     const parent: string | null = msg.parent_tool_use_id ?? null;
     let changed = false;
+    // estagiário começou (aviso do Claude Code): garante que ele aparece, mesmo lançado antes desta sessão
+    if (msg.type === 'system' && msg.subtype === 'task_started' && msg.tool_use_id && !msg.owned_by_subagent && (msg.task_type ?? 'local_agent') === 'local_agent') {
+      if (this.adopt(msg.tool_use_id, msg.description)) changed = true;
+    }
     // aviso exato de conclusão (system task_notification com o tool_use_id de quem lançou)
     if (msg.type === 'system' && msg.subtype === 'task_notification' && msg.tool_use_id && /complete|fail|error|cancel|kill/i.test(String(msg.status ?? ''))) {
       const sub = this.activity.subagents.find(s => s.id === msg.tool_use_id && !s.finished_at);
       if (sub) { this.finish(sub); changed = true; }
     }
-    // aviso de conclusão em texto (versões que mandam como mensagem) com o id do subagente
+    // aviso de conclusão em texto (versões que mandam como mensagem do usuário) com o id do subagente; os avisos do
+    // sistema já foram tratados acima (e os dos comandos do próprio estagiário também trazem o id dele: não são o fim)
     if (this.background.size) {
-      const raw = JSON.stringify(msg);
-      if (raw.includes('task-notification') || raw.includes('task_notification')) {
+      const raw = msg.type === 'user' ? JSON.stringify(msg) : '';
+      if (raw.includes('task-notification')) {
         for (const [id, bg] of this.background) {
           if (!bg.agentId || !raw.includes(bg.agentId)) continue;
           const sub = this.activity.subagents.find(s => s.id === id && !s.finished_at);
@@ -93,6 +106,8 @@ export class ActivityTracker {
         if (b.type !== 'tool_use' || INTERNAL.has(b.name)) continue;
         if (!parent) { const ph = phaseOf(b.name, b.input); if (ph && ph !== this.activity.phase) { this.activity.phase = ph; changed = true; } }
         if (PLAN.has(b.name)) { if (!parent && this.plan(b.name, b.input)) changed = true; continue; }
+        // passo de um estagiário que esta sessão não viu lançar (reativado com SendMessage, ou de antes de uma retomada)
+        if (parent && !this.activity.subagents.some(s => s.id === parent)) this.adopt(parent, null);
         const sub = parent ? this.activity.subagents.find(s => s.id === parent) : null;
         if (sub) {
           // passo de quem já tinha sido dado como terminado: está trabalhando (segundo plano)

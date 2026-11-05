@@ -23,12 +23,13 @@ db.exec(\`
     (4, 'kultivai', 'backlog', 'Não é A fazer', null, null, 0, 0, null, null, null), (5, 'outro', 'todo', 'Sem responsável', null, null, 0, 0, null, null, null),
     (9, 'conteudo', 'backlog', 'Post sobre a Central', null, null, 2, 0, null, null, null),
     (10, null, 'backlog', 'Pedido solto: pesquisa de concorrentes', null, null, 2, 0, null, null, null);
-  create table proposals (id integer primary key, task_id integer, status text);
+  create table proposals (id integer primary key, task_id integer, status text, project_slug text, title text, body text, next_action text, tier integer, source text, source_ref text);
   create table boards (id integer primary key autoincrement, name text not null, description text, project_slug text, color text not null default '#7FA2FF', position integer not null default 0, created_at text default '2026-11-01');
   create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, color text, primary key (board_id, key));
   create table task_boards (task_id integer, board_id integer, stage text, position integer default 0, updated_at text, primary key (task_id, board_id));
   create table deliveries (pr_url text, title text, task_id integer);
   insert into agents (id, permission, name, builtin) values (1, 'edits', 'Central', 1);
+  alter table tasks add column depends_on text;
   create table ideas (id integer primary key, title text, body text, project_slug text, status text, author text, triaged_at text);
   insert into ideas (id, title, body, project_slug, status, author) values (1, 'Solta', 'texto', null, 'new', 'gustavo'),
     (2, 'Com projeto', null, 'kultivai', 'new', 'gustavo'), (3, 'De agente', null, null, 'new', 'agente'), (4, 'Velha', null, null, 'approved', 'gustavo');
@@ -120,7 +121,7 @@ ok(s10 && s10.project_slug === null && s10.agent_id === 7, 'pedido sem projeto t
 started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
 ok(!started.some(x => x.task_id === 9), 'já rodando: não dispara de novo');
-db.exec("update runs set status = 'succeeded' where task_id in (9, 10); insert into proposals values (1, 9, 'proposed')");
+db.exec("update runs set status = 'succeeded' where task_id in (9, 10); insert into proposals (id, task_id, status) values (1, 9, 'proposed')");
 bd.setStage(9, solto.id, 'roteiro');
 started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
@@ -139,10 +140,27 @@ ok(!bd.stagesOf().some(x => x.board_id === solto.id) && db.prepare('select count
 // prioridade: com a sessão em 85% só o agente de prioridade alta pega
 db.exec("insert into agents (id, permission, name, priority) values (20, 'edits', 'Suporte', 'high'), (21, 'edits', 'Dev', 'normal')");
 db.exec("insert into projects values ('pri-a', 'active', 20, 1, ''), ('pri-b', 'active', 21, 1, '')");
-db.exec("insert into tasks values (30, 'pri-a', 'todo', 'Bug urgente', null, null, 0, 0, null, null, null), (31, 'pri-b', 'todo', 'Feature', null, null, 0, 0, null, null, null)");
+db.exec("insert into tasks (id, project_slug, \"column\", title, body, repo_path, priority, position, stage, pr_url, updated_at) values (30, 'pri-a', 'todo', 'Bug urgente', null, null, 0, 0, null, null, null), (31, 'pri-b', 'todo', 'Feature', null, null, 0, 0, null, null, null)");
 started = [];
 await d.dispatchTodo({ ...deps(85), now: () => new Date('2026-11-04T13:00:00Z') });
 ok(started.some(x => x.task_id === 30) && !started.some(x => x.task_id === 31), 'em 85% só prioridade alta despacha');
+
+// dependências: só puxa quando a anterior foi entregue; tarefa que não consegue começar vira decisão e não trava as outras
+db.exec("insert into agents (id, permission, name, priority) values (30, 'full', 'Tech Sis', 'normal')");
+db.exec("insert into projects values ('sis', 'active', 30, 3, '')");
+db.exec("insert into tasks (id, project_slug, \"column\", title, priority, position, depends_on) values (40, 'sis', 'backlog', 'Fundação', 1, 0, null), (41, 'sis', 'todo', 'Design system', 1, 1, '[40]'), (42, 'sis', 'todo', 'Tarefa quebrada', 1, 2, null), (43, 'sis', 'todo', 'Independente', 1, 3, null)");
+started = [];
+const sdeps = { ...deps(10), now: () => new Date('2026-11-05T13:00:00Z'), start: i => { if (i.task_id === 42) throw new Error('Esse repositório não é do projeto'); deps(10).start(i); } };
+await d.dispatchTodo(sdeps);
+ok(!started.some(x => x.task_id === 41), 'dependência não entregue: espera');
+ok(started.some(x => x.task_id === 43), 'erro numa tarefa não trava as outras');
+ok(db.prepare("select count(*) n from proposals where task_id = 42 and status = 'proposed' and source = 'dispatch'").get().n === 1, 'tarefa que não começa vira uma decisão');
+await d.dispatchTodo(sdeps);
+ok(db.prepare("select count(*) n from proposals where task_id = 42").get().n === 1, 'decisão não se repete');
+db.exec("update tasks set \"column\" = 'review' where id = 40");
+started = [];
+await d.dispatchTodo(sdeps);
+ok(started.some(x => x.task_id === 41), 'anterior entregue (Revisão): agora puxa');
 
 // agente de triagem
 const tStarted = [];

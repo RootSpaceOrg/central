@@ -96,6 +96,18 @@ console.log('fases ok');
   t3.handle({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu3', content: 'Async agent launched successfully. agentId: zzz' }] } });
   t3.handle({ type: 'system', subtype: 'task_notification', task_id: 'zzz', tool_use_id: 'tu3', status: 'completed' });
   ok(!!t3.activity.subagents[2].finished_at, 'task_notification do sistema termina o estagiário');
+  // estagiário reativado (SendMessage) ou de antes de uma retomada: aparece pelos passos dele
+  t3.handle({ type: 'assistant', parent_tool_use_id: 'antigo', message: { content: [{ type: 'tool_use', id: 'y1', name: 'Bash', input: { command: 'git status' } }] } });
+  ok(t3.activity.subagents.some(s => s.id === 'antigo' && !s.finished_at && s.steps === 1), 'estagiário sem lançamento nesta sessão aparece pelos passos');
+  t3.handle({ type: 'system', subtype: 'task_started', tool_use_id: 'novo', description: 'frontend', task_type: 'local_agent' });
+  ok(t3.activity.subagents.some(s => s.id === 'novo' && s.description === 'frontend'), 'task_started registra o estagiário');
+  t3.handle({ type: 'system', subtype: 'task_started', tool_use_id: 'shell', owned_by_subagent: true, task_type: 'local_bash' });
+  ok(!t3.activity.subagents.some(s => s.id === 'shell'), 'comando em segundo plano do estagiário não vira estagiário');
+  // o comando em segundo plano do próprio estagiário termina (aviso traz o id dele): o estagiário continua
+  t3.handle({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu9', name: 'Agent', input: { description: 'x', run_in_background: true } }] } });
+  t3.handle({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu9', content: 'Async agent launched successfully. agentId: agX' }] } });
+  t3.handle({ type: 'system', subtype: 'task_notification', task_id: 'bash1', tool_use_id: 'bashtool', owned_by_subagent: true, status: 'completed', summary: 'agX sleep done' });
+  ok(!t3.activity.subagents.find(s => s.id === 'tu9').finished_at, 'fim do comando do estagiário não é o fim dele');
   t3.stop(); void a3;
 }
 console.log('segundo plano ok');
