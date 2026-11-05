@@ -323,6 +323,19 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
   tool('continue_run', 'Continua uma execução que falhou ou foi interrompida, na mesma sessão do Claude (ele lembra tudo o que fez) e de onde parou. Para outro agente assumir, use take_over.', {
     run_id: z.number().int(), note: z.string().optional().describe('o que dizer a ele ao continuar'),
   }, a => { const r = continueRun(a.run_id, a.note ?? null, h.emit); return `Execução #${r.id} continuando.`; }, h.backlog);
+  if (caller?.kind === 'run') tool('pick_task', 'Na execução de escolha ("Escolher a próxima tarefa"): registra qual tarefa do A fazer deve começar agora. A Central começa essa tarefa logo em seguida, numa execução sua com o repositório e a liberdade certos.', {
+    task_id: z.number().int(), motivo: z.string().max(300).describe('por que esta primeiro, em uma frase'),
+  }, a => {
+    const me = get<{ prompt: string; project_slug: string | null }>('select prompt, project_slug from runs where id = ?', caller.id);
+    if (!me?.prompt.startsWith('[responsável:escolher]')) throw new Error('pick_task é só para a execução de escolha da próxima tarefa.');
+    const t = get<{ project_slug: string | null; column: string }>('select project_slug, "column" from tasks where id = ?', a.task_id);
+    if (!t || t.project_slug !== me.project_slug) throw new Error('Essa tarefa não é deste projeto.');
+    if (t.column !== 'todo') throw new Error('Essa tarefa não está mais em A fazer: escolha outra da lista.');
+    if (get(`select 1 from runs where task_id = ? and status in ('queued','preparing','running')`, a.task_id)) throw new Error('Essa tarefa já está com alguém: escolha outra.');
+    run('update tasks set picked_at = ? where id = ?', new Date().toISOString(), a.task_id);
+    run('insert into run_events (run_id, at, kind, text) values (?,?,?,?)', caller.id, new Date().toISOString(), 'system', `Escolheu a tarefa #${a.task_id}: ${a.motivo}`);
+    return `Escolhida a #${a.task_id}. A Central começa ela agora. Termine aqui em uma linha.`;
+  }, h.backlog);
   tool('take_over', 'Passa uma execução parada (pausada pela cota, que falhou ou foi interrompida) para outro agente continuar na mesma branch, com o registro do que já foi feito. Sem agent_id, o mesmo agente recomeça com o registro.', {
     run_id: z.number().int(), agent_id: z.number().int().optional(), note: z.string().optional().describe('o que quem assume precisa saber'),
   }, a => { const r = handoffRun(a.run_id, a.agent_id ?? null, a.note ?? null, h.emit); return `Execução #${r.id} assumiu o trabalho da #${a.run_id}.`; }, h.backlog);

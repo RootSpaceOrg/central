@@ -16,7 +16,7 @@ db.exec(\`
   insert into agents (id, permission, name) values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
   create table projects (slug text primary key, status text, todo_agent_id integer, todo_parallel integer, todo_hours text);
   insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, ''), ('conteudo', 'active', null, 1, '');
-  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text, board_id integer);
+  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text, board_id integer, prompt text);
   create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, repo_path text, priority integer, position integer, stage text, pr_url text, updated_at text);
   insert into tasks values (1, 'kultivai', 'todo', 'Exportar PDF', 'detalhe', 'C:/r/front', 2, 0, null, null, null),
     (2, 'kultivai', 'todo', 'Corrigir login', null, null, 0, 1, null, null, null), (3, 'kultivai', 'todo', 'Terceira', null, null, 2, 2, null, null, null),
@@ -30,10 +30,10 @@ db.exec(\`
   create table deliveries (pr_url text, title text, task_id integer);
   insert into agents (id, permission, name, builtin) values (1, 'edits', 'Central', 1);
   alter table tasks add column depends_on text;
+  alter table tasks add column picked_at text;
   create table ideas (id integer primary key, title text, body text, project_slug text, status text, author text, triaged_at text);
   insert into ideas (id, title, body, project_slug, status, author) values (1, 'Solta', 'texto', null, 'new', 'gustavo'),
     (2, 'Com projeto', null, 'kultivai', 'new', 'gustavo'), (3, 'De agente', null, null, 'new', 'agente'), (4, 'Velha', null, null, 'approved', 'gustavo');
-  alter table runs add column prompt text;
 \`);
 module.exports = { db, now: () => '2026-11-02T12:00:00.000Z', all: (s, ...a) => db.prepare(s).all(...a), get: (s, ...a) => db.prepare(s).get(...a), run: (s, ...a) => db.prepare(s).run(...a) };`);
 const opts = { bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', plugins: [{ name: 'db', setup: b => b.onResolve({ filter: /^\.\/db$/ }, () => ({ path: stub, external: true })) }] };
@@ -53,23 +53,37 @@ ok(d.withinHours('22-06', at(23)) && d.withinHours('22-06', at(3)) && !d.withinH
 ok(d.withinHours('', at(4)), 'vazio = qualquer hora');
 
 let started = [];
-const deps = (quota, h = 10) => ({ quota: async () => quota, start: i => { started.push(i); db.prepare("insert into runs (project_slug, agent_id, task_id, status) values (?,?,?, 'queued')").run(i.project_slug, i.agent_id, i.task_id); }, now: () => at(h) });
+const deps = (quota, h = 10) => ({ quota: async () => quota, start: i => { started.push(i); db.prepare("insert into runs (project_slug, agent_id, task_id, status, prompt) values (?,?,?, 'queued', ?)").run(i.project_slug, i.agent_id, i.task_id, i.prompt); }, now: () => at(h) });
 
 ok(await d.dispatchTodo(deps(85)) === 0 && d.dispatchSkip().includes('85%'), 'cota alta não dispara');
 ok(await d.dispatchTodo(deps(10, 23)) === 0, 'fora do horário não dispara');
-ok(await d.dispatchTodo(deps(10)) === 2, 'dispara até o limite (2 por vez)');
-ok(started[0].task_id === 2 && started[1].task_id === 1, 'prioritária primeiro');
-ok(started[1].repo_path === 'C:/r/front' && started[1].prompt === 'Exportar PDF\n\ndetalhe' && started[1].permission === 'full', 'repositório, prompt e liberdade do agente');
+// mais tarefas prontas (3) que vagas (2): o responsável escolhe primeiro (execução curta, só leitura, com a lista)
+ok(await d.dispatchTodo(deps(10)) === 1, 'mais prontas que vagas: uma escolha');
+ok(started[0].task_id === null && started[0].prompt.startsWith(d.PICK_HEAD) && started[0].permission === 'edits' && started[0].small, 'a escolha é curta e só lê');
+ok(['#1', '#2', '#3'].every(x => started[0].prompt.includes(x)) && started[0].prompt.indexOf('#2') < started[0].prompt.indexOf('#1'), 'a lista vem por prioridade');
 ok(!started.some(s => s.task_id === 5 || s.task_id === 4), 'só A fazer e só projeto com responsável');
-ok(await d.dispatchTodo(deps(10)) === 0, 'sem vaga: espera');
-
-// uma termina bem, outra não termina: a vaga é usada pela terceira, e a que falhou não volta em laço
-db.exec("update runs set status = 'succeeded' where task_id = 2; update tasks set \"column\" = 'review' where id = 2; update runs set status = 'failed', finished_at = '2026-11-02T12:00:00.000Z' where task_id = 1");
 started = [];
-ok(await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-02T13:00:00Z') }) === 1 && started[0].task_id === 3, 'vaga livre pega a próxima (a que falhou fica de fora)');
-db.exec("update runs set status = 'succeeded' where task_id = 3; update tasks set \"column\" = 'review' where id = 3");
+ok(await d.dispatchTodo(deps(10)) === 0, 'escolha em andamento: espera');
+// escolheu a #1: começa direto (repositório, prompt e liberdade dela); sobra uma vaga e duas prontas: nova escolha
+db.exec("update tasks set picked_at = '2026-11-02T12:00:00Z' where id = 1; update runs set status = 'succeeded' where task_id is null and project_slug = 'kultivai'");
 started = [];
-ok(await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-03T13:00:00Z') }) === 1 && started.map(s => s.task_id).join() === '1', 'depois de 12 h tenta de novo a que falhou');
+await d.dispatchTodo(deps(10));
+ok(started[0].task_id === 1 && started[0].repo_path === 'C:/r/front' && started[0].prompt === 'Exportar PDF\n\ndetalhe' && started[0].permission === 'full', 'a escolhida começa direto, com o repositório e a liberdade');
+ok(db.prepare('select picked_at p from tasks where id = 1').get().p === null, 'escolha consumida');
+// sem escolha feita, a mesma lista não é reavaliada antes de 2 h; a que falhou há pouco fica fora
+db.exec("update runs set status = 'succeeded' where project_slug = 'kultivai'; update tasks set \"column\" = 'review' where id = 1; update projects set todo_parallel = 1 where slug = 'kultivai'");
+db.exec("insert into tasks (id, project_slug, \"column\", title, priority, position) values (8, 'kultivai', 'todo', 'Quarta', 2, 3)");
+db.exec("insert into runs (project_slug, agent_id, task_id, status, finished_at) values ('kultivai', 6, 8, 'failed', '2026-11-02T12:00:00.000Z')");
+const mem = new Map();
+const sdeps2 = { ...deps(10), now: () => new Date('2026-11-02T13:00:00Z'), setting: k => mem.get(k) ?? null, setSetting: (k, v) => mem.set(k, v) };
+started = [];
+await d.dispatchTodo(sdeps2);
+ok(started.length === 1 && started[0].task_id === null && !started[0].prompt.includes('#8 '), 'escolha sem a que falhou há pouco');
+db.exec("update runs set status = 'succeeded' where task_id is null and project_slug = 'kultivai'");
+started = [];
+await d.dispatchTodo(sdeps2);
+ok(!started.length, 'não escolheu nenhuma: não pergunta de novo com a mesma lista');
+db.exec("update tasks set \"column\" = 'review' where id in (2, 3); update projects set todo_parallel = 2 where slug = 'kultivai'");
 
 // develop → main
 ok(r.webUrl('git@github.com:RootSpaceOrg/mkt-platform-api.git') === 'https://github.com/RootSpaceOrg/mkt-platform-api', 'remote ssh');

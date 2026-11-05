@@ -17,14 +17,38 @@ export function withinHours(spec: string, now: Date): boolean {
   return from <= to ? h >= from && h < to : h >= from || h < to;
 }
 
+/** execução curta em que o responsável escolhe a próxima tarefa (não faz trabalho; não gera nota de entrega) */
+export const PICK_HEAD = '[responsável:escolher]';
+/** se ele não escolheu nenhuma, só pergunta de novo quando a lista mudar ou depois deste tempo */
+const PICK_AGAIN_H = 2;
+const PRIORITY_LABEL = ['prioritária', 'alta', 'normal', 'baixa'];
+
 export interface DispatchDeps {
   /** % usado da sessão do plano (null = não sabe) */
   quota: () => Promise<number | null>;
-  start: (input: { project_slug: string | null; agent_id: number; repo_path: string | null; prompt: string; permission: 'edits' | 'full'; task_id: number; stage?: string | null; board_id?: number | null }) => void;
+  start: (input: { project_slug: string | null; agent_id: number; repo_path: string | null; prompt: string; permission: 'edits' | 'full'; task_id: number | null; stage?: string | null; board_id?: number | null; small?: boolean }) => void;
+  /** configuração guardada (a lista que o responsável já avaliou) */
+  setting?: (key: string) => string | null;
+  setSetting?: (key: string, value: string) => void;
   now?: () => Date;
 }
 
 let lastSkip = '';
+
+/** O responsável escolhe: a lista do que está pronto, o que espera outras, e como responder. */
+export const pickPrompt = (slug: string, ready: { id: number; title: string; body: string | null; repo_path: string | null; priority: number }[], waiting: { id: number; title: string; depends_on: string }[]) =>
+  `${PICK_HEAD} Escolher a próxima tarefa do projeto ${slug}
+
+Você é o responsável pelo "A fazer" deste projeto. Estas tarefas estão prontas para começar:
+${ready.map(t => `- #${t.id} (${PRIORITY_LABEL[t.priority] ?? 'normal'}${t.repo_path ? `, repositório ${t.repo_path.split(/[\\/]/).pop()}` : ''}) ${t.title}${t.body ? `\n  ${t.body.replace(/\s+/g, ' ').slice(0, 280)}` : ''}`).join('\n')}
+${waiting.length ? `\nEsperando outras (ainda não podem começar):\n${waiting.map(t => `- #${t.id} ${t.title} (depois de ${(JSON.parse(t.depends_on) as number[]).map(n => `#${n}`).join(', ')})`).join('\n')}\n` : ''}
+Escolha UMA para começar agora: a que deve vir primeiro. Pense no que as outras precisam que exista antes, no que destrava mais
+trabalho, no rumo do projeto (get_direction) e no que já foi entregue (list_tasks, list_deliveries). Olhe o código se precisar.
+- Escolheu: chame pick_task com o id e o motivo em uma frase. A Central começa essa tarefa logo em seguida, numa execução sua.
+  Não faça o trabalho aqui: esta execução é só a escolha.
+- Percebeu que uma tarefa depende de outra e isso não está marcado: registre com update_task depends_on.
+- Nenhuma deveria começar agora (falta algo, depende do Gustavo): não escolha; crie uma decisão (create_decision) explicando.
+Termine em uma linha dizendo o que escolheu e por quê. Não chame report_delivery.`;
 
 /**
  * Uma tarefa que não consegue começar (ex.: repositório que não existe mais) vira uma decisão para o Gustavo, uma vez só,
@@ -66,19 +90,37 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
     const slots = Math.max(0, (o.parallel || 1) - busy);
     if (!slots) continue;
     const since = new Date(now.getTime() - RETRY_AFTER_H * 3_600_000).toISOString();
-    const tasks = all<{ id: number; title: string; body: string | null; repo_path: string | null }>(
-      `select t.id, t.title, t.body, t.repo_path from tasks t
+    const ready = all<{ id: number; title: string; body: string | null; repo_path: string | null; priority: number; picked_at: string | null }>(
+      `select t.id, t.title, t.body, t.repo_path, t.priority, t.picked_at from tasks t
        where t.project_slug = ? and t."column" = 'todo'
          and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.status = 'failed' and r.finished_at > ?)))
          and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
          and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
-       order by t.priority, t.position, t.id limit ?`, o.slug, since, slots);
-    for (const t of tasks) {
+       order by t.picked_at is null, t.priority, t.position, t.id`, o.slug, since);
+    const go = (t: typeof ready[number]) => {
       try {
         deps.start({ project_slug: o.slug, agent_id: o.agent, repo_path: t.repo_path, prompt: `${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: o.permission, task_id: t.id });
+        run('update tasks set picked_at = null where id = ?', t.id);
         started++;
       } catch (e) { stuck(t.id, o.slug, (e as Error).message); }
-    }
+    };
+    // o que ele já escolheu (ou cabe tudo nas vagas): começa direto
+    const picked = ready.filter(t => t.picked_at);
+    let free = slots;
+    for (const t of picked.slice(0, free)) { go(t); free--; }
+    const rest = ready.filter(t => !t.picked_at);
+    if (!free || !rest.length) continue;
+    if (rest.length <= free) { rest.forEach(go); continue; }
+    // mais tarefas prontas que vagas: o responsável escolhe qual vem primeiro (uma escolha por vez)
+    if (get(`select 1 from runs where project_slug = ? and agent_id = ? and prompt like ? and status in ('queued','preparing','running')`, o.slug, o.agent, `${PICK_HEAD}%`)) continue;
+    const ids = rest.map(t => t.id).join(',');
+    const seen = (() => { try { return JSON.parse(deps.setting?.(`pick:${o.slug}`) ?? 'null') as { ids: string; at: number } | null; } catch { return null; } })();
+    if (seen && seen.ids === ids && now.getTime() - seen.at < PICK_AGAIN_H * 3_600_000) continue;
+    deps.setSetting?.(`pick:${o.slug}`, JSON.stringify({ ids, at: now.getTime() }));
+    const waiting = all<{ id: number; title: string; depends_on: string }>(
+      `select id, title, depends_on from tasks where project_slug = ? and "column" = 'todo' and depends_on is not null and id not in (${ids})`, o.slug);
+    deps.start({ project_slug: o.slug, agent_id: o.agent, repo_path: null, permission: 'edits', task_id: null, small: true, prompt: pickPrompt(o.slug, rest, waiting) });
+    started++;
   }
   for (const s of stages) {
     if (!withinHours(s.hours, now) || !allowed(s.priority)) continue;

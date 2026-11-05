@@ -101,10 +101,11 @@ export class OfficePage {
       const r = this.runs.runs().find(x => x.id === a.ref);
       const agent = agentOf(r?.agentId ?? null);
       const gestor = !!r?.prompt.includes(GESTOR);
+      const picking = !!r?.prompt.startsWith('[responsável:escolher]');
       list.push({
         own: `r${a.ref}`, slug: r?.projectSlug ?? agent?.projectSlug ?? null, name: gestor ? 'Gestor do projeto' : agent?.name ?? 'Agente',
         role: gestor ? 'Planejando o backlog' : `Execução #${a.ref}${r?.taskId ? ` · tarefa #${r.taskId}` : ''}`,
-        title: gestor ? 'Organizando o backlog pelo rumo' : r?.title ?? `Execução #${a.ref}`, avatar: agent, img: agent ? null : 'file-icons/claude.svg',
+        title: gestor ? 'Organizando o backlog pelo rumo' : picking ? 'Escolhendo a próxima tarefa' : r?.title ?? `Execução #${a.ref}`, avatar: agent, img: agent ? null : 'file-icons/claude.svg',
         since: a.startedAt, doing: doing(a), plan: a.plan, subagents: a.subagents, ...this.state(a, r?.taskId ?? null),
         room: gestor ? 'gestao' : agent ? agentRoom(agent) : 'eng', agentId: agent?.id ?? null, hair: agent?.color ?? CLAUDE,
         open: () => this.router.navigate(['/execucoes'], { queryParams: { run: a.ref } }),

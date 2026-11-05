@@ -46,7 +46,9 @@ Como o trabalho anda:
   Pedidos podem nascer direto num quadro (create_task com board), até sem projeto.
 - Projeto com "responsável pelo A fazer": tarefa que entra em todo vira execução desse agente sozinha, por prioridade e
   posição. Tarefa que só pode começar depois de outra: depends_on (create_task/update_task); o responsável só a puxa
-  quando as anteriores estiverem em Revisão, Em dev ou Feito. Assim dá para pôr uma sequência inteira em todo.
+  quando as anteriores estiverem em Revisão, Em dev ou Feito. Assim dá para pôr uma sequência inteira em todo. Com mais
+  tarefas prontas do que vagas, o responsável primeiro escolhe qual vem antes (execução curta, pick_task) e a Central começa
+  a escolhida.
 - Projeto com "pronto = produção": merge em develop leva a tarefa para dev; ela só vai para done quando o merge chega em main
   (a Central move sozinha). production_status mostra o que está em develop esperando main.
 - Toda execução termina com uma nota de entrega (list_deliveries): o que mudou, por quê, como testar. Quem mexeu em código entra
