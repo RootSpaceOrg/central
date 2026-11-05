@@ -164,7 +164,7 @@ export class ChatView implements OnDestroy {
   }
 
   protected send(text = this.text()): void {
-    if (!text.trim() || this.s().currentBusy()) return;
+    if (!text.trim()) return; // respondendo: a mensagem entra na mesma sessão (ele lê assim que terminar o passo atual)
     this.s().send(text.trim());
     this.setText('');
     this.atBottom = true;

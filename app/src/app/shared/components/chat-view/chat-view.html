@@ -128,6 +128,10 @@
         <span class="flex-1"></span>
         @if (chat.currentBusy()) {
           <span class="size-5 animate-spin rounded-full border-2 border-faint border-t-transparent" aria-hidden="true"></span>
+          @if (text().trim()) {
+            <button class="ml-1 grid size-8 place-items-center rounded-lg bg-frost text-night transition hover:brightness-110" aria-label="Enviar" title="Enviar: ele lê assim que terminar o passo atual">
+              <app-icon name="send" [size]="15" /></button>
+          }
           <button type="button" class="ml-1 grid size-8 place-items-center rounded-lg bg-text text-night transition hover:brightness-90" (click)="chat.stop()" aria-label="Parar" title="Parar">
             <span class="size-3 rounded-[3px] bg-night"></span></button>
         } @else {

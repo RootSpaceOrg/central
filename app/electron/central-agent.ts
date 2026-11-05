@@ -20,6 +20,13 @@ type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) =>
 /** passos internos do Claude que não dizem nada ao Gustavo */
 export const INTERNAL = new Set(['ToolSearch', 'TodoWrite']);
 const procs = new Map<number, ChildProcess>();
+/**
+ * Conversa respondendo: a entrada do Claude fica aberta (stream-json) e a mensagem nova entra na mesma sessão, como no
+ * terminal (ele lê assim que termina o passo atual). Depois do resultado a entrada fecha; o que chegar nesse intervalo
+ * vai como próxima mensagem quando o processo terminar.
+ */
+const inbox = new Map<number, { open: boolean; later: string[] }>();
+const userLine = (text: string) => `${JSON.stringify({ type: 'user', message: { role: 'user', content: text } })}\n`;
 
 export const listChats = (agentId: number | null) => all<ChatDto>(
   `select id, agent_id, project_slug, title, created_at, updated_at, model, effort from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
@@ -63,12 +70,19 @@ let onStream: (chatId: number, text: string) => void = () => {};
 export function onChatStream(fn: typeof onStream): void { onStream = fn; }
 
 export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void, projectSlug: string | null = null,
-  options: ChatOptions | null = null): number {
+  options: ChatOptions | null = null, alreadySaved = false): number {
   // modelo: apelido (opus, sonnet…) ou nome completo; nada que vire outra opção na linha de comando
   if (options && (!/^[\w.\-\[\]]*$/.test(options.model) || !EFFORTS.includes(options.effort))) throw new Error('Modelo ou nível de raciocínio inválido.');
   const msg = text.trim();
   if (!msg) throw new Error('Escreva uma mensagem.');
-  if (chatId && procs.has(chatId)) throw new Error('O agente ainda está respondendo a mensagem anterior.');
+  if (chatId && procs.has(chatId)) {
+    // respondendo: entra na sessão em andamento (ou fica para a próxima, se a entrada já fechou)
+    const box = inbox.get(chatId);
+    save(chatId, 'user', msg, notify);
+    if (box?.open) procs.get(chatId)!.stdin?.write(userLine(msg));
+    else (box ?? inbox.set(chatId, { open: false, later: [] }).get(chatId)!).later.push(msg);
+    return chatId;
+  }
   const chat = chatId ? get<{ agent_id: number | null; session_id: string | null; cwd: string | null; project_slug: string | null }>(
     'select agent_id, session_id, cwd, project_slug from chats where id = ?', chatId) : null;
   if (chatId && !chat) throw new Error('Conversa não encontrada.');
@@ -86,10 +100,10 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   const id = chatId;
   if (options) run('update chats set model = ?, effort = ? where id = ?', options.model, options.effort, id);
   const chosen = get<{ model: string; effort: string }>('select model, effort from chats where id = ?', id)!;
-  save(id, 'user', msg, notify);
+  if (!alreadySaved) save(id, 'user', msg, notify);
 
   // --include-partial-messages: o texto chega em pedaços enquanto o Claude escreve (a tela mostra ao vivo)
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
+  const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
   // continuação de uma execução (pedir ajuste): edita no worktree dela como a execução editava
   const fromRun = !!chat?.cwd && !!get('select 1 from runs where worktree_path = ?', chat.cwd);
   if (agent.restricted) args.push('--allowedTools', `"${restrictedTools(agent).join(',')}"`);
@@ -105,7 +119,8 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
 
   const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv() });
   procs.set(id, child);
-  child.stdin.end(msg);
+  inbox.set(id, { open: true, later: [] });
+  child.stdin.write(userLine(msg));
 
   let answered = false;
   const tracker = track('chat', id, describe, text => save(id, 'tool', text, notify));
@@ -143,7 +158,10 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
           if (String(b.name).startsWith('mcp__central__')) setTimeout(onCentralChange, 800);
         }
       }
-    } else if (m.type === 'result' && m.is_error && !answered) {
+    }
+    // respondeu: fecha a entrada (o Claude termina e sai); o que chegar depois disto vai na próxima vez
+    if (m.type === 'result') { const box = inbox.get(id); if (box?.open) { box.open = false; child.stdin.end(); } }
+    if (m.type === 'result' && m.is_error && !answered) {
       save(id, 'error', m.result || 'O agente não conseguiu responder.', notify);
     }
   });
@@ -151,11 +169,14 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   child.stderr.on('data', d => { stderr = (stderr + d).slice(-2000); });
   child.on('close', code => {
     procs.delete(id);
+    const later = inbox.get(id)?.later ?? [];
+    inbox.delete(id);
     untrack('chat', id, tracker);
     clearTimeout(streamTimer);
     onStream(id, '');
     if (code !== 0 && !answered) save(id, 'error', stderr.trim() || 'Resposta interrompida.', notify);
     notify(id, null, false);
+    if (later.length) setTimeout(() => { try { sendChat(id, agent.id, later.join('\n\n'), notify, onCentralChange, null, null, true); } catch { /* conversa apagada */ } }, 100);
     // terminou um ajuste pedido na entrega: ela volta para a revisão com o diff novo
     const runId = fromRun ? get<{ id: number }>('select id from runs where worktree_path = ?', chat!.cwd)?.id : null;
     if (runId) reopenDelivery(runId).then(onCentralChange, () => {});
