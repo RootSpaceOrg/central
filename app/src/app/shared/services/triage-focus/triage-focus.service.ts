@@ -41,7 +41,6 @@ export class TriageFocusService {
   readonly modes = computed(() => [...BUILTIN, ...this.saved()]);
   /** nome do modo que bate com o foco atual (null = personalizado) */
   readonly mode = computed(() => this.modes().find(m => same(m.focus, this.focus()))?.name ?? null);
-  readonly filtering = computed(() => !same(this.focus(), ALL));
 
   constructor() {
     this.settings.get('triage:focus').then(v => { if (v) this.focus.set({ ...ALL, ...JSON.parse(v) }); });
@@ -49,20 +48,7 @@ export class TriageFocusService {
   }
 
   set(f: Focus): void { this.focus.set(f); this.settings.set('triage:focus', JSON.stringify(f)); }
-  patch(p: Partial<Focus>): void { this.set({ ...this.focus(), ...p }); }
-  /** liga/desliga um valor de uma lista do foco */
-  toggle<K extends 'types' | 'projects' | 'origins'>(key: K, value: Focus[K][number]): void {
-    const list = this.focus()[key] as string[];
-    this.patch({ [key]: list.includes(value) ? list.filter(v => v !== value) : [...list, value] } as Partial<Focus>);
-  }
   use(name: string): void { const m = this.modes().find(x => x.name === name); if (m) this.set(m.focus); }
-  saveAs(name: string): void {
-    const n = name.trim();
-    if (!n || BUILTIN.some(b => b.name === n)) return;
-    const list = [...this.saved().filter(m => m.name !== n), { name: n, focus: this.focus() }];
-    this.saved.set(list);
-    this.settings.set('triage:modes', JSON.stringify(list));
-  }
   remove(name: string): void {
     const list = this.saved().filter(m => m.name !== name);
     this.saved.set(list);
@@ -70,26 +56,34 @@ export class TriageFocusService {
   }
 
   /** o projeto do item está no foco? (a frente conta como o projeto-pai) */
-  private inProjects(slug: string | null): boolean {
-    const f = this.focus().projects;
+  private inProjects(slug: string | null, focus = this.focus()): boolean {
+    const f = focus.projects;
     if (!f.length) return true;
     if (!slug) return f.includes('');
     return f.includes(slug) || f.includes(this.projects.bySlug().get(slug)?.parentSlug ?? '\u0000');
   }
 
-  decision(p: Proposal): boolean {
-    const f = this.focus();
+  decision(p: Proposal, f = this.focus()): boolean {
     if (f.types.length && !f.types.includes('decision')) return false;
     if (f.blocking && !blocking(p)) return false;
     if (f.origins.length && !f.origins.includes(['manual', 'memory'].includes(p.source) ? 'mine' : 'agents')) return false;
-    return this.inProjects(p.projectSlug);
+    return this.inProjects(p.projectSlug, f);
   }
 
-  idea(i: Idea): boolean {
-    const f = this.focus();
+  idea(i: Idea, f = this.focus()): boolean {
     if (f.types.length && !f.types.includes('idea')) return false;
     if (f.blocking) return false; // ideia não trava agente
     if (f.origins.length && !f.origins.includes(i.author === 'gustavo' ? 'mine' : 'agents')) return false;
-    return this.inProjects(i.projectSlug);
+    return this.inProjects(i.projectSlug, f);
+  }
+
+  /** guarda (ou renomeia) um modo com este foco e passa a usá-lo */
+  saveMode(name: string, focus: Focus, previous: string | null): void {
+    const n = name.trim();
+    if (!n || BUILTIN.some(b => b.name === n)) return;
+    const list = [...this.saved().filter(m => m.name !== n && m.name !== previous), { name: n, focus }];
+    this.saved.set(list);
+    this.settings.set('triage:modes', JSON.stringify(list));
+    this.set(focus);
   }
 }

@@ -15,8 +15,7 @@ import { ProposalsService } from '../../../../shared/services/proposals/proposal
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { MarkdownPipe } from '../../../../shared/ui/markdown';
-import { AskService } from '../../../../shared/services/ask/ask.service';
-import { TriageFocusService } from '../../../../shared/services/triage-focus/triage-focus.service';
+import { ALL, BUILTIN, Focus, TriageFocusService } from '../../../../shared/services/triage-focus/triage-focus.service';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
@@ -73,7 +72,6 @@ export class InboxPage {
   protected readonly proposals = inject(ProposalsService);
   protected readonly ideas = inject(IdeasService);
   protected readonly focus = inject(TriageFocusService);
-  private readonly ask = inject(AskService);
   protected readonly projects = inject(ProjectsService);
   protected readonly direction = inject(DirectionService);
   private readonly chat = inject(ChatService);
@@ -99,13 +97,66 @@ export class InboxPage {
     return at > 0 ? [list[at], ...list.slice(0, at), ...list.slice(at + 1)] : list;
   });
   protected readonly key = keyOf;
-  /** quantos ficaram de fora pelo foco */
-  protected readonly hidden = computed(() => this.proposals.inbox().length + this.ideas.fresh().length - this.queue().length);
-  protected readonly adjustingFocus = signal(false);
-  protected readonly focusProjects = computed(() => [...this.projects.living().filter(p => !p.parentSlug).map(p => ({ id: p.slug, label: p.name })), { id: '', label: 'Sem projeto' }]);
-  protected async saveFocus(): Promise<void> {
-    const name = await this.ask.text('Salvar este foco como modo', '', { placeholder: 'ex.: Manhã KultivAi', confirmLabel: 'Salvar' });
-    if (name?.trim()) this.focus.saveAs(name);
+  /** abas dos modos, cada uma com quantos itens mostraria */
+  protected readonly modeTabs = computed(() => {
+    const props = this.proposals.inbox(), ideas = this.ideas.fresh();
+    return this.focus.modes().map(m => ({
+      name: m.name, active: this.focus.mode() === m.name,
+      n: props.filter(p => this.focus.decision(p, m.focus)).length + ideas.filter(i => this.focus.idea(i, m.focus)).length,
+    }));
+  });
+  protected readonly editableActive = computed(() => this.focus.saved().some(m => m.name === this.focus.mode()));
+
+  /** montar ou editar um modo (no painel que abre por cima) */
+  protected readonly editor = signal<{ name: string; focus: Focus; previous: string | null } | null>(null);
+  protected readonly showOptions = [
+    { id: 'all', label: 'Tudo', types: [] as Focus['types'] },
+    { id: 'decision', label: 'Só decisões', types: ['decision'] as Focus['types'] },
+    { id: 'idea', label: 'Só ideias', types: ['idea'] as Focus['types'] },
+  ];
+  protected readonly whoOptions = [
+    { id: 'all', label: 'Todos', origins: [] as Focus['origins'] },
+    { id: 'agents', label: 'Dos agentes', origins: ['agents'] as Focus['origins'] },
+    { id: 'mine', label: 'Minhas', origins: ['mine'] as Focus['origins'] },
+  ];
+  protected showOf(f: Focus): string { return f.types.length === 1 ? f.types[0] : 'all'; }
+  protected whoOf(f: Focus): string { return f.origins.length === 1 ? f.origins[0] : 'all'; }
+  /** só os projetos que têm algo na triagem (e os já escolhidos) */
+  protected readonly editorProjects = computed(() => {
+    const chosen = this.editor()?.focus.projects ?? [];
+    const top = (slug: string | null) => (slug ? this.projects.bySlug().get(slug)?.parentSlug ?? slug : '');
+    const has = new Set([...this.proposals.inbox().map(p => top(p.projectSlug)), ...this.ideas.fresh().map(i => top(i.projectSlug)), ...chosen]);
+    return [...has].map(id => ({ id, label: id ? this.projects.bySlug().get(id)?.name ?? id : 'Sem projeto' })).sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || a.label.localeCompare(b.label));
+  });
+  protected readonly editorCount = computed(() => {
+    const e = this.editor();
+    if (!e) return 0;
+    return this.proposals.inbox().filter(p => this.focus.decision(p, e.focus)).length + this.ideas.fresh().filter(i => this.focus.idea(i, e.focus)).length;
+  });
+  protected readonly canSave = computed(() => {
+    const n = this.editor()?.name.trim() ?? '';
+    return !!n && !BUILTIN.some(b => b.name === n);
+  });
+  protected openEditor(name: string | null): void {
+    const m = name ? this.focus.saved().find(x => x.name === name) : null;
+    this.editor.set(m ? { name: m.name, focus: m.focus, previous: m.name } : { name: '', focus: { ...ALL }, previous: null });
+  }
+  protected editName(name: string): void { this.editor.update(e => (e ? { ...e, name } : e)); }
+  protected editFocus(p: Partial<Focus>): void { this.editor.update(e => (e ? { ...e, focus: { ...e.focus, ...p } } : e)); }
+  protected toggleProject(id: string): void {
+    const cur = this.editor()?.focus.projects ?? [];
+    this.editFocus({ projects: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] });
+  }
+  protected saveEditor(): void {
+    const e = this.editor();
+    if (!e || !this.canSave()) return;
+    this.focus.saveMode(e.name, e.focus, e.previous);
+    this.editor.set(null);
+  }
+  protected deleteMode(name: string): void {
+    this.focus.remove(name);
+    if (this.focus.mode() === null) this.focus.use('Tudo');
+    this.editor.set(null);
   }
   protected readonly suggested = computed(() => { const c = this.current(); return c?.kind === 'idea' ? suggestion(c.i.triage) : null; });
   protected readonly current = computed(() => this.queue()[0] ?? null);
