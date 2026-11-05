@@ -4,6 +4,8 @@ import { ChatService, ChatSession } from '../../services/chat/chat.service';
 import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
 import { CHAT_MODELS, EFFORTS } from '../../services/agents/agents.service';
 import { ContextMenuService } from '../../services/context-menu/context-menu.service';
+import { DictationService, Recording } from '../../services/dictation/dictation.service';
+import { errorMessage } from '../../services/ipc/ipc.service';
 import { LiveService, elapsed } from '../../services/live/live.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
@@ -64,6 +66,43 @@ export class ChatView implements OnDestroy {
     return e?.value ? e.label : 'Raciocínio';
   });
   protected readonly text = signal('');
+
+  /** ditado: fala → texto na caixa (extensão Transcrição) */
+  protected readonly dictation = inject(DictationService);
+  protected readonly mic = signal<'idle' | 'rec' | 'busy'>('idle');
+  protected readonly micSecs = signal(0);
+  protected readonly micError = signal<string | null>(null);
+  private rec: Recording | null = null;
+  private micTimer: ReturnType<typeof setInterval> | undefined;
+  protected async toggleMic(): Promise<void> {
+    if (this.mic() === 'busy') return;
+    this.micError.set(null);
+    if (this.mic() === 'idle') {
+      try { this.rec = await this.dictation.record(); }
+      catch { this.micError.set('Não deu para usar o microfone (permissão do Windows em Privacidade → Microfone?).'); return; }
+      this.mic.set('rec');
+      this.micSecs.set(0);
+      this.micTimer = setInterval(() => this.micSecs.update(n => n + 1), 1000);
+      return;
+    }
+    clearInterval(this.micTimer);
+    this.mic.set('busy');
+    try {
+      const said = (await this.dictation.transcribe(await this.rec!.stop())).trim();
+      if (said) {
+        const cur = this.text();
+        this.setText(cur.trim() ? `${cur.replace(/\s+$/, '')} ${said}` : said);
+        const el = this.input()?.nativeElement;
+        if (el) { el.value = this.text(); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      } else this.micError.set('Não entendi nada no áudio.');
+    } catch (e) {
+      this.micError.set(errorMessage(e));
+    } finally {
+      this.rec = null;
+      this.mic.set('idle');
+    }
+  }
+  protected cancelMic(): void { clearInterval(this.micTimer); this.rec?.cancel(); this.rec = null; this.mic.set('idle'); }
   /** janela: só os últimos itens são desenhados; rolar até o topo traz mais */
   private readonly limit = signal(PAGE);
   protected readonly visible = computed(() => this.s().items().slice(-this.limit()));
@@ -215,7 +254,7 @@ export class ChatView implements OnDestroy {
     setTimeout(() => this.copied.set(null), 1500);
   }
 
-  ngOnDestroy(): void { this.grow.disconnect(); }
+  ngOnDestroy(): void { this.grow.disconnect(); this.cancelMic(); }
 
   protected time(d: Date): string { return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
 }

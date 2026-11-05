@@ -879,6 +879,8 @@ export interface GovLimits { session: [number, number, number]; week: [number, n
 
 export interface SttStatusDto {
   installed: boolean;
+  /** motor pronto para transcrever agora */
+  ready?: boolean;
   running: boolean;
   engine: 'local' | 'openai';
   model: 'small' | 'base';
@@ -1061,6 +1063,8 @@ export interface Api {
   'stt:config': (patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }) => void;
   /** baixa o motor local (whisper.cpp, ffmpeg, modelo) */
   'stt:prepare': () => void;
+  /** ditado: áudio gravado no chat (webm) → texto */
+  'stt:dictate': (audio: Uint8Array) => string;
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];
   'routines:create': (input: NewRoutineInput) => RoutineDto;

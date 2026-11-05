@@ -1,6 +1,6 @@
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
@@ -306,6 +306,12 @@ function registerIpc(): void {
   handle('stt:status', () => sttStatus());
   handle('stt:config', patch => { setSttConfig(patch); });
   handle('stt:prepare', async () => { await prepareLocal(); });
+  // ditado nos chats: o áudio gravado na tela vira texto pelo motor escolhido (o ffmpeg da extensão abre o webm)
+  handle('stt:dictate', async audio => {
+    const file = join(app.getPath('temp'), `central-ditado-${Date.now()}.webm`);
+    writeFileSync(file, Buffer.from(audio));
+    try { return (await transcribeFile(file)).text; } finally { rmSync(file, { force: true }); }
+  });
   // só nos testes (--capture): transcrever/analisar direto
   if (CAPTURE) ipcMain.handle('stt:test', async (_e, kind: string, path: string) => (kind === 'video' ? analyzeVideo(path) : transcribeFile(path)));
   // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp

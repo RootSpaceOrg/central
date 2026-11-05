@@ -46,8 +46,8 @@ const apiKey = () => {
   return v ? safeStorage.decryptString(Buffer.from(v, 'base64')) : undefined;
 };
 
-export const sttStatus = () => ({ installed: installed(EXT), running: running(EXT), ...sttConfig(), ext: extStatus });
-export const mediaReady = () => running(EXT) && (sttConfig().engine === 'openai' ? sttConfig().hasKey : !!extStatus?.whisper && !!extStatus.models[sttConfig().model]);
+export const sttStatus = () => ({ installed: installed(EXT), running: running(EXT), ...sttConfig(), ext: extStatus, ready: mediaReady() });
+export const mediaReady = () => running(EXT) && (sttConfig().engine === 'openai' ? sttConfig().hasKey : !!extStatus?.whisper && !!extStatus.ffmpeg && !!extStatus.models[sttConfig().model]);
 
 /** motor local: whisper + ffmpeg + modelo; com a OpenAI, só o ffmpeg (para vídeo) */
 export const prepareLocal = () => callExtension(EXT, 'setup', sttConfig().engine === 'openai' ? { only: 'ffmpeg' } : { model: sttConfig().model }, 30 * 60_000);

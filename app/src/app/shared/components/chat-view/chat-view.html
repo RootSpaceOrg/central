@@ -116,6 +116,7 @@
 <form class="border-t border-edge" [class]="compact() ? 'p-3' : 'px-6 py-3'" (submit)="$event.preventDefault(); send()">
   <div class="mx-auto" [style.max-width.px]="compact() ? null : prefs.maxWidth()" [style.font-size.px]="prefs.prefs().fontSize">
     @if (chat.error()) { <p role="alert" class="mb-2 px-1 text-[13px] text-no">{{ chat.error() }}</p> }
+    @if (micError()) { <p role="alert" class="mb-2 px-1 text-[13px] text-no">{{ micError() }}</p> }
     <div class="rounded-2xl border border-edge bg-night p-2 transition-colors focus-within:border-frost">
       <textarea #input rows="1" class="max-h-48 min-h-9 w-full resize-none bg-transparent px-2 py-1.5 outline-none placeholder:text-faint"
                 [placeholder]="agent ? 'Mensagem para ' + agent.name + '…' : 'Mensagem…'" aria-label="Mensagem" [value]="text()"
@@ -126,6 +127,22 @@
         <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-mute hover:bg-raise hover:text-text" (click)="pickEffort($event)"
                 title="Nível de raciocínio (quanto o Claude pensa antes de agir)" aria-label="Nível de raciocínio">{{ effortLabel() }}<app-icon name="chevron" [size]="11" class="rotate-90" /></button>
         <span class="flex-1"></span>
+        @if (mic() === 'rec') {
+          <span class="flex items-center gap-1.5 px-1 text-[12.5px] tabular-nums text-no" aria-live="polite"><span class="pulse size-2 rounded-full bg-no"></span>{{ micSecs() }}s</span>
+          <button type="button" class="rounded-lg px-2 py-1 text-[12.5px] text-mute hover:bg-raise hover:text-text" (click)="cancelMic()">Descartar</button>
+        } @else if (mic() === 'busy') {
+          <span class="px-1 text-[12.5px] text-mute" aria-live="polite">Transcrevendo…</span>
+        }
+        @if (dictation.ready() || mic() !== 'idle') {
+          <button type="button" class="grid size-8 place-items-center rounded-lg transition disabled:opacity-40" (click)="toggleMic()" [disabled]="mic() === 'busy'"
+                  [class]="mic() === 'rec' ? 'bg-no text-night hover:brightness-110' : 'text-mute hover:bg-raise hover:text-text'"
+                  [attr.aria-label]="mic() === 'rec' ? 'Parar e transcrever' : 'Ditar mensagem'" [attr.aria-pressed]="mic() === 'rec'"
+                  [title]="mic() === 'rec' ? 'Parar e transcrever (o texto entra na caixa para você revisar)' : 'Ditar: fale e o texto entra na caixa'">
+            @if (mic() === 'busy') { <span class="size-4 animate-spin rounded-full border-2 border-faint border-t-transparent"></span> }
+            @else if (mic() === 'rec') { <span class="size-3 rounded-[3px] bg-night"></span> }
+            @else { <app-icon name="mic" [size]="16" /> }
+          </button>
+        }
         @if (chat.currentBusy()) {
           <span class="size-5 animate-spin rounded-full border-2 border-faint border-t-transparent" aria-hidden="true"></span>
           @if (text().trim()) {
