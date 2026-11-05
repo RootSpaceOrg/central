@@ -13,18 +13,34 @@
     </div>
   </div>
 
-  <form class="mt-7 rounded-3xl border border-edge bg-panel p-4" (submit)="capture($event)" aria-label="Anotar ideia">
-    <input class="w-full bg-transparent px-2 py-1 font-display text-xl outline-none placeholder:text-faint" placeholder="Anote uma ideia…"
-           aria-label="Ideia" [value]="title()" (input)="title.set($any($event.target).value)">
-    @if (title().trim()) {
-      <textarea class="field mt-3 min-h-20 resize-y" placeholder="Por que, para quem, de onde veio" aria-label="Detalhes"
-                [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
-      <div class="mt-3 flex gap-2">
-        <app-project-select class="w-72" [value]="projectSlug()" (valueChange)="projectSlug.set($event)" noneLabel="Sem projeto" />
-        <span class="flex-1"></span>
-        <button class="btn btn-primary">Guardar ideia</button>
-      </div>
+  <!-- caixa de anotar: primeira linha é o título, o resto é markdown -->
+  <form (submit)="capture($event)" aria-label="Anotar ideia"
+        class="mt-7 rounded-3xl border bg-panel transition focus-within:border-frost/50" [class]="dragging() ? 'border-frost' : 'border-edge'"
+        (dragover)="$event.preventDefault(); dragging.set(true)" (dragleave)="dragging.set(false)" (drop)="onDrop($event)">
+    @if (preview() && draft().trim()) {
+      <div class="md max-h-[50vh] min-h-28 overflow-y-auto px-6 py-5 selectable" [innerHTML]="draft() | markdown"></div>
+    } @else {
+      <textarea id="compose" aria-label="Ideia" class="block max-h-[55vh] min-h-28 w-full resize-none bg-transparent [field-sizing:content] px-6 py-5 text-[15.5px] leading-relaxed outline-none placeholder:text-faint"
+                placeholder="Anote uma ideia. A primeira linha vira o título, o resto aceita markdown. Dá para arrastar um .md para cá."
+                [value]="draft()" (input)="draft.set($any($event.target).value)" (keydown.control.enter)="capture($event)"></textarea>
     }
+    <div class="flex flex-wrap items-center gap-2 border-t border-edge px-3 py-2.5">
+      <label class="btn btn-sm btn-ghost cursor-pointer" title="Subir um arquivo .md ou .txt">
+        <app-icon name="file" [size]="14" />Subir .md
+        <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" class="sr-only" (change)="onFile($event)">
+      </label>
+      @if (draft().trim()) {
+        <button type="button" class="btn btn-sm btn-ghost" (click)="preview.set(!preview())" [attr.aria-pressed]="preview()">
+          <app-icon [name]="preview() ? 'edit' : 'summary'" [size]="14" />{{ preview() ? 'Editar' : 'Ver formatado' }}</button>
+        <span class="min-w-0 flex-1 truncate px-1 text-[12.5px] text-faint">Título: <span class="text-mute">{{ parsed().title }}</span></span>
+        <app-project-select class="w-60 shrink-0" [value]="projectSlug()" (valueChange)="projectSlug.set($event)"
+                            [noneLabel]="triageOn() ? 'Sem projeto (triagem decide)' : 'Sem projeto'" />
+        <button class="btn btn-primary shrink-0 whitespace-nowrap">Anotar <kbd class="ml-1 text-xs opacity-70">Ctrl+Enter</kbd></button>
+      } @else {
+        <span class="flex-1 px-1 text-[12.5px] text-faint">
+          {{ triageOn() ? 'Vai para a Triagem; o agente de triagem lê antes de você.' : 'Vai para a Triagem para você aprovar.' }}</span>
+      }
+    </div>
   </form>
 
   <div class="mt-7 flex flex-wrap items-center gap-3">

@@ -1,35 +1,27 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 
 import { Idea } from '../ideas/ideas.service';
 import { ProjectsService } from '../projects/projects.service';
 import { Proposal } from '../proposals/proposals.model';
 import { SettingsApiService } from '../settings/settings-api.service';
 
-/** O que aparece na Triagem. Lista vazia = tudo daquele critério. */
+/** O que aparece na Triagem. Lista vazia = todos os projetos. */
 export interface Focus {
-  types: ('decision' | 'idea')[];
   /** slugs; '' = sem projeto. Um projeto inclui as frentes dele. */
   projects: string[];
-  origins: ('agents' | 'mine')[];
-  /** só o que tem agente parado esperando você */
+  /** só decisões com agente parado esperando você */
   blocking: boolean;
 }
-export interface FocusMode { name: string; focus: Focus }
+export type TriageTab = 'decision' | 'idea';
 
-export const ALL: Focus = { types: [], projects: [], origins: [], blocking: false };
-/** modos que já vêm prontos (não dá para apagar) */
-export const BUILTIN: FocusMode[] = [
-  { name: 'Tudo', focus: ALL },
-  { name: 'Destravar agentes', focus: { ...ALL, types: ['decision'], blocking: true } },
-];
-const same = (a: Focus, b: Focus) => JSON.stringify(a) === JSON.stringify(b);
+export const ALL: Focus = { projects: [], blocking: false };
 
 /** Decisão que trava um agente: é sobre uma tarefa (o responsável espera a resposta) ou veio de quem parou pedindo você. */
 export const blocking = (p: Proposal) => p.taskId !== null || ['dispatch', 'atendimento', 'whatsapp'].includes(p.source);
 
 /**
- * Foco da Triagem: você escolhe o que quer ver agora (tipo, projetos, origem, só bloqueios) e salva como modo.
- * Fica lembrado entre aberturas; o número no menu conta só o que está no foco.
+ * Filtros da Triagem (projetos ligados, só o que trava), aba e colunas da grade. Ficam lembrados entre aberturas;
+ * o número no menu conta só o que passa pelos filtros.
  */
 @Injectable({ providedIn: 'root' })
 export class TriageFocusService {
@@ -37,53 +29,33 @@ export class TriageFocusService {
   private readonly projects = inject(ProjectsService);
 
   readonly focus = signal<Focus>(ALL);
-  readonly saved = signal<FocusMode[]>([]);
-  readonly modes = computed(() => [...BUILTIN, ...this.saved()]);
-  /** nome do modo que bate com o foco atual (null = personalizado) */
-  readonly mode = computed(() => this.modes().find(m => same(m.focus, this.focus()))?.name ?? null);
+  readonly tab = signal<TriageTab>('decision');
+  readonly cols = signal<2 | 3>(3);
 
   constructor() {
-    this.settings.get('triage:focus').then(v => { if (v) this.focus.set({ ...ALL, ...JSON.parse(v) }); });
-    this.settings.get('triage:modes').then(v => { if (v) this.saved.set(JSON.parse(v)); });
+    this.settings.get('triage:focus').then(v => {
+      if (!v) return;
+      const f = JSON.parse(v);
+      this.focus.set({ projects: Array.isArray(f.projects) ? f.projects : [], blocking: !!f.blocking });
+    });
+    this.settings.get('triage:tab').then(v => { if (v === 'decision' || v === 'idea') this.tab.set(v); });
+    this.settings.get('triage:cols').then(v => { if (v === '2') this.cols.set(2); });
   }
 
   set(f: Focus): void { this.focus.set(f); this.settings.set('triage:focus', JSON.stringify(f)); }
-  use(name: string): void { const m = this.modes().find(x => x.name === name); if (m) this.set(m.focus); }
-  remove(name: string): void {
-    const list = this.saved().filter(m => m.name !== name);
-    this.saved.set(list);
-    this.settings.set('triage:modes', JSON.stringify(list));
+  toggleProject(slug: string): void {
+    const l = this.focus().projects;
+    this.set({ ...this.focus(), projects: l.includes(slug) ? l.filter(x => x !== slug) : [...l, slug] });
   }
+  setTab(t: TriageTab): void { this.tab.set(t); this.settings.set('triage:tab', t); }
+  setCols(n: 2 | 3): void { this.cols.set(n); this.settings.set('triage:cols', String(n)); }
 
-  /** o projeto do item está no foco? (a frente conta como o projeto-pai) */
-  private inProjects(slug: string | null, focus = this.focus()): boolean {
-    const f = focus.projects;
-    if (!f.length) return true;
-    if (!slug) return f.includes('');
-    return f.includes(slug) || f.includes(this.projects.bySlug().get(slug)?.parentSlug ?? '\u0000');
-  }
+  /** projeto-pai do item ('' = sem projeto): a frente conta como o projeto */
+  top(slug: string | null): string { return slug ? this.projects.bySlug().get(slug)?.parentSlug ?? slug : ''; }
 
-  decision(p: Proposal, f = this.focus()): boolean {
-    if (f.types.length && !f.types.includes('decision')) return false;
-    if (f.blocking && !blocking(p)) return false;
-    if (f.origins.length && !f.origins.includes(['manual', 'memory'].includes(p.source) ? 'mine' : 'agents')) return false;
-    return this.inProjects(p.projectSlug, f);
-  }
+  private inProjects(slug: string | null, f: Focus): boolean { return !f.projects.length || f.projects.includes(this.top(slug)); }
 
-  idea(i: Idea, f = this.focus()): boolean {
-    if (f.types.length && !f.types.includes('idea')) return false;
-    if (f.blocking) return false; // ideia não trava agente
-    if (f.origins.length && !f.origins.includes(i.author === 'gustavo' ? 'mine' : 'agents')) return false;
-    return this.inProjects(i.projectSlug, f);
-  }
-
-  /** guarda (ou renomeia) um modo com este foco e passa a usá-lo */
-  saveMode(name: string, focus: Focus, previous: string | null): void {
-    const n = name.trim();
-    if (!n || BUILTIN.some(b => b.name === n)) return;
-    const list = [...this.saved().filter(m => m.name !== n && m.name !== previous), { name: n, focus }];
-    this.saved.set(list);
-    this.settings.set('triage:modes', JSON.stringify(list));
-    this.set(focus);
-  }
+  decision(p: Proposal, f = this.focus()): boolean { return (!f.blocking || blocking(p)) && this.inProjects(p.projectSlug, f); }
+  /** "só travando" vale para decisões; ideias seguem só o filtro de projeto */
+  idea(i: Idea, f = this.focus()): boolean { return this.inProjects(i.projectSlug, f); }
 }

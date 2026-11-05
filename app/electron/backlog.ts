@@ -28,18 +28,20 @@ export const setSetting = (key: string, value: string) =>
 const VERDICT: Record<Verdict, ProposalStatus> = { approve: 'approved', defer: 'deferred', reject: 'rejected' };
 
 export function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
-  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at, task_id
+  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at, task_id, summary, options
     from proposals where status in (${statuses.map(() => '?').join(',') || "''"})
     order by coalesce(tier, 9), created_at desc`, ...statuses);
 }
 
-export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string; task_id?: number | null }): ProposalDto {
+export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string; task_id?: number | null; summary?: string | null; options?: string[] | null }): ProposalDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Escreva o que precisa acontecer.');
   const tier = input.tier === 0 || input.tier === 1 || input.tier === 2 ? input.tier : null;
   const { lastInsertRowid } = run(`insert into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,?,?)`,
     input.project_slug || null, title, input.body?.trim() || null, input.next_action?.trim() || null, tier,
     input.source ?? 'manual', `${Date.now()}-${Math.random()}`);
+  const options = (input.options ?? []).map(o => o.trim()).filter(Boolean).slice(0, 4);
+  run('update proposals set summary = ?, options = ? where id = ?', input.summary?.trim().split('\n')[0] || null, options.length ? JSON.stringify(options) : null, Number(lastInsertRowid));
   if (input.task_id && get('select 1 from tasks where id = ?', input.task_id)) run('update proposals set task_id = ? where id = ?', input.task_id, Number(lastInsertRowid));
   return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
 }
@@ -76,7 +78,7 @@ ${p.next_action ?? ''}`.toLowerCase();
       .find(r => text.includes(r.path.toLowerCase()) || text.includes(`repo ${r.name.toLowerCase()}`));
     createTask({
       project_slug: p.project_slug, repo_path: repo?.path ?? null, title: p.title,
-      body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`].filter(Boolean).join('\n\n') || null,
+      body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`, reason && `Gustavo: ${reason}`].filter(Boolean).join('\n\n') || null,
       column: 'todo', priority: p.tier === 2 ? 0 : 1, proposal_id: id,
     });
   }

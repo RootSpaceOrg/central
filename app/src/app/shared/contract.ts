@@ -116,6 +116,10 @@ export interface ProposalDto {
   updated_at: string;
   /** a tarefa sobre a qual é a escolha (decidir devolve a resposta para ela, sem criar outra) */
   task_id?: number | null;
+  /** uma linha: o que está sendo pedido */
+  summary?: string | null;
+  /** JSON: respostas prontas que o agente sugeriu (escolher uma = aprovar com ela) */
+  options?: string | null;
 }
 
 export interface NewProposalInput {

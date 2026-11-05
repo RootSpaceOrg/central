@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+
 import { RouterLink } from '@angular/router';
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
@@ -8,11 +9,22 @@ import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
+import { MarkdownPipe } from '../../../../shared/ui/markdown';
+import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
+
+/** Texto livre → ideia: a primeira linha (sem o "#") é o título; o resto é a descrição em markdown. */
+export function parseDraft(text: string): { title: string; body: string } {
+  const lines = text.replace(/\r/g, '').trim().split('\n');
+  const first = lines[0].replace(/^\s*(#+|[-*>])\s*/, '').trim();
+  if (first.length <= 120) return { title: first, body: lines.slice(1).join('\n').trim() };
+  // parágrafo longo sem título: corta numa palavra e guarda o texto inteiro
+  return { title: `${first.slice(0, 100).replace(/\s+\S*$/, '')}…`, body: text.trim() };
+}
 
 
 @Component({
   selector: 'app-ideas-page',
-  imports: [RouterLink, Icon, AgoPipe, ProjectSelect, ProjectAvatar],
+  imports: [RouterLink, Icon, AgoPipe, ProjectSelect, ProjectAvatar, MarkdownPipe],
   templateUrl: './ideas-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })
@@ -26,8 +38,13 @@ export class IdeasPage {
   protected readonly error = signal<string | null>(null);
   protected readonly projectFilter = signal('');
   protected readonly query = signal('');
-  protected readonly title = signal('');
-  protected readonly body = signal('');
+  /** caixa de anotar */
+  protected readonly draft = signal('');
+  protected readonly parsed = computed(() => parseDraft(this.draft()));
+  protected readonly preview = signal(false);
+  protected readonly dragging = signal(false);
+  /** o agente de triagem lê o que você anota (configurado na Triagem) */
+  protected readonly triageOn = signal(true);
   protected readonly projectSlug = signal('');
   protected readonly importing = signal(false);
   protected readonly importResult = signal<string | null>(null);
@@ -44,13 +61,42 @@ export class IdeasPage {
 
   protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
 
+  constructor() {
+    inject(SettingsApiService).get('triage:mode').then(v => this.triageOn.set(v !== 'off'));
+  }
+
   protected async capture(e: Event): Promise<void> {
     e.preventDefault();
-    if (!this.title().trim()) return;
-    await this.ideas.create(this.title().trim(), this.body().trim(), this.projectSlug() || null);
-    this.title.set('');
-    this.body.set('');
-    this.status.set('new');
+    if (!this.draft().trim()) return;
+    const { title, body } = this.parsed();
+    try {
+      await this.ideas.create(title, body, this.projectSlug() || null);
+      this.draft.set('');
+      this.preview.set(false);
+      this.status.set('new');
+      this.error.set(null);
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    }
+  }
+
+  /** .md/.txt: o conteúdo vai para a caixa (dá para revisar antes de anotar) */
+  protected async load(file: File | undefined): Promise<void> {
+    if (!file) return;
+    if (!/\.(md|markdown|txt)$/i.test(file.name) && !file.type.startsWith('text/')) { this.error.set('Só arquivos .md ou .txt.'); return; }
+    const text = (await file.text()).trim();
+    // arquivo sem título em markdown: o nome do arquivo vira o título
+    this.draft.set(/^\s*#/.test(text) ? text : `${file.name.replace(/\.\w+$/, '')}\n\n${text}`);
+    this.preview.set(true);
+    this.error.set(null);
+  }
+  protected onFile(e: Event): void { const input = e.target as HTMLInputElement; this.load(input.files?.[0]); input.value = ''; }
+  protected onDrop(e: DragEvent): void {
+    this.dragging.set(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return; // texto arrastado: o textarea cuida
+    e.preventDefault();
+    this.load(file);
   }
 
   protected promote(i: Idea): void {

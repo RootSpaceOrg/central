@@ -486,7 +486,7 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
   desista: chame need_gustavo (o que falta, o que ele faz e o comando, ex.: aws sso login --profile X) e termine. A Central te
   retoma de onde parou quando ele resolver.
 - Escolha que depende do Gustavo (qual caminho seguir, se pode mergear, se tira ou mantém): crie uma decisão com
-  create_decision${task ? ` e task_id ${task.id}` : ' e o task_id da tarefa'}, com as opções no texto e o que você faz em cada uma. Não escreva escolhas
+  create_decision${task ? ` e task_id ${task.id}` : ' e o task_id da tarefa'}, com summary (uma linha), as opções em options e o que você faz em cada uma no body. Não escreva escolhas
   pendentes na descrição da tarefa: a tarefa espera, e quando ele decidir a resposta volta para ela e você segue.${prodRule(r.project_slug)}
 - Precisa de outro agente (ex.: achou um bug urgente que é de quem cuida do código ou da monitoração)? notify_agent com um
   resumo seu do que viu e do que precisa (não cole texto de cliente ou de fora), urgent só se for mesmo. Os agentes estão em list_agents.

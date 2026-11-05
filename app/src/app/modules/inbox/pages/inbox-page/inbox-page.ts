@@ -13,10 +13,10 @@ import { ProjectsService } from '../../../../shared/services/projects/projects.s
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
+import { TriageFocusService, TriageTab, blocking } from '../../../../shared/services/triage-focus/triage-focus.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
-import { MarkdownPipe } from '../../../../shared/ui/markdown';
-import { ALL, BUILTIN, Focus, TriageFocusService } from '../../../../shared/services/triage-focus/triage-focus.service';
 import { Icon } from '../../../../shared/ui/icon';
+import { MarkdownPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
 const KEYS: Record<string, Verdict> = { a: 'approve', d: 'defer', n: 'reject' };
@@ -24,13 +24,16 @@ const KEYS: Record<string, Verdict> = { a: 'approve', d: 'defer', n: 'reject' };
 /** O pedido ao gestor quando você aprova e manda planejar: só esta ideia, nada de reorganizar o backlog inteiro. */
 export const planRequest = (id: number, title: string) =>
   `Acabei de aprovar a ideia #${id} ("${title}"). Quebre só ela: tarefas no backlog ligadas a ela (create_task com idea_id; coluna todo quando estiver clara e pequena, backlog quando precisar de mais definição) e decisões (create_decision) para o que depender de mim. Ligue ao marco do roadmap que ela serve, se houver. Não mexa no resto do backlog.`;
-/** conversas abertas a partir da triagem começam assim (a lateral lista as recentes) */
+/** conversas abertas a partir da triagem começam assim */
 const PREFIX = 'Triagem: ';
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Item da triagem: decisão (pergunta/alerta de um agente ou do CI) ou ideia nova (sua ou de um agente). */
 type Item = { kind: 'decision'; p: Proposal } | { kind: 'idea'; i: Idea };
 const keyOf = (q: Item) => (q.kind === 'decision' ? `d${q.p.id}` : `i${q.i.id}`);
+const slugOf = (q: Item) => (q.kind === 'decision' ? q.p.projectSlug : q.i.projectSlug);
+const dateOf = (q: Item) => (q.kind === 'decision' ? q.p.createdAt : q.i.createdAt).getTime();
+const stuck = (q: Item) => q.kind === 'decision' && blocking(q.p);
 
 type TriageMode = 'off' | 'no_project' | 'all';
 const MODES: { id: TriageMode; label: string; hint: string }[] = [
@@ -38,15 +41,6 @@ const MODES: { id: TriageMode; label: string; hint: string }[] = [
   { id: 'all', label: 'Todas as minhas ideias', hint: 'Lê tudo que você anota, com ou sem projeto.' },
   { id: 'off', label: 'Desligado', hint: 'As ideias chegam como você escreveu.' },
 ];
-
-/** Texto livre → ideia: a primeira linha (sem o "#") é o título; o resto é a descrição em markdown. */
-export function parseDraft(text: string): { title: string; body: string } {
-  const lines = text.replace(/\r/g, '').trim().split('\n');
-  const first = lines[0].replace(/^\s*(#+|[-*>])\s*/, '').trim();
-  if (first.length <= 120) return { title: first, body: lines.slice(1).join('\n').trim() };
-  // parágrafo longo sem título: corta numa palavra e guarda o texto inteiro
-  return { title: `${first.slice(0, 100).replace(/\s+\S*$/, '')}…`, body: text.trim() };
-}
 
 /** Recomendação do agente de triagem → botão que fica em destaque. */
 export function suggestion(triage: string | null): 'plan' | 'approve' | 'reject' | 'steer' | null {
@@ -58,9 +52,17 @@ export function suggestion(triage: string | null): 'plan' | 'approve' | 'reject'
   return null;
 }
 
+/** Uma linha a partir de um texto em markdown (para decisões antigas, sem resumo do agente). */
+export function oneLine(md: string | null): string {
+  const line = (md ?? '').split('\n').map(l => l.replace(/^\s*(#+|[-*>]|\d+\.)\s*/, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '').trim()).find(Boolean) ?? '';
+  const end = line.search(/[.!?](\s|$)/);
+  const s = end > 20 ? line.slice(0, end + 1) : line;
+  return s.length > 160 ? `${s.slice(0, 157).replace(/\s+\S*$/, '')}…` : s;
+}
+
 /**
- * Triagem: o trabalho de gestor num lugar só. Uma coisa de cada vez: decisões primeiro (alguém está esperando),
- * depois ideias novas. Aprovar uma ideia a torna insumo do backlog do projeto; o gestor do projeto quebra em tarefas.
+ * Triagem: decisões e ideias em abas, agrupadas por projeto numa grade de cards. O que trava um agente vem primeiro
+ * (com o tempo parado). Clicar abre o item num modal com o contexto e as ações; dá para selecionar vários e decidir em lote.
  */
 @Component({
   selector: 'app-inbox-page',
@@ -73,116 +75,179 @@ export class InboxPage {
   protected readonly ideas = inject(IdeasService);
   protected readonly focus = inject(TriageFocusService);
   protected readonly projects = inject(ProjectsService);
-  protected readonly direction = inject(DirectionService);
+  private readonly direction = inject(DirectionService);
   private readonly chat = inject(ChatService);
   private readonly agents = inject(AgentsService);
   protected readonly live = inject(LiveService);
   private readonly settings = inject(SettingsApiService);
 
-  /** ideias deixadas para depois nesta visita (continuam novas, vão para o fim) */
-  private readonly skipped = signal<ReadonlySet<number>>(new Set());
-  /** item escolhido na lista "Na fila" (vai para a frente) */
-  private readonly pinned = signal<string | null>(null);
-  protected readonly queue = computed<Item[]>(() => {
-    const ideas = this.ideas.fresh();
-    const later = this.skipped();
-    // só o que está no foco escolhido (o resto continua lá: "fora do foco · mostrar tudo")
-    const f = this.focus;
-    const list: Item[] = [
-      ...this.proposals.inbox().filter(p => f.decision(p)).map(p => ({ kind: 'decision' as const, p })),
-      ...ideas.filter(i => !later.has(i.id) && f.idea(i)).map(i => ({ kind: 'idea' as const, i })),
-      ...ideas.filter(i => later.has(i.id) && f.idea(i)).map(i => ({ kind: 'idea' as const, i })),
-    ];
-    const at = list.findIndex(q => keyOf(q) === this.pinned());
-    return at > 0 ? [list[at], ...list.slice(0, at), ...list.slice(at + 1)] : list;
-  });
   protected readonly key = keyOf;
-  /** abas dos modos, cada uma com quantos itens mostraria */
-  protected readonly modeTabs = computed(() => {
-    const props = this.proposals.inbox(), ideas = this.ideas.fresh();
-    return this.focus.modes().map(m => ({
-      name: m.name, active: this.focus.mode() === m.name,
-      n: props.filter(p => this.focus.decision(p, m.focus)).length + ideas.filter(i => this.focus.idea(i, m.focus)).length,
-    }));
-  });
-  protected readonly editableActive = computed(() => this.focus.saved().some(m => m.name === this.focus.mode()));
+  protected readonly stuck = stuck;
+  protected readonly oneLine = oneLine;
+  protected readonly risk = RISK_LABEL;
+  protected readonly source = (s: string) => SOURCE_LABEL[s] ?? IDEA_SOURCE_LABEL[s] ?? s;
 
-  /** montar ou editar um modo (no painel que abre por cima) */
-  protected readonly editor = signal<{ name: string; focus: Focus; previous: string | null } | null>(null);
-  protected readonly showOptions = [
-    { id: 'all', label: 'Tudo', types: [] as Focus['types'] },
-    { id: 'decision', label: 'Só decisões', types: ['decision'] as Focus['types'] },
-    { id: 'idea', label: 'Só ideias', types: ['idea'] as Focus['types'] },
-  ];
-  protected readonly whoOptions = [
-    { id: 'all', label: 'Todos', origins: [] as Focus['origins'] },
-    { id: 'agents', label: 'Dos agentes', origins: ['agents'] as Focus['origins'] },
-    { id: 'mine', label: 'Minhas', origins: ['mine'] as Focus['origins'] },
-  ];
-  protected showOf(f: Focus): string { return f.types.length === 1 ? f.types[0] : 'all'; }
-  protected whoOf(f: Focus): string { return f.origins.length === 1 ? f.origins[0] : 'all'; }
-  /** só os projetos que têm algo na triagem (e os já escolhidos) */
-  protected readonly editorProjects = computed(() => {
-    const chosen = this.editor()?.focus.projects ?? [];
-    const top = (slug: string | null) => (slug ? this.projects.bySlug().get(slug)?.parentSlug ?? slug : '');
-    const has = new Set([...this.proposals.inbox().map(p => top(p.projectSlug)), ...this.ideas.fresh().map(i => top(i.projectSlug)), ...chosen]);
-    return [...has].map(id => ({ id, label: id ? this.projects.bySlug().get(id)?.name ?? id : 'Sem projeto' })).sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || a.label.localeCompare(b.label));
+  /** ideias deixadas para depois nesta visita (continuam novas, vão para o fim do grupo) */
+  private readonly skipped = signal<ReadonlySet<number>>(new Set());
+
+  // ---------- abas, filtros e grade ----------
+  protected readonly decisionCount = computed(() => this.proposals.inbox().filter(p => this.focus.decision(p)).length);
+  protected readonly ideaCount = computed(() => this.ideas.fresh().filter(i => this.focus.idea(i)).length);
+  protected readonly stuckCount = computed(() => this.proposals.inbox().filter(p => blocking(p) && this.focus.decision(p, { ...this.focus.focus(), blocking: false })).length);
+  protected readonly total = computed(() => this.decisionCount() + this.ideaCount());
+
+  protected readonly items = computed<Item[]>(() => this.focus.tab() === 'decision'
+    ? this.proposals.inbox().filter(p => this.focus.decision(p)).map(p => ({ kind: 'decision' as const, p }))
+    : this.ideas.fresh().filter(i => this.focus.idea(i)).map(i => ({ kind: 'idea' as const, i })));
+
+  /** por projeto; dentro de cada um, o que trava primeiro (o mais antigo antes), depois o mais novo */
+  protected readonly groups = computed(() => {
+    const later = this.skipped();
+    const rank = (q: Item) => (stuck(q) ? 0 : 1) + (q.kind === 'idea' && later.has(q.i.id) ? 2 : 0);
+    const m = new Map<string, Item[]>();
+    for (const q of this.items()) { const k = this.focus.top(slugOf(q)); m.set(k, [...(m.get(k) ?? []), q]); }
+    return [...m].map(([slug, list]) => ({
+      slug, project: this.project(slug), stuck: list.filter(stuck).length,
+      list: list.sort((a, b) => rank(a) - rank(b) || (stuck(a) ? dateOf(a) - dateOf(b) : dateOf(b) - dateOf(a))),
+    })).sort((a, b) => b.stuck - a.stuck || (a.slug ? 0 : 1) - (b.slug ? 0 : 1) || (a.project?.name ?? '').localeCompare(b.project?.name ?? ''));
   });
-  protected readonly editorCount = computed(() => {
-    const e = this.editor();
-    if (!e) return 0;
-    return this.proposals.inbox().filter(p => this.focus.decision(p, e.focus)).length + this.ideas.fresh().filter(i => this.focus.idea(i, e.focus)).length;
+  protected readonly flat = computed(() => this.groups().flatMap(g => g.list));
+
+  /** toggles de projeto: os que têm algo nesta aba (e os já ligados) */
+  protected readonly chips = computed(() => {
+    const f = { ...this.focus.focus(), projects: [] };
+    const slugs = this.focus.tab() === 'decision'
+      ? this.proposals.inbox().filter(p => this.focus.decision(p, f)).map(p => p.projectSlug)
+      : this.ideas.fresh().map(i => i.projectSlug);
+    const n = new Map<string, number>();
+    for (const s of slugs) { const k = this.focus.top(s); n.set(k, (n.get(k) ?? 0) + 1); }
+    for (const k of this.focus.focus().projects) if (!n.has(k)) n.set(k, 0);
+    return [...n].map(([id, count]) => ({ id, count, project: this.project(id), on: this.focus.focus().projects.includes(id) }))
+      .sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || (a.project?.name ?? '').localeCompare(b.project?.name ?? ''));
   });
-  protected readonly canSave = computed(() => {
-    const n = this.editor()?.name.trim() ?? '';
-    return !!n && !BUILTIN.some(b => b.name === n);
-  });
-  protected openEditor(name: string | null): void {
-    const m = name ? this.focus.saved().find(x => x.name === name) : null;
-    this.editor.set(m ? { name: m.name, focus: m.focus, previous: m.name } : { name: '', focus: { ...ALL }, previous: null });
+
+  protected setTab(t: TriageTab): void { this.focus.setTab(t); this.selected.set(new Set()); this.error.set(null); }
+
+  // ---------- seleção e lote ----------
+  protected readonly selected = signal<ReadonlySet<string>>(new Set());
+  protected toggleSel(q: Item): void {
+    const s = new Set(this.selected()), k = keyOf(q);
+    if (!s.delete(k)) s.add(k);
+    this.selected.set(s);
   }
-  protected editName(name: string): void { this.editor.update(e => (e ? { ...e, name } : e)); }
-  protected editFocus(p: Partial<Focus>): void { this.editor.update(e => (e ? { ...e, focus: { ...e.focus, ...p } } : e)); }
-  protected toggleProject(id: string): void {
-    const cur = this.editor()?.focus.projects ?? [];
-    this.editFocus({ projects: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] });
+  protected selectGroup(list: Item[]): void {
+    const keys = list.map(keyOf), all = keys.every(k => this.selected().has(k));
+    const s = new Set(this.selected());
+    for (const k of keys) { if (all) s.delete(k); else s.add(k); }
+    this.selected.set(s);
   }
-  protected saveEditor(): void {
-    const e = this.editor();
-    if (!e || !this.canSave()) return;
-    this.focus.saveMode(e.name, e.focus, e.previous);
-    this.editor.set(null);
+  protected clearSel(): void { this.selected.set(new Set()); }
+  protected allIn(list: Item[]): boolean { return list.every(q => this.selected().has(keyOf(q))); }
+
+  /** aprovar em lote pula o que precisa de você: ideia sem projeto e decisão com opções (falta escolher uma) */
+  protected async batch(verdict: Verdict): Promise<void> {
+    const sel = this.flat().filter(q => this.selected().has(keyOf(q)));
+    const kept = new Set<string>();
+    this.error.set(null);
+    try {
+      for (const q of sel) {
+        if (verdict === 'approve' && (q.kind === 'idea' ? !q.i.projectSlug : q.p.options.length > 0)) { kept.add(keyOf(q)); continue; }
+        if (q.kind === 'decision') this.proposals.decide(q.p, verdict);
+        else if (verdict === 'approve') await this.ideas.approve(q.i.id, null);
+        else if (verdict === 'reject') await this.ideas.setStatus(q.i.id, 'archived');
+        else this.skipped.update(s => new Set([...s, q.i.id]));
+      }
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    }
+    this.selected.set(verdict === 'defer' ? new Set() : kept);
+    if (kept.size) this.error.set(`${kept.size} ${kept.size === 1 ? 'ficou selecionada' : 'ficaram selecionadas'}: ${this.focus.tab() === 'idea' ? 'falta escolher o projeto' : 'falta escolher uma das opções'}. Abra para decidir.`);
   }
-  protected deleteMode(name: string): void {
-    this.focus.remove(name);
-    if (this.focus.mode() === null) this.focus.use('Tudo');
-    this.editor.set(null);
-  }
+
+  // ---------- modal ----------
+  private readonly openKey = signal<string | null>(null);
+  protected readonly current = computed(() => this.flat().find(q => keyOf(q) === this.openKey()) ?? null);
+  protected readonly position = computed(() => this.flat().findIndex(q => keyOf(q) === this.openKey()));
   protected readonly suggested = computed(() => { const c = this.current(); return c?.kind === 'idea' ? suggestion(c.i.triage) : null; });
-  protected readonly current = computed(() => this.queue()[0] ?? null);
-  protected readonly behind = computed(() => Math.min(this.queue().length - 1, 2));
   protected readonly leaving = signal<Verdict | null>(null);
-  /** projeto escolhido no cartão da ideia (se ela ainda não tem) */
+  /** projeto escolhido no modal da ideia (se ela ainda não tem) */
   protected readonly pickSlug = signal('');
   protected readonly error = signal<string | null>(null);
   /** ideias aprovadas e mandadas para o gestor planejar nesta tela (aviso discreto) */
   protected readonly sentToPlan = signal<string[]>([]);
 
-  /** aprovadas que ainda não viraram tarefa, por projeto: o gestor de cada um tem trabalho */
-  protected readonly waiting = computed(() => {
-    const m = new Map<string, Idea[]>();
-    for (const i of this.ideas.waiting()) if (i.projectSlug) m.set(i.projectSlug, [...(m.get(i.projectSlug) ?? []), i]);
-    return [...m].map(([slug, list]) => ({ slug, list }));
-  });
+  protected open(q: Item | undefined): void {
+    if (!q) return;
+    this.openKey.set(keyOf(q));
+    this.steering.set(false);
+    this.pickSlug.set('');
+    this.error.set(null);
+    queueMicrotask(() => document.querySelector<HTMLElement>('#tri-modal')?.focus());
+  }
+  protected close(): void { this.openKey.set(null); this.steering.set(false); }
+  protected move(d: number): void { this.open(this.flat()[this.position() + d]); }
 
-  /** caixa de anotar */
-  protected readonly draft = signal('');
-  protected readonly parsed = computed(() => parseDraft(this.draft()));
-  protected readonly preview = signal(false);
-  protected readonly dragging = signal(false);
-  protected readonly projectSlug = signal('');
+  protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
 
-  /** agente de triagem: quando roda e quem faz */
+  protected approveAndPlan(): void { this.decide('approve', true); }
+  protected choose(option: string): void { this.decide('approve', false, `Escolheu: ${option}`); }
+
+  protected decide(verdict: Verdict, plan = false, reason: string | null = null): void {
+    const item = this.current();
+    if (!item || this.leaving()) return;
+    if (item.kind === 'idea' && verdict === 'approve' && !(item.i.projectSlug || this.pickSlug())) {
+      this.error.set('Escolha o projeto da ideia antes de aprovar.');
+      return;
+    }
+    if (item.kind === 'decision' && verdict === 'approve' && !reason && item.p.options.length) {
+      this.error.set('Escolha uma das opções (ou Direcionar para outra resposta).');
+      return;
+    }
+    // depois de decidir, abre o próximo (ou o anterior, se era o último)
+    const l = this.flat(), at = this.position();
+    const next = l[at + 1] ?? l[at - 1];
+    this.error.set(null);
+    this.leaving.set(verdict);
+    setTimeout(async () => {
+      try {
+        if (item.kind === 'decision') this.proposals.decide(item.p, verdict, reason);
+        else if (verdict === 'approve') {
+          const slug = item.i.projectSlug ?? this.pickSlug();
+          await this.ideas.approve(item.i.id, item.i.projectSlug ? null : slug);
+          if (plan) {
+            await this.direction.plan(slug, planRequest(item.i.id, item.i.title));
+            this.sentToPlan.update(s => [item.i.title, ...s].slice(0, 5));
+          }
+        }
+        else if (verdict === 'reject') this.ideas.setStatus(item.i.id, 'archived');
+        else this.skipped.update(s => new Set([...s, item.i.id]));
+        const s = new Set(this.selected()); s.delete(keyOf(item)); this.selected.set(s);
+        if (next && next !== item) this.open(next); else this.close();
+      } catch (e) {
+        this.error.set(errorMessage(e));
+      }
+      this.leaving.set(null);
+    }, reducedMotion() ? 120 : 220);
+  }
+
+  protected onKey(e: KeyboardEvent): void {
+    if (!this.current()) return;
+    if (e.key === 'Escape') { if (this.steering()) this.steering.set(false); else this.close(); return; }
+    const tag = (e.target as HTMLElement).tagName;
+    if (e.ctrlKey || e.metaKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.querySelector('dialog[open]')) return;
+    const k = e.key.toLowerCase();
+    if (k === 'arrowright' || k === 'j') { e.preventDefault(); this.move(1); return; }
+    if (k === 'arrowleft' || k === 'k') { e.preventDefault(); this.move(-1); return; }
+    if (k === 'r') { e.preventDefault(); this.openSteer(); return; }
+    const item = this.current()!;
+    if (k === 'p' && item.kind === 'idea') { e.preventDefault(); this.approveAndPlan(); return; }
+    const n = Number(k);
+    if (item.kind === 'decision' && n >= 1 && n <= item.p.options.length) { e.preventDefault(); this.choose(item.p.options[n - 1]); return; }
+    const verdict = KEYS[k];
+    if (verdict) { e.preventDefault(); this.decide(verdict); }
+  }
+
+  // ---------- agente de triagem: quando roda e quem faz ----------
   protected readonly modes = MODES;
   protected readonly triageMode = signal<TriageMode>('no_project');
   protected readonly triageAgent = signal('');
@@ -192,20 +257,6 @@ export class InboxPage {
   protected reading(i: Idea): boolean {
     return !!i.triagedAt && !i.triage && this.triageMode() !== 'off' && Date.now() - i.triagedAt.getTime() < 30 * 60_000;
   }
-  protected readonly risk = RISK_LABEL;
-  protected readonly source = (s: string) => SOURCE_LABEL[s] ?? IDEA_SOURCE_LABEL[s] ?? s;
-  protected readonly planned = signal<Record<string, number>>({});
-
-  /** direcionamento livre: o texto vai para a Central junto com o item */
-  protected readonly steering = signal(false);
-  protected readonly guidance = signal('');
-  protected readonly sending = signal(false);
-  /** conversas da triagem (últimos 3 dias): o que está com a Central agora */
-  protected readonly discussing = computed(() => {
-    const since = Date.now() - 3 * 86_400_000;
-    return this.chat.chats().filter(c => c.title.startsWith(PREFIX) && c.updatedAt.getTime() > since).slice(0, 8)
-      .map(c => ({ id: c.id, title: c.title.slice(PREFIX.length), at: c.updatedAt, live: this.live.chat(c.id) }));
-  });
 
   constructor() {
     this.settings.get('triage:mode').then(v => { if (v === 'off' || v === 'all' || v === 'no_project') this.triageMode.set(v); });
@@ -214,52 +265,17 @@ export class InboxPage {
 
   protected setMode(m: TriageMode): void { this.triageMode.set(m); this.settings.set('triage:mode', m); }
   protected setAgent(id: string): void { this.triageAgent.set(id); this.settings.set('triage:agent', id); }
-  protected pin(q: Item): void { this.pinned.set(keyOf(q)); this.steering.set(false); this.pickSlug.set(''); }
 
-  protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
-
-  /** Aprovar e já pôr o gestor do projeto para quebrar a ideia em tarefas (ligadas a ela) ou decisões. */
-  protected approveAndPlan(): void { this.decide('approve', true); }
-
-  protected decide(verdict: Verdict, plan = false): void {
-    const item = this.current();
-    if (!item || this.leaving()) return;
-    if (item.kind === 'idea' && verdict === 'approve' && !(item.i.projectSlug || this.pickSlug())) {
-      this.error.set('Escolha o projeto da ideia antes de aprovar.');
-      return;
-    }
-    this.error.set(null);
-    this.leaving.set(verdict);
-    setTimeout(async () => {
-      try {
-        if (item.kind === 'decision') this.proposals.decide(item.p, verdict);
-        else if (verdict === 'approve') {
-          const slug = item.i.projectSlug ?? this.pickSlug();
-          await this.ideas.approve(item.i.id, item.i.projectSlug ? null : slug);
-          if (plan) {
-            await this.direction.plan(slug, planRequest(item.i.id, item.i.title));
-            this.sentToPlan.update(l => [item.i.title, ...l].slice(0, 5));
-          }
-        }
-        else if (verdict === 'reject') this.ideas.setStatus(item.i.id, 'archived');
-        else this.skipped.update(s => new Set([...s, item.i.id]));
-      } catch (e) {
-        this.error.set(errorMessage(e));
-      }
-      this.pickSlug.set('');
-      this.pinned.set(null);
-      this.leaving.set(null);
-    }, reducedMotion() ? 120 : 220);
-  }
-
-  protected onKey(e: KeyboardEvent): void {
-    const tag = (e.target as HTMLElement).tagName;
-    if (e.ctrlKey || e.metaKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.querySelector('dialog[open]')) return;
-    if (e.key.toLowerCase() === 'r') { e.preventDefault(); this.openSteer(); return; }
-    if (e.key.toLowerCase() === 'p' && this.current()?.kind === 'idea') { e.preventDefault(); this.approveAndPlan(); return; }
-    const verdict = KEYS[e.key.toLowerCase()];
-    if (verdict) this.decide(verdict);
-  }
+  // ---------- direcionar: o texto vai para a Central junto com o item ----------
+  protected readonly steering = signal(false);
+  protected readonly guidance = signal('');
+  protected readonly sending = signal(false);
+  /** conversas da triagem (últimos 3 dias): o que está com a Central agora */
+  protected readonly discussing = computed(() => {
+    const since = Date.now() - 3 * 86_400_000;
+    return this.chat.chats().filter(c => c.title.startsWith(PREFIX) && c.updatedAt.getTime() > since).slice(0, 6)
+      .map(c => ({ id: c.id, title: c.title.slice(PREFIX.length), at: c.updatedAt, live: this.live.chat(c.id) }));
+  });
 
   protected openSteer(): void {
     this.steering.set(true);
@@ -275,6 +291,7 @@ export class InboxPage {
     const text = this.guidance().trim();
     const central = this.agents.central();
     if (!item || !text || !central) return;
+    const l = this.flat(), next = l[this.position() + 1] ?? l[this.position() - 1];
     this.sending.set(true);
     this.error.set(null);
     try {
@@ -285,6 +302,7 @@ export class InboxPage {
       else this.proposals.decide(item.p, 'defer');
       this.guidance.set('');
       this.steering.set(false);
+      if (next && next !== item) this.open(next); else this.close();
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {
@@ -293,48 +311,6 @@ export class InboxPage {
   }
 
   protected openChat(id: number): void { this.chat.openInPanel(id); }
-
-  protected async plan(slug: string): Promise<void> {
-    try {
-      const id = await this.direction.plan(slug);
-      this.planned.update(m => ({ ...m, [slug]: id }));
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    }
-  }
-
-  protected async capture(e: Event): Promise<void> {
-    e.preventDefault();
-    if (!this.draft().trim()) return;
-    const { title, body } = this.parsed();
-    try {
-      await this.ideas.create(title, body, this.projectSlug() || null);
-      this.draft.set('');
-      this.preview.set(false);
-      this.error.set(null);
-    } catch (err) {
-      this.error.set(errorMessage(err));
-    }
-  }
-
-  /** .md/.txt: o conteúdo vai para a caixa (dá para revisar antes de anotar) */
-  protected async load(file: File | undefined): Promise<void> {
-    if (!file) return;
-    if (!/\.(md|markdown|txt)$/i.test(file.name) && !file.type.startsWith('text/')) { this.error.set('Só arquivos .md ou .txt.'); return; }
-    const text = (await file.text()).trim();
-    // arquivo sem título em markdown: o nome do arquivo vira o título
-    this.draft.set(/^\s*#/.test(text) ? text : `${file.name.replace(/\.\w+$/, '')}\n\n${text}`);
-    this.preview.set(true);
-    this.error.set(null);
-  }
-  protected onFile(e: Event): void { const input = e.target as HTMLInputElement; this.load(input.files?.[0]); input.value = ''; }
-  protected onDrop(e: DragEvent): void {
-    this.dragging.set(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (!file) return; // texto arrastado: o textarea cuida
-    e.preventDefault();
-    this.load(file);
-  }
 }
 
 const ideaPrompt = (i: Idea, project: string | null, guidance: string) => `${PREFIX}${i.title}
@@ -357,6 +333,7 @@ O Gustavo está fazendo a triagem e, em vez de aprovar ou recusar esta decisão,
 Decisão #${p.id} (projeto: ${project ?? 'nenhum'})
 Título: ${p.title}
 ${p.body ? `Contexto: ${p.body}` : ''}
+${p.options.length ? `Opções que o agente deu: ${p.options.join(' | ')}` : ''}
 ${p.nextAction ? `Se aprovada, o próximo passo seria: ${p.nextAction}` : ''}
 
 Direcionamento dele:
