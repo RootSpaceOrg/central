@@ -13,7 +13,7 @@ import { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { z } from 'zod';
 
-import { Emit, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
+import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
 import { agentSend, notifyOwners } from './whatsapp';
 import { analyzeVideo, transcribeFile } from './media';
@@ -318,6 +318,9 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
   tool('analisar_video', 'Prepara um vídeo para você entender: tira alguns quadros (imagens que você abre com Read) e transcreve a fala. Você não assiste vídeo direto; veja os quadros e leia a fala.', {
     caminho: z.string(), quadros: z.number().int().min(1).max(20).optional().describe('quantos quadros (padrão 8)'),
   }, async a => { const r = await analyzeVideo(a.caminho, undefined, a.quadros ?? 8); return { quadros: r.frames, fala: r.transcript || '(sem fala ou sem áudio)', segundos: r.seconds }; });
+  tool('continue_run', 'Continua uma execução que falhou ou foi interrompida, na mesma sessão do Claude (ele lembra tudo o que fez) e de onde parou. Para outro agente assumir, use take_over.', {
+    run_id: z.number().int(), note: z.string().optional().describe('o que dizer a ele ao continuar'),
+  }, a => { const r = continueRun(a.run_id, a.note ?? null, h.emit); return `Execução #${r.id} continuando.`; }, h.backlog);
   tool('take_over', 'Passa uma execução parada (pausada pela cota, que falhou ou foi interrompida) para outro agente continuar na mesma branch, com o registro do que já foi feito. Sem agent_id, o mesmo agente recomeça com o registro.', {
     run_id: z.number().int(), agent_id: z.number().int().optional(), note: z.string().optional().describe('o que quem assume precisa saber'),
   }, a => { const r = handoffRun(a.run_id, a.agent_id ?? null, a.note ?? null, h.emit); return `Execução #${r.id} assumiu o trabalho da #${a.run_id}.`; }, h.backlog);

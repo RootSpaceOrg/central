@@ -229,8 +229,8 @@ async function execute(id: number, emit: Emit): Promise<void> {
   let cwd: string, frame: string;
   if (resuming) {
     cwd = r.worktree_path ?? r.repo_path;
-    frame = `A Central pausou você (${r.resume}) para não estourar a cota do plano do Gustavo. Já pode continuar.
-Continue exatamente de onde parou, sem refazer o que já fez. Confira o estado (git status, seu plano) e termine a tarefa; no fim, chame report_delivery.`;
+    frame = `Você parou no meio do trabalho (${r.resume}). Já pode continuar.
+Continue exatamente de onde parou, sem refazer o que já fez: confira o estado (git status, seus estagiários, seu plano) e termine a tarefa; no fim, chame report_delivery.`;
     set(id, { resume: null }, emit);
     event(id, 'system', `Retomando a mesma sessão do Claude em ${cwd}.`, emit);
   } else if (from?.worktree_path && r.scope === 'repo') {
@@ -370,6 +370,26 @@ export function pauseAllOnQuit(): void {
     procs.delete(id);
     if (pid) { try { execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* já saiu */ } }
   }
+}
+
+/**
+ * Continuar uma execução que falhou ou foi interrompida: a mesma sessão do Claude (com tudo o que ele já fez), na mesma
+ * pasta, de onde parou. A tarefa volta para Fazendo. note = o que dizer a ele (opcional).
+ */
+export function continueRun(id: number, note: string | null, emit: Emit): RunDto {
+  const r = dto(id);
+  if (!['failed', 'killed'].includes(r.status)) throw new Error('Só dá para continuar uma execução que falhou ou foi interrompida.');
+  if (!r.session_id) throw new Error('Essa execução não guardou a sessão do Claude: use "Passar adiante" para outro agente continuar com o registro.');
+  if (get(`select 1 from runs where handoff_from = ? and status in ('queued','preparing','running')`, id)) throw new Error('Outro agente já está continuando esse trabalho.');
+  const why = r.status === 'killed' ? 'a execução foi interrompida' : 'a execução parou com erro';
+  run(`update runs set status = 'queued', paused = null, resume = ?, finished_at = null, result = null where id = ?`,
+    `${why}; o Gustavo pediu para continuar${note?.trim() ? `. Ele disse: ${note.trim()}` : ''}`, id);
+  event(id, 'system', 'Continuando a mesma sessão, de onde parou.', emit);
+  if (r.task_id && !r.stage) moveTaskForRun(r.task_id, 'doing');
+  emit.update(dto(id));
+  emit.changed();
+  pump(emit);
+  return dto(id);
 }
 
 /** "Retomar agora": tira a pausa; começa assim que o freio e as vagas deixarem. */

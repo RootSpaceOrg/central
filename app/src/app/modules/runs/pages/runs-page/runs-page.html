@@ -62,6 +62,10 @@
         <div class="flex shrink-0 gap-2">
           @if (r.prUrl) { <button type="button" class="btn btn-primary btn-sm" (click)="openPr(r)"><app-icon name="pr" [size]="14" />Ver PR</button> }
           @if (r.worktreePath) { <button type="button" class="btn btn-sm" (click)="openWorktree(r)"><app-icon name="code" [size]="14" />Abrir no VS Code</button> }
+          @if ((r.status === 'failed' || r.status === 'killed') && r.sessionId && !handedOff(r)) {
+            <button type="button" class="btn btn-primary btn-sm" (click)="continueRun(r)" title="A mesma sessão do Claude, de onde parou (ele lembra tudo o que já fez)">
+              <app-icon name="play" [size]="14" />Continuar</button>
+          }
           @if (canHandoff(r)) { <button type="button" class="btn btn-sm" (click)="handingOff.set(!handingOff())" [attr.aria-expanded]="handingOff()"
                                         title="Outro agente continua na mesma branch, com o registro do que já foi feito"><app-icon name="agent" [size]="14" />Passar adiante</button> }
           @if (isActive(r.status)) { <button type="button" class="btn btn-sm !text-no" (click)="runs.kill(r.id)"><app-icon name="stop" [size]="13" />Interromper</button> }

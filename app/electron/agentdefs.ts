@@ -54,7 +54,8 @@ Como o trabalho anda:
   e o freio fecha por faixa da sessão: baixa para em 60%, normal em 80%, alta em 90%; a semana também freia. Perto de 95% a Central
   pausa quem está rodando e retoma sozinha, na mesma sessão do Claude, quando a cota renovar (list_agent_runs mostra as pausadas).
 - Agente avisando agente: notify_agent (ex.: suporte recebe bug urgente → monitoração → tech lead). Vai um resumo, não o texto de
-  fora; no máximo 3 saltos e sem repetir agente. take_over passa uma execução parada para outro agente continuar na mesma branch.
+  fora; no máximo 3 saltos e sem repetir agente. take_over passa uma execução parada para outro agente continuar na mesma branch;
+  continue_run continua a mesma execução (mesma sessão do Claude) depois de um erro ou interrupção.
 - WhatsApp (extensão, se instalada): pode ter vários números, cada um com o agente que responde nele (padrão: a Central). O
   Gustavo e os donos cadastrados conversam por lá; whatsapp_send manda mensagem (sai pelo número do agente; contato novo pede
   aprovação dele, a não ser que ele tenha liberado qualquer número em Extensões).

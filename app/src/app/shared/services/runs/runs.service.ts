@@ -103,6 +103,11 @@ export class RunsService {
     this.api.kill(id);
   }
 
+  /** continua uma execução que falhou ou foi interrompida, na mesma sessão do Claude, de onde parou */
+  async continue(id: number, note: string | null = null): Promise<void> {
+    try { await this.api.continue(id, note); } catch (e) { throw new Error(errorMessage(e)); }
+  }
+
   /** tira a pausa do freio (volta assim que a cota e as vagas deixarem) */
   unpause(id: number): Promise<void> { return this.api.unpause(id).catch(e => { throw new Error(errorMessage(e)); }); }
 

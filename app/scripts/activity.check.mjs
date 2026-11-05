@@ -91,6 +91,11 @@ console.log('fases ok');
   t3.handle({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu2', name: 'Agent', input: { description: 'api' } }] } });
   t3.handle({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu2', content: 'pronto, fiz X' }] } });
   ok(!!t3.activity.subagents[1].finished_at, 'primeiro plano termina com a resposta');
+  // o evento exato (system task_notification) também termina
+  t3.handle({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu3', name: 'Agent', input: { description: 'front', run_in_background: true } }] } });
+  t3.handle({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu3', content: 'Async agent launched successfully. agentId: zzz' }] } });
+  t3.handle({ type: 'system', subtype: 'task_notification', task_id: 'zzz', tool_use_id: 'tu3', status: 'completed' });
+  ok(!!t3.activity.subagents[2].finished_at, 'task_notification do sistema termina o estagiário');
   t3.stop(); void a3;
 }
 console.log('segundo plano ok');

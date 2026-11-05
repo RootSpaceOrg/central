@@ -922,6 +922,8 @@ export interface Api {
   'runs:kill': (id: number) => void;
   /** tira a pausa do freio: volta assim que a cota e as vagas deixarem */
   'runs:unpause': (id: number) => void;
+  /** continua uma execução que falhou ou foi interrompida, na mesma sessão do Claude */
+  'runs:continue': (id: number, note: string | null) => RunDto;
   /** outro agente (ou o mesmo, do zero) assume o trabalho parado, na mesma branch */
   'runs:handoff': (id: number, agentId: number | null, note: string | null) => RunDto;
   /** o Gustavo resolveu o que o agente esperava: retoma a sessão da execução de onde parou (devolve a conversa) */

@@ -90,6 +90,11 @@ export class RunsPage {
   protected canHandoff(r: Run): boolean {
     return (!!r.paused || r.status === 'failed' || r.status === 'killed') && !this.runs.runs().some(x => x.handoffFrom === r.id);
   }
+  protected handedOff(r: Run): boolean { return this.runs.runs().some(x => x.handoffFrom === r.id); }
+  protected async continueRun(r: Run): Promise<void> {
+    this.chatError.set(null);
+    try { await this.runs.continue(r.id); } catch (e) { this.chatError.set((e as Error).message); }
+  }
   protected async unpause(r: Run): Promise<void> {
     this.chatError.set(null);
     try { await this.runs.unpause(r.id); } catch (e) { this.chatError.set((e as Error).message); }

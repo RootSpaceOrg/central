@@ -66,7 +66,12 @@ export class ActivityTracker {
   handle(msg: any): void {
     const parent: string | null = msg.parent_tool_use_id ?? null;
     let changed = false;
-    // aviso de conclusão de um subagente em segundo plano (vem como texto com o id dele)
+    // aviso exato de conclusão (system task_notification com o tool_use_id de quem lançou)
+    if (msg.type === 'system' && msg.subtype === 'task_notification' && msg.tool_use_id && /complete|fail|error|cancel|kill/i.test(String(msg.status ?? ''))) {
+      const sub = this.activity.subagents.find(s => s.id === msg.tool_use_id && !s.finished_at);
+      if (sub) { this.finish(sub); changed = true; }
+    }
+    // aviso de conclusão em texto (versões que mandam como mensagem) com o id do subagente
     if (this.background.size) {
       const raw = JSON.stringify(msg);
       if (raw.includes('task-notification') || raw.includes('task_notification')) {
