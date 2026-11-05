@@ -54,6 +54,8 @@ async function sha256(path) {
 async function download(key) {
   const a = ASSETS[key];
   const out = join(tmp, `${key}.part`);
+  progress = { name: key, done: 0, total: a.size };
+  push();
   const res = await fetch(a.url, { redirect: 'follow' });
   if (!res.ok || !res.body) throw new Error(`Download de ${key} falhou (${res.status}).`);
   const f = await open(out, 'w');
@@ -78,15 +80,15 @@ async function download(key) {
 }
 
 /** Prepara o motor local: baixa o que falta (programas + o modelo escolhido). Pode rodar de novo para trocar de modelo. */
-async function setup({ model = 'small' } = {}) {
-  if (!ASSETS[model]?.file) throw new Error('Modelo inválido: small ou base.');
+async function setup({ model = 'small', only } = {}) {
+  if (only !== 'ffmpeg' && !ASSETS[model]?.file) throw new Error('Modelo inválido: small ou base.');
   if (setting) return setting;
   setupError = null;
   setting = (async () => {
     try {
-      if (!have.whisper()) await download('whisper');
+      if (only !== 'ffmpeg' && !have.whisper()) await download('whisper');
       if (!have.ffmpeg()) await download('ffmpeg');
-      if (!have.model(model)) await download(model);
+      if (only !== 'ffmpeg' && !have.model(model)) await download(model);
       return status();
     } catch (e) { setupError = e.message; throw e; }
     finally { progress = null; setting = null; push(); }

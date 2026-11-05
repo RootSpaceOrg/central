@@ -161,9 +161,14 @@ const calls = {
     a.queue = job.catch(() => {});
     return job;
   },
-  async typing({ account, to }) {
+  /** "digitando…" no WhatsApp da pessoa (some sozinho em ~10-25 s: a Central renova enquanto o agente pensa); stop = parou */
+  async typing({ account, to, stop }) {
     const a = accounts.get(account ?? 'main');
-    if (a?.sock && a.state.state === 'open') await a.sock.sendPresenceUpdate('composing', await target(a, to)).catch(() => {});
+    if (!a?.sock || a.state.state !== 'open') return { ok: false };
+    const jid = await target(a, to);
+    if (!a.subscribed) a.subscribed = new Set();
+    if (!a.subscribed.has(jid)) { a.subscribed.add(jid); await a.sock.presenceSubscribe(jid).catch(() => {}); }
+    await a.sock.sendPresenceUpdate(stop ? 'paused' : 'composing', jid).catch(() => {});
     return { ok: true };
   },
   async logout({ account }) {

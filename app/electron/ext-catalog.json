@@ -2,19 +2,19 @@
   "transcricao": {
     "id": "transcricao",
     "name": "Transcrição",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Áudio vira texto e vídeo vira quadros + fala, para os agentes entenderem (áudios do WhatsApp, gravações de reunião, vídeos). Motor local (Whisper, no seu PC, sem gastar cota) ou OpenAI.",
     "warning": "O motor local baixa uns 530 MB na preparação (whisper.cpp, ffmpeg e o modelo). Áudio longo pode levar alguns minutos no processador.",
-    "file": "transcricao-1.0.0.mjs",
-    "sha256": "f2d964de73fd87339343dda221503e9bf00d72250c3a522d1d07937f95bc0458"
+    "file": "transcricao-1.0.1.mjs",
+    "sha256": "cf3a46509f9bf15746a532a0a4645a35e53b3b27cff31d5bda710e16ee2955f5"
   },
   "whatsapp": {
     "id": "whatsapp",
     "name": "WhatsApp",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Conecta um número de WhatsApp à Central: você conversa com a Central por lá, recebe os avisos urgentes e os agentes podem mandar mensagens.",
     "warning": "Usa o protocolo do WhatsApp Web (não é a API oficial). Para falar com clientes em volume, prefira um número dedicado: envio em massa ou para quem não espera pode bloquear o número.",
-    "file": "whatsapp-1.2.0.mjs",
-    "sha256": "aed5e4eefd9ab57688d9d2be766c8b3a07f37b39e885cffddd2cdc018271d254"
+    "file": "whatsapp-1.2.1.mjs",
+    "sha256": "0acfdbefc5dac9744f4126862b4bb5450f610c02d76eaadfb4c09a0b16d0ae2d"
   }
 }

@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 
 import { ExtensionDto, SttStatusDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
@@ -22,7 +23,7 @@ export function formatPhone(n: string): string {
  */
 @Component({
   selector: 'app-extensions-page',
-  imports: [Icon, AgoPipe, AgentSelect],
+  imports: [Icon, AgoPipe, AgentSelect, NgTemplateOutlet],
   host: { class: 'block h-full overflow-y-auto' },
   template: `
     <div class="mx-auto max-w-[980px] px-10 pt-9 pb-16">
@@ -176,46 +177,59 @@ export function formatPhone(n: string): string {
                 </div>
               </div>
 
-              <div>
-                <h3 class="font-semibold">Motor local</h3>
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                  <span class="text-[13px] text-mute">Modelo</span>
-                  @for (m of models; track m.id) {
-                    <button type="button" class="btn btn-sm" [class.!border-frost]="t?.model === m.id" [class.!text-frost]="t?.model === m.id" (click)="config({ model: m.id })">{{ m.label }}
-                      @if (t?.ext?.models?.[m.id]) { <app-icon name="check" [size]="13" class="text-yes" /> }</button>
-                  }
-                  <span class="flex-1"></span>
-                  @if (localReady()) { <span class="flex items-center gap-1.5 text-[13px] text-yes"><app-icon name="check" [size]="14" />Pronto</span> }
-                  @else if (!t?.ext?.progress) { <button type="button" class="btn btn-sm btn-primary" (click)="prepare()" [disabled]="busy()"><app-icon name="download" [size]="14" />Preparar ({{ prepareSize() }})</button> }
+              @if (t?.engine === 'local') {
+                <div>
+                  <h3 class="font-semibold">Motor local</h3>
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="text-[13px] text-mute">Modelo</span>
+                    @for (m of models; track m.id) {
+                      <button type="button" class="btn btn-sm" [class.!border-frost]="t?.model === m.id" [class.!text-frost]="t?.model === m.id" (click)="config({ model: m.id })">{{ m.label }}
+                        @if (t?.ext?.models?.[m.id]) { <app-icon name="check" [size]="13" class="text-yes" /> }</button>
+                    }
+                    <span class="flex-1"></span>
+                    @if (localReady()) { <span class="flex items-center gap-1.5 text-[13px] text-yes"><app-icon name="check" [size]="14" />Pronto</span> }
+                    @else if (!downloading()) { <button type="button" class="btn btn-sm btn-primary" (click)="prepare()"><app-icon name="download" [size]="14" />Preparar ({{ prepareSize() }})</button> }
+                  </div>
+                  <ng-container *ngTemplateOutlet="bar" />
+                  <p class="mt-2 text-[12.5px] text-faint">Roda no seu PC, sem nuvem e sem gastar a cota do Claude. O ffmpeg baixado aqui também serve para vídeo (quadros + fala).</p>
                 </div>
-                @if (t?.ext?.progress; as p) {
+              } @else {
+                <div>
+                  <h3 class="font-semibold">OpenAI</h3>
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    @if (t?.hasKey) {
+                      <span class="flex items-center gap-1.5 rounded-full bg-yes/12 px-3 py-1 text-[13px] text-yes"><app-icon name="check" [size]="13" />Chave guardada (criptografada pelo Windows)</span>
+                      <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="config({ key: null })">Remover</button>
+                    } @else {
+                      <input class="field !w-80 font-mono text-[13px]" type="password" autocomplete="off" placeholder="sk-..." aria-label="Chave da OpenAI" [value]="keyInput()" (input)="keyInput.set($any($event.target).value)">
+                      <button type="button" class="btn btn-sm" [disabled]="keyInput().trim().length < 20" (click)="saveKey()">Guardar chave</button>
+                    }
+                    <span class="flex-1"></span>
+                    <span class="text-[13px] text-mute">Modelo</span>
+                    <select class="field !w-56 !py-1 text-[13px]" aria-label="Modelo da OpenAI" (change)="config({ openaiModel: $any($event.target).value })">
+                      @for (m of openaiModels; track m) { <option [value]="m" [selected]="t?.openaiModel === m">{{ m }}</option> }
+                    </select>
+                  </div>
+                  <p class="mt-2 text-[12.5px] text-faint">Cobrado na sua conta da OpenAI por áudio transcrito. A chave só sai do seu PC para a própria OpenAI.</p>
+                  <div class="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-edge px-3 py-2.5 text-[13px]">
+                    <span class="flex-1 text-mute">Vídeo (quadros + fala) usa o ffmpeg no seu PC, com qualquer motor.</span>
+                    @if (t?.ext?.ffmpeg) { <span class="flex items-center gap-1.5 text-yes"><app-icon name="check" [size]="14" />Pronto para vídeo</span> }
+                    @else if (!downloading()) { <button type="button" class="btn btn-sm" (click)="prepare()"><app-icon name="download" [size]="14" />Preparar para vídeo (ffmpeg, 34 MB)</button> }
+                  </div>
+                  <ng-container *ngTemplateOutlet="bar" />
+                </div>
+              }
+              <ng-template #bar>
+                @if (downloading()) {
+                  @let p = t?.ext?.progress;
                   <div class="mt-3">
-                    <p class="text-[12.5px] text-mute">Baixando {{ assetLabel[p.name] ?? p.name }}: {{ mb(p.done) }} de {{ mb(p.total) }} MB</p>
-                    <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-raise"><div class="h-full rounded-full bg-frost transition-all" [style.width.%]="(p.done / p.total) * 100"></div></div>
+                    <p class="text-[12.5px] text-mute">{{ p ? 'Baixando ' + (assetLabel[p.name] ?? p.name) + ': ' + mb(p.done) + ' de ' + mb(p.total) + ' MB' : 'Começando…' }}</p>
+                    <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-raise">
+                      <div class="h-full rounded-full bg-frost transition-all" [class.animate-pulse]="!p" [style.width.%]="p ? (p.done / p.total) * 100 : 4"></div></div>
                   </div>
                 }
                 @if (t?.ext?.error) { <p class="mt-2 text-[13px] text-no">{{ t!.ext!.error }}</p> }
-                <p class="mt-2 text-[12.5px] text-faint">Roda no seu PC, sem nuvem e sem gastar a cota do Claude. O ffmpeg baixado aqui também serve para vídeo (quadros + fala), com qualquer motor.</p>
-              </div>
-
-              <div>
-                <h3 class="font-semibold">OpenAI</h3>
-                <div class="mt-2 flex flex-wrap items-center gap-2">
-                  @if (t?.hasKey) {
-                    <span class="flex items-center gap-1.5 rounded-full bg-yes/12 px-3 py-1 text-[13px] text-yes"><app-icon name="check" [size]="13" />Chave guardada (criptografada pelo Windows)</span>
-                    <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="config({ key: null })">Remover</button>
-                  } @else {
-                    <input class="field !w-80 font-mono text-[13px]" type="password" autocomplete="off" placeholder="sk-..." aria-label="Chave da OpenAI" [value]="keyInput()" (input)="keyInput.set($any($event.target).value)">
-                    <button type="button" class="btn btn-sm" [disabled]="keyInput().trim().length < 20" (click)="saveKey()">Guardar chave</button>
-                  }
-                  <span class="flex-1"></span>
-                  <span class="text-[13px] text-mute">Modelo</span>
-                  <select class="field !w-56 !py-1 text-[13px]" aria-label="Modelo da OpenAI" (change)="config({ openaiModel: $any($event.target).value })">
-                    @for (m of openaiModels; track m) { <option [value]="m" [selected]="t?.openaiModel === m">{{ m }}</option> }
-                  </select>
-                </div>
-                <p class="mt-2 text-[12.5px] text-faint">Cobrado na sua conta da OpenAI por áudio transcrito. A chave só sai do seu PC para a própria OpenAI.</p>
-              </div>
+              </ng-template>
             </div>
           }
         </section>
@@ -292,7 +306,14 @@ export class ExtensionsPage {
   protected config(patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }): void { this.run(() => this.ipc.invoke('stt:config', patch)); }
   protected saveKey(): void { const k = this.keyInput().trim(); this.keyInput.set(''); this.config({ key: k }); }
   // a preparação baixa centenas de MB: não prende a tela; o progresso chega pelo status
-  protected prepare(): void { this.error.set(null); this.ipc.invoke('stt:prepare').catch(e => this.error.set(errorMessage(e))).finally(() => this.load()); }
+  /** clicou em Preparar: a barra aparece na hora (o primeiro aviso de progresso da extensão leva uns segundos) */
+  protected readonly preparing = signal(false);
+  protected readonly downloading = computed(() => this.preparing() || !!this.stt()?.ext?.progress);
+  protected prepare(): void {
+    this.error.set(null);
+    this.preparing.set(true);
+    this.ipc.invoke('stt:prepare').catch(e => this.error.set(errorMessage(e))).finally(() => { this.preparing.set(false); this.load(); });
+  }
   protected setOpen(account: string, on: boolean): void { this.run(() => this.ipc.invoke('wa:setOpen', account, on)); }
   protected agentName(id: number | null): string { return id ? this.agents.byId().get(id)?.name ?? 'o agente' : 'a Central'; }
   protected isRestricted(id: number | null): boolean { return !!id && !!this.agents.byId().get(id)?.restricted; }

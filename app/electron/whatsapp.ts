@@ -175,13 +175,17 @@ function talk(account: string, who: string, chat: string, text: string, name: st
   const chatId = saved && get('select 1 from chats where id = ? and agent_id = ?', saved, agentId) ? saved : null;
   if (waiting.has(key)) { waiting.get(key)!.push(text); return; }
   waiting.set(key, []);
-  callExtension(EXT, 'typing', { account, to: chat }).catch(() => {});
+  // "digitando…" enquanto o agente pensa: o WhatsApp apaga o aviso em ~10-25 s, então renova a cada 8 s até a resposta sair
+  const typing = () => callExtension(EXT, 'typing', { account, to: chat }).catch(() => {});
+  typing();
+  const keep = setInterval(typing, 8000);
   let last: string | null = null;
   const notify: Notify = (id, msg, live) => {
     deps.notify(id, msg, live);
     if (msg?.role === 'assistant') last = msg.text;
     if (msg?.role === 'error') last = `⚠️ ${msg.text}`;
     if (msg === null && !live) {
+      clearInterval(keep);
       sendOut(account, chat, toWhatsApp(last ?? 'Terminei, mas não tenho nada para dizer aqui. Veja a conversa na Central.')).catch(() => {});
       const queued = waiting.get(key) ?? [];
       waiting.delete(key);
@@ -197,6 +201,7 @@ function talk(account: string, who: string, chat: string, text: string, name: st
       setSetting(`wa:chat:${key}`, String(id));
     }
   } catch (e) {
+    clearInterval(keep);
     waiting.delete(key);
     sendOut(account, chat, `⚠️ ${(e as Error).message}`).catch(() => {});
   }
