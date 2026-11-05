@@ -15,6 +15,8 @@ import { ProposalsService } from '../../../../shared/services/proposals/proposal
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { MarkdownPipe } from '../../../../shared/ui/markdown';
+import { AskService } from '../../../../shared/services/ask/ask.service';
+import { TriageFocusService } from '../../../../shared/services/triage-focus/triage-focus.service';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
@@ -70,6 +72,8 @@ export function suggestion(triage: string | null): 'plan' | 'approve' | 'reject'
 export class InboxPage {
   protected readonly proposals = inject(ProposalsService);
   protected readonly ideas = inject(IdeasService);
+  protected readonly focus = inject(TriageFocusService);
+  private readonly ask = inject(AskService);
   protected readonly projects = inject(ProjectsService);
   protected readonly direction = inject(DirectionService);
   private readonly chat = inject(ChatService);
@@ -84,15 +88,25 @@ export class InboxPage {
   protected readonly queue = computed<Item[]>(() => {
     const ideas = this.ideas.fresh();
     const later = this.skipped();
+    // só o que está no foco escolhido (o resto continua lá: "fora do foco · mostrar tudo")
+    const f = this.focus;
     const list: Item[] = [
-      ...this.proposals.inbox().map(p => ({ kind: 'decision' as const, p })),
-      ...ideas.filter(i => !later.has(i.id)).map(i => ({ kind: 'idea' as const, i })),
-      ...ideas.filter(i => later.has(i.id)).map(i => ({ kind: 'idea' as const, i })),
+      ...this.proposals.inbox().filter(p => f.decision(p)).map(p => ({ kind: 'decision' as const, p })),
+      ...ideas.filter(i => !later.has(i.id) && f.idea(i)).map(i => ({ kind: 'idea' as const, i })),
+      ...ideas.filter(i => later.has(i.id) && f.idea(i)).map(i => ({ kind: 'idea' as const, i })),
     ];
     const at = list.findIndex(q => keyOf(q) === this.pinned());
     return at > 0 ? [list[at], ...list.slice(0, at), ...list.slice(at + 1)] : list;
   });
   protected readonly key = keyOf;
+  /** quantos ficaram de fora pelo foco */
+  protected readonly hidden = computed(() => this.proposals.inbox().length + this.ideas.fresh().length - this.queue().length);
+  protected readonly adjustingFocus = signal(false);
+  protected readonly focusProjects = computed(() => [...this.projects.living().filter(p => !p.parentSlug).map(p => ({ id: p.slug, label: p.name })), { id: '', label: 'Sem projeto' }]);
+  protected async saveFocus(): Promise<void> {
+    const name = await this.ask.text('Salvar este foco como modo', '', { placeholder: 'ex.: Manhã KultivAi', confirmLabel: 'Salvar' });
+    if (name?.trim()) this.focus.saveAs(name);
+  }
   protected readonly suggested = computed(() => { const c = this.current(); return c?.kind === 'idea' ? suggestion(c.i.triage) : null; });
   protected readonly current = computed(() => this.queue()[0] ?? null);
   protected readonly behind = computed(() => Math.min(this.queue().length - 1, 2));

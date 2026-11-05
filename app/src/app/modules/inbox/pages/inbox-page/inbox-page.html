@@ -36,6 +36,53 @@
     </details>
   </header>
 
+  <!-- foco: o que aparece agora -->
+  <div class="mt-5 flex flex-wrap items-center gap-2 text-[13px]">
+    <span class="text-mute">Foco</span>
+    <select class="field !w-auto !py-1 text-[13px]" aria-label="Modo de foco" (change)="focus.use($any($event.target).value)">
+      @for (m of focus.modes(); track m.name) { <option [value]="m.name" [selected]="focus.mode() === m.name">{{ m.name }}</option> }
+      @if (!focus.mode()) { <option value="" selected disabled>Personalizado</option> }
+    </select>
+    <button type="button" class="btn btn-sm btn-ghost" (click)="adjustingFocus.set(!adjustingFocus())" [attr.aria-expanded]="adjustingFocus()"><app-icon name="settings" [size]="13" />Ajustar</button>
+    @if (!focus.mode()) { <button type="button" class="btn btn-sm btn-ghost" (click)="saveFocus()">Salvar como modo</button> }
+    @if (hidden()) {
+      <span class="ml-auto text-mute">{{ hidden() }} fora do foco ·
+        <button type="button" class="text-frost hover:underline" (click)="focus.use('Tudo')">mostrar tudo</button></span>
+    }
+  </div>
+  @if (adjustingFocus()) {
+    @let f = focus.focus();
+    <div class="mt-3 space-y-3 rounded-2xl border border-edge bg-panel p-4 text-[13px]">
+      <div class="flex flex-wrap items-center gap-1.5"><span class="w-24 text-mute">Tipo</span>
+        @for (t of [{ id: 'decision', label: 'Decisões' }, { id: 'idea', label: 'Ideias' }]; track t.id) {
+          <button type="button" class="rounded-full border px-2.5 py-0.5" [class]="f.types.includes($any(t.id)) ? 'border-frost/60 bg-frost/10 text-frost' : 'border-edge text-mute hover:text-text'" (click)="focus.toggle('types', $any(t.id))">{{ t.label }}</button>
+        }
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5"><span class="w-24 text-mute">Projetos</span>
+        @for (p of focusProjects(); track p.id) {
+          <button type="button" class="rounded-full border px-2.5 py-0.5" [class]="f.projects.includes(p.id) ? 'border-frost/60 bg-frost/10 text-frost' : 'border-edge text-mute hover:text-text'" (click)="focus.toggle('projects', p.id)">{{ p.label }}</button>
+        }
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5"><span class="w-24 text-mute">Origem</span>
+        @for (o of [{ id: 'agents', label: 'Dos agentes' }, { id: 'mine', label: 'Minhas' }]; track o.id) {
+          <button type="button" class="rounded-full border px-2.5 py-0.5" [class]="f.origins.includes($any(o.id)) ? 'border-frost/60 bg-frost/10 text-frost' : 'border-edge text-mute hover:text-text'" (click)="focus.toggle('origins', $any(o.id))">{{ o.label }}</button>
+        }
+      </div>
+      <label class="flex cursor-pointer items-center gap-2"><span class="w-24 text-mute">Urgência</span>
+        <input type="checkbox" class="accent-frost" [checked]="f.blocking" (change)="focus.patch({ blocking: $any($event.target).checked })">
+        Só o que trava agentes <span class="text-faint">(decisões que um agente está esperando)</span></label>
+      <p class="text-[12px] text-faint">Nada marcado num critério = tudo daquele critério. O foco fica lembrado e o número da Triagem no menu conta só o que está nele.</p>
+      @if (focus.saved().length) {
+        <div class="flex flex-wrap items-center gap-1.5 border-t border-edge pt-3"><span class="w-24 text-mute">Seus modos</span>
+          @for (m of focus.saved(); track m.name) {
+            <span class="flex items-center gap-1 rounded-full bg-raise px-2.5 py-0.5">{{ m.name }}
+              <button type="button" class="text-faint hover:text-no" (click)="focus.remove(m.name)" [attr.aria-label]="'Apagar o modo ' + m.name"><app-icon name="close" [size]="11" /></button></span>
+          }
+        </div>
+      }
+    </div>
+  }
+
   <!-- caixa de anotar: primeira linha é o título, o resto é markdown -->
   <form (submit)="capture($event)" aria-label="Anotar ideia"
         class="mt-6 rounded-3xl border bg-panel transition focus-within:border-frost/50" [class]="dragging() ? 'border-frost' : 'border-edge'"

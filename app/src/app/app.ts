@@ -18,6 +18,7 @@ import { UpdateService } from './shared/services/update/update.service';
 import { IdeasService } from './shared/services/ideas/ideas.service';
 import { TasksService } from './shared/services/tasks/tasks.service';
 import { DeliveriesService } from './shared/services/deliveries/deliveries.service';
+import { TriageFocusService } from './shared/services/triage-focus/triage-focus.service';
 import { DialogsService } from './shared/services/dialogs/dialogs.service';
 import { Project, ProjectStatus } from './shared/services/projects/projects.model';
 import { ProjectsService } from './shared/services/projects/projects.service';
@@ -59,6 +60,7 @@ export class App {
   protected readonly ideas = inject(IdeasService);
   protected readonly tasks = inject(TasksService);
   private readonly deliveries = inject(DeliveriesService);
+  private readonly focus = inject(TriageFocusService);
   protected readonly update = inject(UpdateService);
   protected readonly chat = inject(ChatService);
   private readonly menu = inject(ContextMenuService);
@@ -88,7 +90,7 @@ export class App {
 
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {
-    const triage = this.proposals.inbox().length + this.ideas.fresh().length;
+    const triage = this.proposals.inbox().filter(p => this.focus.decision(p)).length + this.ideas.fresh().filter(i => this.focus.idea(i)).length;
     if (path === '/triagem' && triage) return { n: triage, tone: 'bg-later text-night' };
     if (path === '/ideias' && this.ideas.waiting().length) return { n: this.ideas.waiting().length, tone: 'bg-edge text-text' };
     // revisão: entregas na fila + tarefas em Revisão sem entrega (o mesmo que a tela Revisão lista)
