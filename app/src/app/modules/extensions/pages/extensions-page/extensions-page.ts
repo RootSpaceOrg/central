@@ -1,6 +1,7 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 
 import { ExtensionDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
+import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
@@ -63,6 +64,14 @@ export function formatPhone(n: string): string {
                           <app-agent-select class="w-60" [compact]="true" [value]="a.agent_id ? '' + a.agent_id : ''" (valueChange)="setAgent(a.account, $event)" noneLabel="A Central" />
                           <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="logout(a.account)">Desconectar</button>
                         </div>
+                        <label class="mt-3 flex cursor-pointer items-start gap-3 border-t border-edge pt-3">
+                          <input type="checkbox" class="mt-1 accent-frost" [checked]="a.open" (change)="setOpen(a.account, $any($event.target).checked)">
+                          <span><span class="block">Responder qualquer pessoa que escrever</span>
+                            <span class="block text-[13px] text-mute">Atendimento: quem não é da casa também conversa com {{ agentName(a.agent_id) }} (até 20 mensagens por pessoa por hora). Desligado, só registra o contato.</span>
+                            @if (a.open && !isRestricted(a.agent_id)) {
+                              <span class="mt-1 block text-[13px] font-semibold text-no">{{ agentName(a.agent_id) }} não tem atuação restrita: qualquer pessoa estaria falando com um agente que mexe na Central. Ligue "Atuação restrita" no agente (aba Trabalho).</span>
+                            }</span>
+                        </label>
                       }
                       @case ('connecting') { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-later"></span>{{ a.me ? fmt(a.me.phone) + ': ' : '' }}reconectando…</p> }
                       @case ('pairing') {
@@ -143,6 +152,7 @@ export function formatPhone(n: string): string {
 export class ExtensionsPage {
   private readonly ipc = inject(IpcService);
   private readonly settings = inject(SettingsApiService);
+  private readonly agents = inject(AgentsService);
 
   protected readonly list = signal<ExtensionDto[]>([]);
   protected readonly wa = signal<WaStatusDto | null>(null);
@@ -188,6 +198,9 @@ export class ExtensionsPage {
   protected uninstall(e: ExtensionDto): void { this.run(() => this.ipc.invoke('ext:uninstall', e.id)); }
   protected pair(): void { this.run(async () => { await this.ipc.invoke('wa:pair', null, digits(this.phone())); this.phone.set(''); this.adding.set(false); }); }
   protected logout(account: string): void { this.run(() => this.ipc.invoke('wa:logout', account)); }
+  protected setOpen(account: string, on: boolean): void { this.run(() => this.ipc.invoke('wa:setOpen', account, on)); }
+  protected agentName(id: number | null): string { return id ? this.agents.byId().get(id)?.name ?? 'o agente' : 'a Central'; }
+  protected isRestricted(id: number | null): boolean { return !!id && !!this.agents.byId().get(id)?.restricted; }
   protected setAgent(account: string, id: string): void { this.run(() => this.ipc.invoke('wa:setAgent', account, Number(id) || null)); }
 
   private saveOwners(list: string[]): void {

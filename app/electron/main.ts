@@ -20,8 +20,8 @@ import { listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
-import { callExtension, installExtension, listExtensions, onExtensionsChange, startInstalled, uninstallExtension } from './extensions';
-import { inbound as waInbound, initWhatsApp, listContacts, pairAccount, setAccountAgent, setSender as waSetSender, waStatus } from './whatsapp';
+import { callExtension, installExtension, listExtensions, onExtensionsChange, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
+import { inbound as waInbound, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -272,6 +272,7 @@ function registerIpc(): void {
   handle('wa:pair', (account, phone) => pairAccount(account, phone));
   handle('wa:logout', async account => { await callExtension('whatsapp', 'logout', { account }); });
   handle('wa:setAgent', (account, agentId) => { setAccountAgent(account, agentId); send('ext:changed', null); });
+  handle('wa:setOpen', (account, on) => { setAccountOpen(account, on); send('ext:changed', null); });
   handle('wa:contacts', () => listContacts());
   // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp
   if (CAPTURE) ipcMain.handle('wa:test-inbound', async (_e, m: Record<string, unknown>) => {
@@ -369,7 +370,7 @@ app.whenReady().then(() => {
   setInterval(watchGithub, 15 * 60_000);
 });
 
-app.on('before-quit', () => markQuitting());
+app.on('before-quit', () => { markQuitting(); stopAllExtensions(); });
 
 // uma Central só: abrir de novo traz a janela que já está rodando (na bandeja, por exemplo)
 // (só no app de verdade: dev e testes com --data rodam ao lado da instalada)

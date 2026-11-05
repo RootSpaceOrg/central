@@ -820,6 +820,8 @@ export interface AgentDto {
   /** aparência do boneco 3D (JSON: hair, acc, skin, outfit); '' = padrão */
   look: string;
   priority: AgentPriority;
+  /** atuação restrita: para atender gente de fora (sem comandos nem arquivos) */
+  restricted: boolean;
   builtin: boolean;
   created_at: string;
   chats: number;
@@ -842,6 +844,7 @@ export interface NewAgentInput {
   look?: string;
   /** na fila e no freio da cota: high, normal, low */
   priority?: AgentPriority;
+  restricted?: boolean;
 }
 
 export type AgentPriority = 'high' | 'normal' | 'low';
@@ -857,6 +860,8 @@ export interface WaAccountDto {
   code: string | null;
   /** quem responde nesse número; null = a Central */
   agent_id: number | null;
+  /** responde qualquer pessoa que escrever (atendimento) */
+  open: boolean;
 }
 export interface WaStatusDto { installed: boolean; accounts: WaAccountDto[] }
 export interface WaContactDto { phone: string; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null; account: string | null }
@@ -1008,6 +1013,8 @@ export interface Api {
   'wa:logout': (account: string) => void;
   /** quem responde nesse número (null = a Central) */
   'wa:setAgent': (account: string, agentId: number | null) => void;
+  /** responder qualquer pessoa que escrever nesse número (atendimento) */
+  'wa:setOpen': (account: string, on: boolean) => void;
   'wa:contacts': () => WaContactDto[];
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];

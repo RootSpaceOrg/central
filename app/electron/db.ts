@@ -395,6 +395,7 @@ for (const [table, column, type] of [
   ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['runs', 'board_id', 'integer'], ['board_cols', 'color', 'text'], ['tasks', 'color', 'text'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['ideas', 'triaged_at', 'text'], ['ideas', 'triage', 'text'], ['wa_contacts', 'account', 'text'], ['wa_outbox', 'account', 'text'],
+  ['agents', 'restricted', 'integer not null default 0'], ['chats', 'contact', 'text'],
   ['agents', 'priority', "text not null default 'normal'"], ['runs', 'priority', 'integer not null default 1'],
   ['runs', 'paused', 'text'], ['runs', 'resume', 'text'], ['runs', 'checkpoint', 'text'],
   ['runs', 'parent_run_id', 'integer'], ['runs', 'depth', 'integer not null default 0'], ['runs', 'handoff_from', 'integer'],

@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 import type { ChatDto, ChatMessageDto, ChatOptions, ChatRole } from '../src/app/shared/contract';
-import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, sessionPromptFile } from './agentdefs';
+import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, restrictedTools, sessionPromptFile } from './agentdefs';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { reopenDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
@@ -92,7 +92,8 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
   // continuação de uma execução (pedir ajuste): edita no worktree dela como a execução editava
   const fromRun = !!chat?.cwd && !!get('select 1 from runs where worktree_path = ?', chat.cwd);
-  if (slug || fromRun) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SESSION_TOOLS, ...agentTools(agent)])].join(',')}"`);
+  if (agent.restricted) args.push('--allowedTools', `"${restrictedTools(agent).join(',')}"`);
+  else if (slug || fromRun) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SESSION_TOOLS, ...agentTools(agent)])].join(',')}"`);
   else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
   else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
   const model = chosen.model || agent.model;

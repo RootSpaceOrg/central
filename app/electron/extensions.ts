@@ -28,6 +28,8 @@ const procs = new Map<string, UtilityProcess>();
 const listeners = new Map<string, Set<Listener>>();
 const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 let seq = 0;
+/** a Central está fechando: extensão que sai não volta (senão o processo novo segura o app aberto) */
+let quitting = false;
 /** avisa a tela quando muda (instalou, ligou, caiu) */
 let onChange: () => void = () => {};
 export const onExtensionsChange = (fn: () => void) => { onChange = fn; };
@@ -95,7 +97,7 @@ export function startExtension(id: string): void {
     emit(id, 'status', { state: 'disconnected', me: null, code: null, stopped: true });
     onChange();
     // caiu sozinha: volta em 5 s (se continua ligada)
-    if (getSetting(`ext:${id}:enabled`) === '1') setTimeout(() => startExtension(id), 5000);
+    if (!quitting && getSetting(`ext:${id}:enabled`) === '1') setTimeout(() => { if (!quitting) startExtension(id); }, 5000);
   });
   onChange();
 }
@@ -104,6 +106,12 @@ export function stopExtension(id: string): void {
   const p = procs.get(id);
   procs.delete(id);
   p?.kill();
+}
+
+/** A Central vai fechar: para todas, sem religar. */
+export function stopAllExtensions(): void {
+  quitting = true;
+  for (const id of [...procs.keys()]) stopExtension(id);
 }
 
 /** Liga as instaladas quando a Central abre. */

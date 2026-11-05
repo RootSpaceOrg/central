@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { Emit, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
 import { agentSend, notifyOwners } from './whatsapp';
-import { createAgent, deleteAgent, listAgents, updateAgent } from './agentdefs';
+import { RESTRICTED_CENTRAL, createAgent, deleteAgent, getAgent, listAgents, updateAgent } from './agentdefs';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   getSetting, setSetting, updateIdea, updateTask,
@@ -76,8 +76,12 @@ function chainOf(runId: number): number[] {
 
 function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): McpServer {
   const s = new McpServer({ name: 'central', version: app.getVersion() }, { instructions: INSTRUCTIONS });
+  // agente de atuação restrita: o servidor só oferece o conjunto pequeno + as ferramentas da Central liberadas nas extras dele
+  const who = callerAgent(caller);
+  const restricted = who ? getAgent(who) : null;
+  const allowed = restricted?.restricted ? new Set([...RESTRICTED_CENTRAL, ...restricted.tools.split(',').map(t => t.trim().replace(/^mcp__central__/, ''))]) : null;
   const tool = <T extends z.ZodRawShape>(name: string, description: string, shape: T, fn: (a: z.infer<z.ZodObject<T>>) => unknown, after?: () => void) =>
-    s.registerTool(name, { description, inputSchema: shape }, (async (a: z.infer<z.ZodObject<T>>) => {
+    allowed && !allowed.has(name) ? undefined : s.registerTool(name, { description, inputSchema: shape }, (async (a: z.infer<z.ZodObject<T>>) => {
       try { const r = await fn(a); after?.(); return ok(r); } catch (e) { return fail(e); }
     }) as never);
 
@@ -246,6 +250,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     room: z.enum(['', 'gestao', 'eng', 'monitor', 'creative', 'business']).optional()
       .describe('sala no Escritório: gestao, eng (engenharia), monitor, creative, business; vazio = deduz pelo papel'),
     priority: z.enum(['high', 'normal', 'low']).optional().describe('na fila e no freio da cota: high passa à frente e segue até 90% da sessão; low para em 60%'),
+    restricted: z.boolean().optional().describe('atuação restrita: para atender gente de fora; sem comandos nem arquivos, só memória, chamar_gustavo e as ferramentas extras liberadas'),
   };
   tool('list_agents', 'Agentes definidos (papel, projeto, ferramentas extras, quantas conversas, rotinas e execuções).', {}, () =>
     listAgents().map(a => ({ id: a.id, name: a.name, description: a.description, project: a.project_slug, priority: a.priority, tools: a.tools, permission: a.permission, model: a.model, builtin: a.builtin, chats: a.chats, routines: a.routines, runs: a.runs, instructions: a.instructions.slice(0, 400) })));
@@ -294,6 +299,17 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
   }, async a => {
     const me = callerAgent(caller);
     return agentSend(a.to, a.text, { name: me ? listAgents().find(x => x.id === me)?.name ?? 'Um agente' : 'A Central', agentId: me }, a.from_number);
+  }, h.backlog);
+  tool('chamar_gustavo', 'Chama o Gustavo (ou a equipe) para um caso que você não deve resolver sozinho: exceção, reembolso, algo técnico, pessoa irritada, ou o que não souber. Vira uma decisão na Triagem e um aviso no WhatsApp dele.', {
+    resumo: z.string().max(1500).describe('o caso em poucas linhas: quem é, o que quer, o que você já disse'),
+    sugestao: z.string().max(500).optional().describe('o que você acha que deveria ser feito'),
+  }, a => {
+    const chat = caller?.kind === 'chat' ? get<{ title: string; contact: string | null }>('select title, contact from chats where id = ?', caller.id) : null;
+    const me = who ? listAgents().find(x => x.id === who)?.name ?? 'Um agente' : 'Um agente';
+    const p = createProposal({ project_slug: restricted?.project_slug ?? null, title: `${me} precisa de você${chat?.contact ? ` (+${chat.contact})` : ''}`,
+      body: `${a.resumo}${chat ? `\n\nConversa: ${chat.title}` : ''}`, next_action: a.sugestao ?? null, tier: 1, source: 'atendimento' });
+    notifyOwners(`🙋 ${me} precisa de você${chat?.contact ? ` (cliente +${chat.contact})` : ''}:\n${a.resumo}`);
+    return `Pronto: o Gustavo foi avisado (decisão #${p.id}). Diga à pessoa que alguém da equipe vai responder.`;
   }, h.backlog);
   tool('take_over', 'Passa uma execução parada (pausada pela cota, que falhou ou foi interrompida) para outro agente continuar na mesma branch, com o registro do que já foi feito. Sem agent_id, o mesmo agente recomeça com o registro.', {
     run_id: z.number().int(), agent_id: z.number().int().optional(), note: z.string().optional().describe('o que quem assume precisa saber'),

@@ -75,6 +75,16 @@
               </div>
             </div>
 
+            @if (!builtin()) {
+              <label class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4" [class]="restricted() ? 'border-later/50 bg-later/5' : 'border-edge'">
+                <input type="checkbox" class="mt-1 accent-later" [checked]="restricted()" (change)="restricted.set($any($event.target).checked)">
+                <span><span class="block font-semibold">Atuação restrita (atendimento)</span>
+                  <span class="mt-0.5 block text-[13px] leading-relaxed text-mute">Para falar com pessoas de fora, como clientes no WhatsApp. Ele não roda comandos, não lê nem edita arquivos e não mexe na Central:
+                    só usa a memória dele e chama você quando precisar. O que mais ele puder usar, libere em Ferramentas extras (ex.: <code class="font-mono text-[12px]">mcp__central__list_tasks</code>, <code class="font-mono text-[12px]">mcp__stripe__…</code>).
+                    O que ele pode responder vai nas instruções e nas memórias dele.</span></span>
+              </label>
+            }
+
             <div>
               <span class="mb-1.5 block font-semibold">Prioridade</span>
               <div class="flex max-w-md gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Prioridade">

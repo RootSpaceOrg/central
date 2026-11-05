@@ -36,10 +36,26 @@ export function setAccountAgent(account: string, agentId: number | null): void {
   setSetting('wa:agents', JSON.stringify(m));
 }
 const agentFor = (account: string) => agentsOf()[account] ?? deps.centralId();
+/** números em que quem escrever conversa com o agente (atendimento) */
+const openOf = (): Record<string, boolean> => { try { return JSON.parse(getSetting('wa:open') ?? '{}'); } catch { return {}; } };
+export function setAccountOpen(account: string, on: boolean): void {
+  const m = openOf();
+  if (on) m[account] = true; else delete m[account];
+  setSetting('wa:open', JSON.stringify(m));
+}
+/** atendimento: no máximo N mensagens por pessoa por hora acionam o agente (o resto fica registrado) */
+const PER_HOUR = 20;
+const hits = new Map<string, number[]>();
+function allowHit(phone: string): boolean {
+  const now_ = Date.now(), list = (hits.get(phone) ?? []).filter(t => now_ - t < 3_600_000);
+  if (list.length >= PER_HOUR) { hits.set(phone, list); return false; }
+  hits.set(phone, [...list, now_]);
+  return true;
+}
 
 export const waStatus = () => ({
   installed: running(EXT) || getSetting(`ext:${EXT}:enabled`) === '1',
-  accounts: [...accounts.values()].map(a => ({ ...a, agent_id: agentsOf()[a.account] ?? null })),
+  accounts: [...accounts.values()].map(a => ({ ...a, agent_id: agentsOf()[a.account] ?? null, open: !!openOf()[a.account] })),
 });
 const opened = () => [...accounts.values()].filter(a => a.state === 'open');
 
@@ -94,12 +110,19 @@ export function inbound(m: WaMessage): void {
   // da casa: os donos cadastrados e os números conectados na própria Central (falar de um para o outro funciona)
   const house = [...owners(), ...opened().map(a => a.me?.phone).filter((p): p is string => !!p)];
   const owner = m.self || (!!m.phone && house.includes(m.phone));
-  if (!owner) { if (m.phone) touch(m.phone, m, 'in'); deps.changed(); return; }
-  talk(m.account ?? 'main', m.self ? 'self' : m.phone!, m.chat, m.text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`);
+  const account = m.account ?? 'main';
+  if (!owner) {
+    if (m.phone) touch(m.phone, m, 'in');
+    deps.changed();
+    // número com "responder qualquer pessoa": quem escreveu conversa com o agente do número (com limite por pessoa)
+    if (openOf()[account] && m.phone && allowHit(m.phone)) talk(account, m.phone, m.chat, m.text, m.name ?? `+${m.phone}`, true);
+    return;
+  }
+  talk(account, m.self ? 'self' : m.phone!, m.chat, m.text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`);
 }
 
 /** Dono escreveu: segue a conversa dele com o agente do número; o que chega enquanto ele responde vai junto depois. */
-function talk(account: string, who: string, chat: string, text: string, name: string): void {
+function talk(account: string, who: string, chat: string, text: string, name: string, outside = false): void {
   const agentId = agentFor(account);
   const key = `${account}:${agentId}:${who}`;
   // conversa de antes dos vários números (v0.28): a "você mesmo" com a Central continua a mesma
@@ -118,14 +141,15 @@ function talk(account: string, who: string, chat: string, text: string, name: st
       sendOut(account, chat, toWhatsApp(last ?? 'Terminei, mas não tenho nada para dizer aqui. Veja a conversa na Central.')).catch(() => {});
       const queued = waiting.get(key) ?? [];
       waiting.delete(key);
-      if (queued.length) talk(account, who, chat, queued.join('\n\n'), name);
+      if (queued.length) talk(account, who, chat, queued.join('\n\n'), name, outside);
     }
   };
   try {
-    const id = sendChat(chatId, agentId, chatId ? text : `${intro(name)}\n\n${text}`, notify, deps.changed);
+    const first = outside ? `(Mensagem de ${name} (+${who}), uma pessoa de fora, pelo WhatsApp. Responda como no WhatsApp: curto e educado.)` : intro(name);
+    const id = sendChat(chatId, agentId, chatId ? text : `${first}\n\n${text}`, notify, deps.changed);
     if (!chatId) {
       const phone = accounts.get(account)?.me?.phone;
-      run('update chats set title = ? where id = ?', `WhatsApp${phone ? ` +${phone}` : ''} · ${who === 'self' ? 'você' : name}`, id);
+      run('update chats set title = ?, contact = ? where id = ?', `WhatsApp${phone ? ` +${phone}` : ''} · ${who === 'self' ? 'você' : name}`, who === 'self' ? null : who, id);
       setSetting(`wa:chat:${key}`, String(id));
     }
   } catch (e) {
