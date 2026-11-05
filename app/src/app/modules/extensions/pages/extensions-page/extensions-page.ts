@@ -152,7 +152,8 @@ export function formatPhone(n: string): string {
                               [title]="copied() === c.phone ? 'Copiado' : 'Copiar número'" [attr.aria-label]="'Copiar ' + fmt(c.phone)">
                         <app-icon [name]="copied() === c.phone ? 'check' : 'copy'" [size]="14" [class.text-yes]="copied() === c.phone" /></button>
                       @if (owners().includes(c.phone)) {
-                        <span class="shrink-0 text-[12px] text-frost" title="Já pode conversar com os agentes">na lista</span>
+                        <button type="button" class="btn btn-sm btn-ghost shrink-0 !text-no" (click)="removeOwner(c.phone)" title="Tira da lista de quem pode conversar com os agentes">
+                          <app-icon name="close" [size]="13" />Remover</button>
                       } @else {
                         <button type="button" class="btn btn-sm shrink-0" (click)="addOwnerNumber(c.phone)" title="Pode conversar com os agentes (como você)">
                           <app-icon name="plus" [size]="13" />Adicionar</button>
