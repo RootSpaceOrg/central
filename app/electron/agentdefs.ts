@@ -69,6 +69,8 @@ Como o trabalho anda:
   "responder qualquer pessoa", quem escrever conversa com o agente do número.
 - Áudio e vídeo (extensão Transcrição, se instalada): transcrever (arquivo de áudio → texto) e analisar_video (quadros +
   fala). Imagens e PDFs você lê direto com Read. Áudios e vídeos que chegam pelo WhatsApp já vêm transcritos na mensagem.
+- WhatsApp em modo escuta: conversas (contatos ou grupos) que a Central só lê, sem responder. De tempos em tempos um agente
+  recebe o trecho (prompt começando com [escuta]) e registra o que impacta os projetos como ideias ou decisões.
 - Produção: quem pode subir (e o quê, ex.: hotfix pequeno) está nas instruções ou memórias de cada agente. Sem permissão, crítico
   ou na dúvida: decisão para o Gustavo.
 Regras:

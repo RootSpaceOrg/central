@@ -23,7 +23,7 @@ import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
 import { getUsage, usageNow } from './usage';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
 import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
-import { inbound as waInbound, testPresence as waPresence, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
+import { inbound as waInbound, testPresence as waPresence, initWhatsApp, digestListened, listContacts, listGroups, listenStatus, pairAccount, setAccountAgent, setAccountOpen, setListened, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -215,7 +215,8 @@ function registerIpc(): void {
 
   const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean) => send('chat:event', { chat_id, message, busy });
   // WhatsApp (extensão): os donos conversam com a Central por lá; a resposta aparece aqui também
-  initWhatsApp({ notify: chatNotify, changed: () => { changed(); backlogChanged(); }, onStatus: () => send('ext:changed', null), centralId: () => get<{ id: number }>('select id from agents where builtin = 1')!.id });
+  initWhatsApp({ notify: chatNotify, changed: () => { changed(); backlogChanged(); }, onStatus: () => send('ext:changed', null), centralId: () => get<{ id: number }>('select id from agents where builtin = 1')!.id,
+    startListen: input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.small, proposal_id: null }, emitRun).id });
   handle('agents:list', () => listAgents());
   handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });
   handle('agents:update', (id, patch) => { updateAgent(id, patch); agentsChanged(); });
@@ -297,6 +298,11 @@ function registerIpc(): void {
   handle('wa:setAgent', (account, agentId) => { setAccountAgent(account, agentId); send('ext:changed', null); });
   handle('wa:setOpen', (account, on) => { setAccountOpen(account, on); send('ext:changed', null); });
   handle('wa:contacts', () => listContacts());
+  handle('wa:groups', account => listGroups(account));
+  handle('wa:listen', () => listenStatus());
+  handle('wa:setListen', list => { setListened(list); send('ext:changed', null); });
+  // ler agora o que acumulou numa conversa escutada (sem esperar o intervalo)
+  handle('wa:digestNow', (account, chat) => { const l = listenStatus().find(x => x.account === account && x.chat === chat); return l ? digestListened(l) : null; });
   handle('stt:status', () => sttStatus());
   handle('stt:config', patch => { setSttConfig(patch); });
   handle('stt:prepare', async () => { await prepareLocal(); });

@@ -30,6 +30,14 @@ if (existsSync(join(dataDir, 'auth'))) {
  * laço respondendo a si mesmo) e fila de envio (uma mensagem a cada ~1,2 s, com "digitando" antes: menos cara de robô).
  */
 const accounts = new Map();
+/** grupos que a Central escuta (modo escuta): só esses são lidos; os outros grupos ficam de fora (nem a mídia é baixada) */
+let listened = new Set();
+/** nome dos grupos (cache) */
+const groupNames = new Map();
+async function groupName(s, jid) {
+  if (!groupNames.has(jid)) groupNames.set(jid, (await s.groupMetadata(jid).catch(() => null))?.subject ?? null);
+  return groupNames.get(jid);
+}
 /**
  * Tudo que a Central mandou, por qualquer número (id → quando). Mensagem com um desses ids nunca vira entrada: nem o eco
  * no próprio número, nem a chegada em outro número conectado (senão dois agentes ficariam respondendo um ao outro).
@@ -84,9 +92,11 @@ async function connect(a) {
     if (type !== 'notify') return;
     for (const m of messages) {
       const jid = m.key.remoteJid ?? '';
-      if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue; // grupos e status ficam de fora
+      if (!jid || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue; // status e canais ficam de fora
+      const group = jid.endsWith('@g.us');
+      if (group && !listened.has(jid)) continue; // grupo que a Central não escuta
       if (sentIds.has(m.key.id)) continue;
-      if (!m.key.fromMe) {
+      if (!m.key.fromMe && !group) {
         if (!a.subscribed) a.subscribed = new Set();
         if (!a.subscribed.has(jid)) { a.subscribed.add(jid); s.presenceSubscribe(jid).catch(() => {}); }
       }
@@ -94,10 +104,13 @@ async function connect(a) {
       const media = await saveMedia(a, s, m, c).catch(e => { log(`mídia: ${e.message}`); return null; });
       const text = c.conversation ?? c.extendedTextMessage?.text ?? c.imageMessage?.caption ?? c.videoMessage?.caption ?? c.documentMessage?.caption ?? '';
       if (!text.trim() && !media) continue;
-      const pn = jid.endsWith('@s.whatsapp.net') ? jid : m.key.remoteJidAlt ?? m.key.senderPn ?? null;
+      // em grupo, quem falou é o participante; fora dele, o próprio chat
+      const who = group ? m.key.participant ?? '' : jid;
+      const pn = who.endsWith('@s.whatsapp.net') ? who : (group ? m.key.participantAlt : m.key.remoteJidAlt) ?? m.key.senderPn ?? null;
       const me = a.state.me;
-      const self = !!me && (jidNormalizedUser(jid) === me.id || (me.lid && jidNormalizedUser(jid) === me.lid));
-      emit('message', { account: a.id, id: m.key.id, chat: jid, phone: pn ? digits(pn.split('@')[0]) : null, name: m.pushName ?? null, fromMe: !!m.key.fromMe, self, text: text.trim(), media, at: Number(m.messageTimestamp ?? 0) * 1000 || Date.now() });
+      const self = !group && !!me && (jidNormalizedUser(jid) === me.id || (me.lid && jidNormalizedUser(jid) === me.lid));
+      emit('message', { account: a.id, id: m.key.id, chat: jid, phone: pn ? digits(pn.split('@')[0]) : null, name: m.pushName ?? null, fromMe: !!m.key.fromMe, self,
+        group, groupName: group ? await groupName(s, jid) : null, text: text.trim(), media, at: Number(m.messageTimestamp ?? 0) * 1000 || Date.now() });
     }
   });
 }
@@ -140,6 +153,14 @@ const open = account => {
 
 const calls = {
   status: async () => [...accounts.values()].map(a => ({ account: a.id, ...a.state })),
+  /** grupos de que o número participa (para escolher quais escutar) */
+  async groups({ account }) {
+    const a = open(account);
+    const all = await a.sock.groupFetchAllParticipating();
+    return Object.values(all).map(g => { groupNames.set(g.id, g.subject); return { id: g.id, name: g.subject, size: g.participants?.length ?? 0 }; }).sort((x, y) => x.name.localeCompare(y.name));
+  },
+  /** quais grupos a Central escuta */
+  async listen({ chats }) { listened = new Set((chats ?? []).filter(c => String(c).endsWith('@g.us'))); return { ok: true }; },
   async pair({ account, phone }) {
     const n = digits(phone);
     if (n.length < 10) throw new Error('Digite o número com DDI e DDD (ex.: 55 11 99999-8888).');

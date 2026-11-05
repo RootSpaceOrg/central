@@ -373,6 +373,15 @@ db.exec(`
     created_at  text not null default (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     sent_at     text
   );
+  create table if not exists wa_feed (
+    id           integer primary key autoincrement,
+    account      text not null,
+    chat         text not null,
+    sender       text,
+    text         text not null,
+    at           text not null,
+    run_id       integer
+  );
   create table if not exists settings (
     key   text primary key,
     value text not null

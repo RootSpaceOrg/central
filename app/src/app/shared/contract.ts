@@ -882,7 +882,8 @@ export interface SttStatusDto {
   hasKey: boolean;
   ext: { whisper: boolean; ffmpeg: boolean; models: { small: boolean; base: boolean }; progress: { name: string; done: number; total: number } | null; error: string | null } | null;
 }
-export interface WaContactDto { phone: string; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null; account: string | null }
+export interface WaListenDto { account: string; chat: string; name: string; group: boolean; agent_id: number | null; pending: number; last_run: { id: number | null; at: string | null } | null }
+export interface WaContactDto { phone: string; chat?: string | null; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null; account: string | null }
 
 export interface UpdateInfoDto {
   current: string;
@@ -1044,6 +1045,12 @@ export interface Api {
   /** responder qualquer pessoa que escrever nesse número (atendimento) */
   'wa:setOpen': (account: string, on: boolean) => void;
   'wa:contacts': () => WaContactDto[];
+  /** grupos de que o número participa */
+  'wa:groups': (account: string) => { id: string; name: string; size: number }[];
+  /** conversas em modo escuta (sem responder; um agente lê e registra ideias/decisões) */
+  'wa:listen': () => WaListenDto[];
+  'wa:setListen': (list: { account: string; chat: string; name: string; group: boolean; agent_id: number | null }[]) => void;
+  'wa:digestNow': (account: string, chat: string) => number | null;
   /** extensão Transcrição: motor, modelo, chave e o que já está baixado */
   'stt:status': () => SttStatusDto;
   'stt:config': (patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }) => void;

@@ -45,7 +45,7 @@ export async function closeDelivery(runId: number): Promise<void> {
     project_slug: string | null; agent_id: number | null; task_id: number | null }>(
     'select prompt, status, result, pr_url, worktree_path, base_branch, project_slug, agent_id, task_id from runs where id = ?', runId);
   if (!r || r.status === 'killed') return;
-  if (r.prompt.startsWith('[responsável:escolher]')) return; // só escolheu a próxima tarefa: não é entrega
+  if (r.prompt.startsWith('[responsável:escolher]') || r.prompt.startsWith('[escuta]')) return; // escolha da próxima tarefa ou leitura de conversa: não é entrega
   if (!get('select 1 from deliveries where run_id = ?', runId)) {
     const title = r.prompt.includes('[gestor:planejar]') ? 'Gestor organizou o backlog' : r.prompt.split('\n')[0].slice(0, 160);
     run(`insert into deliveries (run_id, project_slug, agent_id, task_id, title, what, explained, status) values (?,?,?,?,?,?,0,'pending')`,

@@ -1,7 +1,7 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 
-import { ExtensionDto, SttStatusDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
+import { ExtensionDto, SttStatusDto, WaContactDto, WaListenDto, WaStatusDto } from '../../../../shared/contract';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
@@ -126,6 +126,42 @@ export function formatPhone(n: string): string {
                   <input class="field !w-48 !py-1 font-mono text-[13px]" inputmode="tel" placeholder="+ número" aria-label="Adicionar número" [value]="ownerInput()" (input)="ownerInput.set($any($event.target).value)">
                   <button class="btn btn-sm" [disabled]="digits(ownerInput()).length < 12">Adicionar</button>
                 </form>
+              </div>
+
+              <h3 class="mt-7 font-semibold">Escutar conversas (sem responder)</h3>
+              <p class="mt-0.5 text-[13px] text-mute">Contatos ou grupos que a Central só lê. A cada trecho de conversa, o agente escolhido vê se algo impacta os projetos e registra ideias ou decisões (sem duplicar o que já existe). Ninguém recebe resposta.</p>
+              <div class="mt-3 space-y-2">
+                @for (l of listen(); track l.account + l.chat) {
+                  <div class="flex flex-wrap items-center gap-3 rounded-xl border border-edge bg-night/60 px-3 py-2.5">
+                    <span class="rounded-full px-2 py-0.5 text-[11.5px] font-semibold" [class]="l.group ? 'bg-frost/15 text-frost' : 'bg-raise text-mute'">{{ l.group ? 'grupo' : 'contato' }}</span>
+                    <span class="min-w-0 flex-1 truncate">{{ l.name }}
+                      <span class="text-[12px] text-faint"> · {{ l.pending ? l.pending + (l.pending === 1 ? ' mensagem esperando leitura' : ' mensagens esperando leitura') : 'nada novo' }}</span></span>
+                    <span class="text-[12.5px] text-mute">Quem lê</span>
+                    <app-agent-select class="w-52" [compact]="true" [value]="l.agent_id ? '' + l.agent_id : ''" (valueChange)="setListenAgent(l, $event)" noneLabel="A Central" />
+                    <button type="button" class="btn btn-sm" [disabled]="!l.pending" (click)="digestNow(l)" title="Ler agora o que acumulou, sem esperar o intervalo">Ler agora</button>
+                    <button type="button" class="grid size-7 place-items-center rounded-lg text-faint hover:bg-raise hover:text-no" (click)="unlisten(l)" [attr.aria-label]="'Parar de escutar ' + l.name"><app-icon name="close" [size]="14" /></button>
+                  </div>
+                } @empty {
+                  <p class="text-[13px] text-faint">Nenhuma conversa escutada.</p>
+                }
+              </div>
+              <div class="mt-3 flex flex-wrap items-center gap-2">
+                <select class="field !w-80 !py-1.5 text-[13px]" aria-label="Conversa para escutar" (focus)="loadGroups()" (change)="pickListen($any($event.target).value); $any($event.target).value = ''">
+                  <option value="">+ Escutar um grupo ou contato…</option>
+                  @if (groups().length) {
+                    <optgroup label="Grupos">
+                      @for (g of groups(); track g.account + g.id) { <option [value]="'g|' + g.account + '|' + g.id + '|' + g.name">{{ g.name }} ({{ g.size }})</option> }
+                    </optgroup>
+                  }
+                  @if (contactChats().length) {
+                    <optgroup label="Contatos recentes">
+                      @for (c of contactChats(); track c.phone) { <option [value]="'c|' + (c.account ?? 'main') + '|' + (c.chat ?? c.phone + '@s.whatsapp.net') + '|' + (c.name ?? fmt(c.phone))">{{ c.name ?? fmt(c.phone) }}</option> }
+                    </optgroup>
+                  }
+                </select>
+                <span class="flex items-center gap-2 text-[13px]">Ler depois de
+                  <input type="number" min="1" max="240" class="field !w-16 !py-1 text-center" aria-label="Minutos de conversa antes de ler" [value]="listenDelay()" (change)="setListenDelay($any($event.target).value)">
+                  minutos de conversa</span>
               </div>
 
               <h3 class="mt-7 font-semibold">Como os agentes respondem</h3>
@@ -283,6 +319,11 @@ export class ExtensionsPage {
   protected readonly any = signal(false);
   protected readonly notifyOn = signal(true);
   protected readonly wait = signal(8);
+  protected readonly listen = signal<WaListenDto[]>([]);
+  protected readonly groups = signal<{ account: string; id: string; name: string; size: number }[]>([]);
+  protected readonly listenDelay = signal(10);
+  /** contatos recentes que ainda não são escutados */
+  protected readonly contactChats = computed(() => this.contacts().filter(c => !this.listen().some(l => l.chat === (c.chat ?? `${c.phone}@s.whatsapp.net`))));
   protected readonly waitMax = signal(60);
   protected readonly split = signal(true);
   protected readonly phone = signal('');
@@ -301,6 +342,7 @@ export class ExtensionsPage {
     this.settings.get('wa:owners').then(v => this.owners.set(v ? JSON.parse(v) : []));
     this.settings.get('wa:any').then(v => this.any.set(v === '1'));
     this.settings.get('wa:notify').then(v => this.notifyOn.set(v !== '0'));
+    this.settings.get('wa:listenDelay').then(v => this.listenDelay.set(v === null ? 10 : Number(v) || 10));
     this.settings.get('wa:wait').then(v => this.wait.set(v === null ? 8 : Number(v) || 0));
     this.settings.get('wa:waitMax').then(v => this.waitMax.set(v === null ? 60 : Number(v) || 0));
     this.settings.get('wa:split').then(v => this.split.set(v !== '0'));
@@ -312,6 +354,7 @@ export class ExtensionsPage {
     if (this.waInstalled()) {
       this.wa.set(await this.ipc.invoke('wa:status'));
       this.contacts.set(await this.ipc.invoke('wa:contacts'));
+      this.listen.set(await this.ipc.invoke('wa:listen'));
     }
   }
 
@@ -336,6 +379,25 @@ export class ExtensionsPage {
     this.preparing.set(true);
     this.ipc.invoke('stt:prepare').catch(e => this.error.set(errorMessage(e))).finally(() => { this.preparing.set(false); this.load(); });
   }
+  /** grupos de cada número conectado (carrega ao abrir a lista) */
+  protected async loadGroups(): Promise<void> {
+    const open = (this.wa()?.accounts ?? []).filter(a => a.state === 'open');
+    const all = await Promise.all(open.map(a => this.ipc.invoke('wa:groups', a.account).then(gs => gs.map(g => ({ ...g, account: a.account })), () => [])));
+    this.groups.set(all.flat().filter(g => !this.listen().some(l => l.chat === g.id)));
+  }
+  private saveListen(list: WaListenDto[]): void {
+    this.run(() => this.ipc.invoke('wa:setListen', list.map(l => ({ account: l.account, chat: l.chat, name: l.name, group: l.group, agent_id: l.agent_id }))));
+  }
+  protected pickListen(v: string): void {
+    if (!v) return;
+    const [kind, account, chat, ...name] = v.split('|');
+    this.saveListen([...this.listen(), { account, chat, name: name.join('|'), group: kind === 'g', agent_id: null, pending: 0, last_run: null }]);
+    this.groups.update(g => g.filter(x => x.id !== chat));
+  }
+  protected unlisten(l: WaListenDto): void { this.saveListen(this.listen().filter(x => !(x.account === l.account && x.chat === l.chat))); }
+  protected setListenAgent(l: WaListenDto, id: string): void { this.saveListen(this.listen().map(x => (x === l ? { ...x, agent_id: Number(id) || null } : x))); }
+  protected digestNow(l: WaListenDto): void { this.run(() => this.ipc.invoke('wa:digestNow', l.account, l.chat)); }
+  protected setListenDelay(v: string): void { const n = Math.max(1, Math.min(240, Math.round(Number(v) || 10))); this.listenDelay.set(n); this.settings.set('wa:listenDelay', String(n)); }
   protected setOpen(account: string, on: boolean): void { this.run(() => this.ipc.invoke('wa:setOpen', account, on)); }
   protected agentName(id: number | null): string { return id ? this.agents.byId().get(id)?.name ?? 'o agente' : 'a Central'; }
   protected isRestricted(id: number | null): boolean { return !!id && !!this.agents.byId().get(id)?.restricted; }
