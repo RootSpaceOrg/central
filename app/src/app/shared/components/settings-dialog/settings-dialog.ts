@@ -6,6 +6,7 @@ import { errorMessage } from '../../services/ipc/ipc.service';
 import { PrefsApiService } from '../../services/prefs/prefs-api.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { UpdateService } from '../../services/update/update.service';
+import { UsageService } from '../../services/usage/usage.service';
 import { Icon } from '../../ui/icon';
 import { CHAT_WIDTHS, ChatPrefsService, FONT_MAX, FONT_MIN } from '../../services/chat-prefs/chat-prefs.service';
 
@@ -68,6 +69,32 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
           <p class="leading-relaxed">Assim fica uma resposta: <b>texto</b>, listas e <code class="rounded bg-raise px-1 font-mono text-[0.86em] text-frost">código</code> acompanham o tamanho.</p>
         </div>
       </section>
+      <section class="mx-8 mb-6 rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-gov">
+        <div class="flex items-baseline justify-between">
+          <h3 id="st-gov" class="font-semibold">Freio da cota do Claude</h3>
+          <button type="button" class="text-[12px] text-faint hover:text-text" (click)="resetLimits()">Padrão</button>
+        </div>
+        <p class="text-[13px] text-mute">Até quanto da cota cada prioridade de agente ainda <b class="text-text">começa</b> trabalho novo. A prioridade é de cada agente (aba Trabalho).</p>
+        @let l = usage.limits();
+        <table class="mt-3 w-full text-[13px]">
+          <thead><tr class="text-left text-faint"><th class="font-normal">Prioridade</th><th class="w-28 font-normal">Sessão</th><th class="w-28 font-normal">Semana</th></tr></thead>
+          <tbody>
+            @for (p of prios; track p.i) {
+              <tr>
+                <td class="py-1">{{ p.label }}</td>
+                <td class="py-1"><label class="flex items-center gap-1"><input type="number" min="0" max="100" class="field !w-16 !py-1 text-center" [value]="l.session[p.i]" (change)="setLimit('session', p.i, $any($event.target).value)" [attr.aria-label]="p.label + ': sessão'">%</label></td>
+                <td class="py-1"><label class="flex items-center gap-1"><input type="number" min="0" max="100" class="field !w-16 !py-1 text-center" [value]="l.week[p.i]" (change)="setLimit('week', p.i, $any($event.target).value)" [attr.aria-label]="p.label + ': semana'">%</label></td>
+              </tr>
+            }
+            <tr class="border-t border-edge">
+              <td class="pt-2">Pausar quem está rodando</td>
+              <td class="pt-2"><label class="flex items-center gap-1"><input type="number" min="0" max="100" class="field !w-16 !py-1 text-center" [value]="l.pause.session" (change)="setPause('session', $any($event.target).value)" aria-label="Pausar: sessão">%</label></td>
+              <td class="pt-2"><label class="flex items-center gap-1"><input type="number" min="0" max="100" class="field !w-16 !py-1 text-center" [value]="l.pause.week" (change)="setPause('week', $any($event.target).value)" aria-label="Pausar: semana">%</label></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="mt-2 text-[12px] text-faint">Pausadas voltam sozinhas, na mesma sessão, quando a cota renova. A cota conta também o que você usa fora da Central: deixe folga.</p>
+      </section>
       <footer class="flex items-center gap-2 border-t border-edge px-8 py-4">
         <span class="font-mono text-[11.5px] text-faint">Projetos em {{ projects.devRoot() }}</span>
         <span class="flex-1"></span>
@@ -83,6 +110,21 @@ export class SettingsDialog {
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
   protected readonly options = OPTIONS;
+  protected readonly usage = inject(UsageService);
+  protected readonly prios = [{ i: 0, label: 'Alta' }, { i: 1, label: 'Normal' }, { i: 2, label: 'Baixa' }];
+  protected setLimit(kind: 'session' | 'week', i: number, v: string): void {
+    const l = structuredClone(this.usage.limits());
+    l[kind][i] = Number(v);
+    this.usage.saveLimits(l).catch(e => this.error.set(errorMessage(e)));
+  }
+  protected setPause(kind: 'session' | 'week', v: string): void {
+    const l = structuredClone(this.usage.limits());
+    l.pause[kind] = Number(v);
+    this.usage.saveLimits(l).catch(e => this.error.set(errorMessage(e)));
+  }
+  protected resetLimits(): void {
+    this.usage.saveLimits({ session: [90, 80, 60], week: [95, 90, 80], pause: { session: 95, week: 98 } }).catch(e => this.error.set(errorMessage(e)));
+  }
   protected readonly chat = inject(ChatPrefsService);
   protected readonly widths = CHAT_WIDTHS;
   protected readonly fontMin = FONT_MIN;

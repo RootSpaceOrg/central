@@ -55,7 +55,8 @@ Como o trabalho anda:
   na fila de revisão do Gustavo; "o que aconteceu desde X" é what_happened.
 - Agente que precisa de algo que só o Gustavo resolve (sessão AWS, login) para e espera; ele retoma pelo Início.
 - Cota do plano: cada agente tem prioridade (alta, normal, baixa; update_agent priority). A fila de todos os projetos anda por ela
-  e o freio fecha por faixa da sessão: baixa para em 60%, normal em 80%, alta em 90%; a semana também freia. Perto de 95% a Central
+  e o freio fecha por faixa da sessão (padrão: baixa para em 60%, normal em 80%, alta em 90%; a semana também freia; o
+  Gustavo ajusta em Preferências). Perto do teto (padrão 95%) a Central
   pausa quem está rodando e retoma sozinha, na mesma sessão do Claude, quando a cota renovar (list_agent_runs mostra as pausadas).
 - Agente avisando agente: notify_agent (ex.: suporte recebe bug urgente → monitoração → tech lead). Vai um resumo, não o texto de
   fora; no máximo 3 saltos e sem repetir agente. take_over passa uma execução parada para outro agente continuar na mesma branch;

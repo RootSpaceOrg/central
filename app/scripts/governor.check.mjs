@@ -43,6 +43,13 @@ ok(g.nextToResume([p(1, 1, '2026-11-04T13:00:00Z')], u(10), now) === null, 'ante
 ok(g.nextToResume([p(1, 1, '2026-11-04T11:00:00Z'), p(2, 0, '2026-11-04T11:00:00Z')], u(10), now) === 2, 'renovou: volta uma, a mais prioritária');
 ok(g.nextToResume([p(1, 2, null)], u(70), now) === null, 'sem previsão: volta quando o freio deixar');
 
+// faixas configuráveis
+g.setLimits({ session: [95, 50, 30], week: [99, 99, 99], pause: { session: 97, week: 99 } });
+ok(g.canStart(1, u(49)) && !g.canStart(1, u(50)) && g.canStart(0, u(94)), 'faixas novas valem');
+ok(g.mustPause(u(96)) === null && g.mustPause(u(97)) !== null, 'pausa no novo teto');
+ok(JSON.stringify(g.parseLimits({ session: [150, 'x', -5] }).session) === JSON.stringify([100, 80, 0]), 'valores conferidos (0 a 100, inválido volta ao padrão)');
+g.setLimits(g.DEFAULT_LIMITS);
+
 // cadeia
 ok(g.chainProblem([5, 6], 7) === null, 'cadeia curta passa');
 ok(g.chainProblem([5, 6], 5)?.includes('laço'), 'repetir agente é laço');

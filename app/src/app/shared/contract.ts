@@ -870,6 +870,9 @@ export interface WaAccountDto {
   open: boolean;
 }
 export interface WaStatusDto { installed: boolean; accounts: WaAccountDto[] }
+/** até quanto da sessão / da semana cada prioridade começa algo novo (alta, normal, baixa) e quando pausa quem roda */
+export interface GovLimits { session: [number, number, number]; week: [number, number, number]; pause: { session: number; week: number } }
+
 export interface SttStatusDto {
   installed: boolean;
   running: boolean;
@@ -1021,6 +1024,9 @@ export interface Api {
   'turns:stop': (id: number) => void;
   'settings:get': (key: string) => string | null;
   'app:copy': (text: string) => void;
+  /** freio da cota: faixas (Preferências) e o que segura agora */
+  'gov:get': () => { limits: GovLimits; brake: string | null };
+  'gov:set': (l: GovLimits) => GovLimits;
   'ext:list': () => ExtensionDto[];
   'ext:install': (id: string) => void;
   'ext:uninstall': (id: string) => void;
@@ -1072,6 +1078,8 @@ export interface Api {
 
 /** eventos main → interface */
 export interface Events {
+  /** as faixas do freio mudaram */
+  'gov:changed': null;
   /** extensão instalada, ligada ou com status novo (WhatsApp conectou, código de pareamento) */
   'ext:changed': null;
   'pty:data': { id: number; data: string };

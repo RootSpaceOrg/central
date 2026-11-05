@@ -8,11 +8,27 @@
 export type Priority = 0 | 1 | 2;
 export const PRIORITY_OF: Record<string, Priority> = { high: 0, normal: 1, low: 2 };
 
-/** até quanto da sessão / da semana cada prioridade ainda pode começar (alta, normal, baixa) */
-export const SESSION_START = [90, 80, 60] as const;
-export const WEEK_START = [95, 90, 80] as const;
-/** a partir daqui pausa quem está rodando (para não estourar e ficar sem conseguir voltar) */
-export const PAUSE_AT = { session: 95, week: 98 } as const;
+/**
+ * As faixas do freio (o Gustavo ajusta em Preferências): até quanto da sessão / da semana cada prioridade ainda pode
+ * começar (alta, normal, baixa) e a partir de quanto pausa quem está rodando (para não estourar e ficar sem voltar).
+ */
+export interface Limits { session: [number, number, number]; week: [number, number, number]; pause: { session: number; week: number } }
+export const DEFAULT_LIMITS: Limits = { session: [90, 80, 60], week: [95, 90, 80], pause: { session: 95, week: 98 } };
+let limits: Limits = DEFAULT_LIMITS;
+export const getLimits = () => limits;
+
+/** Lê e confere (0 a 100; o que vier errado volta ao padrão). */
+export function parseLimits(raw: unknown): Limits {
+  const pct = (v: unknown, d: number) => (Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Math.round(Number(v)))) : d);
+  const r = (raw ?? {}) as Partial<Limits>;
+  const D = DEFAULT_LIMITS;
+  return {
+    session: [0, 1, 2].map(i => pct(r.session?.[i], D.session[i])) as Limits['session'],
+    week: [0, 1, 2].map(i => pct(r.week?.[i], D.week[i])) as Limits['week'],
+    pause: { session: pct(r.pause?.session, D.pause.session), week: pct(r.pause?.week, D.pause.week) },
+  };
+}
+export const setLimits = (l: unknown) => { limits = parseLimits(l); return limits; };
 /** esperando na fila há este tempo sobe um nível na ordem (não no freio) */
 const AGING_MIN = 45;
 
@@ -23,12 +39,12 @@ export function readUsage(limits: { kind: string; percent: number; resets_at: st
   return { session: s?.percent ?? null, week: w?.percent ?? null, sessionReset: s?.resets_at ?? null, weekReset: w?.resets_at ?? null };
 }
 
-export const canStart = (p: Priority, u: Usage) => (u.session ?? 0) < SESSION_START[p] && (u.week ?? 0) < WEEK_START[p];
+export const canStart = (p: Priority, u: Usage) => (u.session ?? 0) < limits.session[p] && (u.week ?? 0) < limits.week[p];
 
 /** null = segue; senão o motivo e até quando (renovação do limite que estourou) */
 export function mustPause(u: Usage): { reason: string; until: string | null } | null {
-  if ((u.week ?? 0) >= PAUSE_AT.week) return { reason: `semana em ${u.week}%`, until: u.weekReset };
-  if ((u.session ?? 0) >= PAUSE_AT.session) return { reason: `sessão em ${u.session}%`, until: u.sessionReset };
+  if ((u.week ?? 0) >= limits.pause.week) return { reason: `semana em ${u.week}%`, until: u.weekReset };
+  if ((u.session ?? 0) >= limits.pause.session) return { reason: `sessão em ${u.session}%`, until: u.sessionReset };
   return null;
 }
 

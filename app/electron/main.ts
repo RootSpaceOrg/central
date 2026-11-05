@@ -11,7 +11,6 @@ import {
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
-import { getUsage } from './usage';
 import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
 import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
@@ -20,6 +19,8 @@ import { listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
+import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
+import { getUsage, usageNow } from './usage';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
 import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
 import { inbound as waInbound, testPresence as waPresence, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
@@ -294,6 +295,9 @@ function registerIpc(): void {
     return sent;
   });
 
+  // freio da cota: as faixas (Preferências) e o que ele está segurando agora (barra de uso)
+  handle('gov:get', () => ({ limits: getLimits(), brake: brakeLabel(readUsage(usageNow())) }));
+  handle('gov:set', l => { const v = setLimits(l); setSetting('gov:limits', JSON.stringify(v)); send('gov:changed', null); return v; });
   handle('settings:get', key => getSetting(key));
   handle('settings:set', (key, value) => { setSetting(key, value); if (key.startsWith('triage:')) backlogChanged(); });
 
@@ -354,6 +358,7 @@ app.whenReady().then(() => {
   onExtensionsChange(() => send('ext:changed', null));
   initMedia(() => send('ext:changed', null));
   if (!CAPTURE || process.argv.includes('--extensions')) startInstalled();
+  try { setLimits(JSON.parse(getSetting('gov:limits') ?? 'null')); } catch { /* fica o padrão */ }
   watchTurns(emitRun);
   // freio da cota: pausa perto do limite e retoma quando renova (testes só com --dispatch)
   if (!CAPTURE || process.argv.includes('--dispatch')) watchQuota(emitRun);
