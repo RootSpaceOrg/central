@@ -75,12 +75,21 @@ async function connect(a) {
       setTimeout(() => { if (s === a.sock) connect(a).catch(e => log(e.message)); }, code === DisconnectReason.restartRequired ? 200 : 3000);
     }
   });
+  // "digitando…" de quem está conversando: a Central espera a pessoa terminar antes de responder
+  s.ev.on('presence.update', ({ id, presences }) => {
+    const p = Object.values(presences ?? {})[0]?.lastKnownPresence;
+    if (p) emit('presence', { account: a.id, chat: id, state: p });
+  });
   s.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const m of messages) {
       const jid = m.key.remoteJid ?? '';
       if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue; // grupos e status ficam de fora
       if (sentIds.has(m.key.id)) continue;
+      if (!m.key.fromMe) {
+        if (!a.subscribed) a.subscribed = new Set();
+        if (!a.subscribed.has(jid)) { a.subscribed.add(jid); s.presenceSubscribe(jid).catch(() => {}); }
+      }
       const c = normalizeMessageContent(m.message) ?? {};
       const media = await saveMedia(a, s, m, c).catch(e => { log(`mídia: ${e.message}`); return null; });
       const text = c.conversation ?? c.extendedTextMessage?.text ?? c.imageMessage?.caption ?? c.videoMessage?.caption ?? c.documentMessage?.caption ?? '';

@@ -90,6 +90,7 @@ export function initWhatsApp(d: typeof deps): void {
     }
     if (event === 'ready') callExtension(EXT, 'status').then((list: any[]) => { for (const a of list) accounts.set(a.account, { account: a.account, state: a.state, me: a.me ?? null, code: a.code ?? null }); deps.onStatus(); }, () => {});
     if (event === 'message') inbound(data as WaMessage);
+    if (event === 'presence') presence.set(`${data.account}:${data.chat}`, { state: data.state, at: Date.now() });
   });
   // aprovou a decisão de mandar para um contato novo: manda; recusou: descarta
   onDecided((p, verdict) => {
@@ -174,15 +175,35 @@ function withMedia(m: WaMessage, account: string, go: (text: string) => void): v
  * Espera alguns segundos depois da última mensagem antes de chamar o agente: "oi, tudo bem?" + "preciso da sua ajuda"
  * viram uma resposta só. 0 = responde na hora. (O que chega enquanto o agente responde já vai junto depois.)
  */
-const gathering = new Map<string, { texts: string[]; timer?: ReturnType<typeof setTimeout> }>();
+const gathering = new Map<string, { texts: string[]; last: number; timer?: ReturnType<typeof setTimeout> }>();
+/** "digitando…" de cada conversa (conta:chat → estado e quando chegou) */
+const presence = new Map<string, { state: string; at: number }>();
+/** a pessoa ainda está escrevendo: o WhatsApp repete o "digitando" a cada ~10 s e manda "parou" quando ela para */
+const typing = (account: string, chat: string) => {
+  const p = presence.get(`${account}:${chat}`);
+  return !!p && (p.state === 'composing' || p.state === 'recording') && Date.now() - p.at < 15_000;
+};
+/** só nos testes: simula o "digitando" de um contato */
+export const testPresence = (account: string, chat: string, state: string) => presence.set(`${account}:${chat}`, { state, at: Date.now() });
+export const waitSettings = () => ({
+  base: Math.max(0, Math.min(120, Number(getSetting('wa:wait') ?? 8) || 0)),
+  max: Math.max(0, Math.min(300, Number(getSetting('wa:waitMax') ?? 60) || 0)),
+});
 function soon(account: string, who: string, chat: string, text: string, name: string, outside = false): void {
-  const wait = Math.max(0, Math.min(60, Number(getSetting('wa:wait') ?? 8) || 0));
-  if (!wait) return talk(account, who, chat, text, name, outside);
+  const { base, max } = waitSettings();
+  if (!base && !max) return talk(account, who, chat, text, name, outside);
   const k = `${account}:${who}`;
-  const g = gathering.get(k) ?? { texts: [] };
+  const g = gathering.get(k) ?? { texts: [], last: 0 };
   clearTimeout(g.timer);
   g.texts.push(text);
-  g.timer = setTimeout(() => { gathering.delete(k); talk(account, who, chat, g.texts.join('\n'), name, outside); }, wait * 1000);
+  g.last = Date.now();
+  // espera a base depois da última mensagem; se a pessoa ainda estiver digitando, segue esperando (até o máximo)
+  const fire = () => {
+    if (typing(account, chat) && Date.now() - g.last < Math.max(base, max) * 1000) { g.timer = setTimeout(fire, 2000); return; }
+    gathering.delete(k);
+    talk(account, who, chat, g.texts.join('\n'), name, outside);
+  };
+  g.timer = setTimeout(fire, base * 1000);
   gathering.set(k, g);
 }
 

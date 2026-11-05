@@ -11,10 +11,10 @@
   "whatsapp": {
     "id": "whatsapp",
     "name": "WhatsApp",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "description": "Conecta um número de WhatsApp à Central: você conversa com a Central por lá, recebe os avisos urgentes e os agentes podem mandar mensagens.",
     "warning": "Usa o protocolo do WhatsApp Web (não é a API oficial). Para falar com clientes em volume, prefira um número dedicado: envio em massa ou para quem não espera pode bloquear o número.",
-    "file": "whatsapp-1.2.1.mjs",
-    "sha256": "0acfdbefc5dac9744f4126862b4bb5450f610c02d76eaadfb4c09a0b16d0ae2d"
+    "file": "whatsapp-1.2.2.mjs",
+    "sha256": "ddc13f783bca1bcfbb19d69b5531953740b8b379cdfa8c2745926f2f18394a1c"
   }
 }

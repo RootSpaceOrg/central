@@ -22,7 +22,7 @@ import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
 import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
-import { inbound as waInbound, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
+import { inbound as waInbound, testPresence as waPresence, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -284,6 +284,7 @@ function registerIpc(): void {
   // só nos testes (--capture): transcrever/analisar direto
   if (CAPTURE) ipcMain.handle('stt:test', async (_e, kind: string, path: string) => (kind === 'video' ? analyzeVideo(path) : transcribeFile(path)));
   // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp
+  if (CAPTURE) ipcMain.handle('wa:test-presence', (_e, account: string, chat: string, state: string) => { waPresence(account, chat, state); });
   if (CAPTURE) ipcMain.handle('wa:test-inbound', async (_e, m: Record<string, unknown>) => {
     const sent: { account: string; to: string; text: string }[] = [];
     waSetSender(async (account, to, text) => { sent.push({ account, to, text }); return {}; });

@@ -129,12 +129,14 @@ export function formatPhone(n: string): string {
               </div>
 
               <h3 class="mt-7 font-semibold">Como os agentes respondem</h3>
-              <label class="mt-2 flex flex-wrap items-center gap-2">
+              <div class="mt-2 flex flex-wrap items-center gap-2">
                 <span>Esperar</span>
-                <input type="number" min="0" max="60" class="field !w-20 !py-1 text-center" aria-label="Segundos de espera" [value]="wait()" (change)="setWait($any($event.target).value)">
-                <span>segundos depois da última mensagem</span>
-                <span class="w-full text-[13px] text-mute">Mensagens seguidas ("oi, tudo bem?" + "preciso da sua ajuda") viram uma resposta só. 0 responde na hora.</span>
-              </label>
+                <input type="number" min="0" max="120" class="field !w-20 !py-1 text-center" aria-label="Segundos de espera depois da última mensagem" [value]="wait()" (change)="setWait($any($event.target).value)">
+                <span>segundos depois da última mensagem, e até</span>
+                <input type="number" min="0" max="300" class="field !w-20 !py-1 text-center" aria-label="Segundos de espera enquanto a pessoa digita" [value]="waitMax()" (change)="setWaitMax($any($event.target).value)">
+                <span>segundos se a pessoa ainda estiver digitando</span>
+                <span class="w-full text-[13px] text-mute">Mensagens seguidas ("oi, tudo bem?" + "preciso da sua ajuda") viram uma resposta só, e quem ainda está escrevendo não é interrompido. 0 e 0 respondem na hora.</span>
+              </div>
               <label class="mt-3 flex cursor-pointer items-start gap-3">
                 <input type="checkbox" class="mt-1 accent-frost" [checked]="split()" (change)="setSplit($any($event.target).checked)">
                 <span><span class="block">Responder em mensagens curtas</span>
@@ -281,6 +283,7 @@ export class ExtensionsPage {
   protected readonly any = signal(false);
   protected readonly notifyOn = signal(true);
   protected readonly wait = signal(8);
+  protected readonly waitMax = signal(60);
   protected readonly split = signal(true);
   protected readonly phone = signal('');
   protected readonly ownerInput = signal('');
@@ -299,6 +302,7 @@ export class ExtensionsPage {
     this.settings.get('wa:any').then(v => this.any.set(v === '1'));
     this.settings.get('wa:notify').then(v => this.notifyOn.set(v !== '0'));
     this.settings.get('wa:wait').then(v => this.wait.set(v === null ? 8 : Number(v) || 0));
+    this.settings.get('wa:waitMax').then(v => this.waitMax.set(v === null ? 60 : Number(v) || 0));
     this.settings.get('wa:split').then(v => this.split.set(v !== '0'));
   }
 
@@ -354,7 +358,8 @@ export class ExtensionsPage {
   protected enable(e: ExtensionDto, on: boolean): void { this.run(() => this.ipc.invoke('ext:enable', e.id, on)); }
   protected removeOwner(n: string): void { this.saveOwners(this.owners().filter(x => x !== n)); }
   protected setAny(v: boolean): void { this.any.set(v); this.settings.set('wa:any', v ? '1' : '0'); }
-  protected setWait(v: string): void { const n = Math.max(0, Math.min(60, Math.round(Number(v) || 0))); this.wait.set(n); this.settings.set('wa:wait', String(n)); }
+  protected setWait(v: string): void { const n = Math.max(0, Math.min(120, Math.round(Number(v) || 0))); this.wait.set(n); this.settings.set('wa:wait', String(n)); }
+  protected setWaitMax(v: string): void { const n = Math.max(0, Math.min(300, Math.round(Number(v) || 0))); this.waitMax.set(n); this.settings.set('wa:waitMax', String(n)); }
   protected setSplit(v: boolean): void { this.split.set(v); this.settings.set('wa:split', v ? '1' : '0'); }
   protected setNotify(v: boolean): void { this.notifyOn.set(v); this.settings.set('wa:notify', v ? '1' : '0'); }
 }
