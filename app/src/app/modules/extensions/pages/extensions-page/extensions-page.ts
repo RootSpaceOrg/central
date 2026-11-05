@@ -1,0 +1,184 @@
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+
+import { ExtensionDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
+import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
+import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
+import { AgoPipe } from '../../../../shared/ui/ago.pipe';
+import { Icon } from '../../../../shared/ui/icon';
+
+const digits = (s: string) => s.replace(/\D/g, '');
+/** +55 11 99999-8888 */
+export function formatPhone(n: string): string {
+  const d = digits(n);
+  const m = /^(\d{2})(\d{2})(\d{4,5})(\d{4})$/.exec(d);
+  return m ? `+${m[1]} ${m[2]} ${m[3]}-${m[4]}` : `+${d}`;
+}
+
+/**
+ * Extensões: integrações instaláveis (o núcleo da Central não carrega o que você não usa). Cada uma roda num processo
+ * próprio e é conferida pelo hash antes de rodar. Hoje: WhatsApp.
+ */
+@Component({
+  selector: 'app-extensions-page',
+  imports: [Icon, AgoPipe],
+  host: { class: 'block h-full overflow-y-auto' },
+  template: `
+    <div class="mx-auto max-w-[980px] px-10 pt-9 pb-16">
+      <h1 class="flex items-center gap-3 font-display text-[32px] font-bold leading-tight tracking-tight"><app-icon name="puzzle" [size]="26" class="text-frost" />Extensões</h1>
+      <p class="mt-1 max-w-2xl text-mute">Integrações que você instala quando precisa. Cada uma roda separada da Central: se cair, volta sozinha, e nada dela é carregado se não estiver instalada.</p>
+      @if (error()) { <p role="alert" class="mt-5 rounded-2xl bg-no/10 px-5 py-3 text-no">{{ error() }}</p> }
+
+      @for (e of list(); track e.id) {
+        <section class="mt-7 rounded-3xl border border-edge bg-panel p-6" [attr.aria-labelledby]="'ext-' + e.id">
+          <div class="flex flex-wrap items-start gap-4">
+            <div class="min-w-0 flex-1">
+              <h2 [id]="'ext-' + e.id" class="flex items-center gap-2 font-display text-xl font-semibold">{{ e.name }}
+                <span class="rounded-full bg-raise px-2 py-0.5 text-[12px] font-normal text-mute">v{{ e.version }}</span>
+                @if (e.installed) { <span class="rounded-full px-2 py-0.5 text-[12px] font-semibold" [class]="e.running ? 'bg-yes/15 text-yes' : 'bg-later/15 text-later'">{{ e.running ? 'instalada' : 'parada' }}</span> }
+              </h2>
+              <p class="mt-1 text-[14px] leading-relaxed text-mute">{{ e.description }}</p>
+              @if (e.warning) { <p class="mt-2 text-[13px] leading-relaxed text-later">{{ e.warning }}</p> }
+            </div>
+            @if (!e.installed) {
+              <button type="button" class="btn btn-primary" (click)="install(e)" [disabled]="busy()"><app-icon name="download" [size]="15" />{{ busy() ? 'Instalando…' : 'Instalar' }}</button>
+            } @else {
+              <button type="button" class="btn btn-ghost !text-no" (click)="uninstall(e)" [disabled]="busy()">Desinstalar</button>
+            }
+          </div>
+
+          @if (e.id === 'whatsapp' && e.installed) {
+            @let s = wa();
+            <div class="mt-6 border-t border-edge pt-5">
+              @switch (s?.state) {
+                @case ('open') {
+                  <p class="flex flex-wrap items-center gap-2"><span class="size-2.5 rounded-full bg-yes"></span>
+                    Conectado em <b>{{ fmt(s!.me!.phone) }}</b>{{ s!.me!.name ? ' (' + s!.me!.name + ')' : '' }}
+                    <button type="button" class="btn btn-sm btn-ghost ml-auto" (click)="logout()">Desconectar</button></p>
+                }
+                @case ('connecting') { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-later"></span>Reconectando…</p> }
+                @case ('pairing') {
+                  @if (s!.code) {
+                    <div class="rounded-2xl border border-frost/40 bg-night p-5">
+                      <p class="text-[14px] text-mute">No celular do número, abra o WhatsApp → <b class="text-text">Dispositivos conectados</b> → <b class="text-text">Conectar dispositivo</b> →
+                        <b class="text-text">Conectar com número de telefone</b> e digite:</p>
+                      <p class="mt-3 font-mono text-[34px] font-bold tracking-[0.25em] text-frost selectable" aria-live="polite">{{ s!.code!.slice(0, 4) }}-{{ s!.code!.slice(4) }}</p>
+                      <p class="mt-2 flex items-center gap-3 text-[12.5px] text-faint">Fica válido por alguns minutos. Quando conectar, esta tela muda sozinha.
+                        <button type="button" class="btn btn-sm btn-ghost ml-auto" (click)="logout()">Cancelar</button></p>
+                    </div>
+                  } @else { <p class="flex items-center gap-2 text-mute"><span class="pulse size-2.5 rounded-full bg-frost"></span>Pedindo o código ao WhatsApp…</p> }
+                }
+                @default {
+                  <form class="flex flex-wrap items-end gap-3" (submit)="$event.preventDefault(); pair()">
+                    <label class="min-w-64 flex-1"><span class="mb-1.5 block font-semibold">Número para conectar</span>
+                      <input class="field font-mono" inputmode="tel" autocomplete="off" placeholder="55 11 99999-8888" [value]="phone()" (input)="phone.set($any($event.target).value)"></label>
+                    <button class="btn btn-primary" [disabled]="digits(phone()).length < 12">Gerar código</button>
+                    <p class="w-full text-[12.5px] text-faint">Com DDI e DDD. Pode ser o seu número (aí você fala com a Central na conversa "você mesmo") ou um número só da Central, como o do atendimento.</p>
+                  </form>
+                }
+              }
+
+              <h3 class="mt-7 font-semibold">Quem conversa com a Central</h3>
+              <p class="mt-0.5 text-[13px] text-mute">Estes números falam com o agente principal, com tudo o que ele pode fazer. Mensagens de outros números ficam registradas abaixo e não acionam agente.</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                @if (s?.me) { <span class="rounded-full bg-frost/12 px-3 py-1 text-[13px] text-frost">Você mesmo ({{ fmt(s!.me!.phone) }})</span> }
+                @for (o of owners(); track o) {
+                  <span class="flex items-center gap-1.5 rounded-full bg-raise px-3 py-1 font-mono text-[13px]">{{ fmt(o) }}
+                    <button type="button" (click)="removeOwner(o)" [attr.aria-label]="'Remover ' + fmt(o)" class="text-faint hover:text-no"><app-icon name="close" [size]="12" /></button></span>
+                }
+                <form class="flex gap-1.5" (submit)="$event.preventDefault(); addOwner()">
+                  <input class="field !w-48 !py-1 font-mono text-[13px]" inputmode="tel" placeholder="+ número" aria-label="Adicionar número" [value]="ownerInput()" (input)="ownerInput.set($any($event.target).value)">
+                  <button class="btn btn-sm" [disabled]="digits(ownerInput()).length < 12">Adicionar</button>
+                </form>
+              </div>
+
+              <h3 class="mt-7 font-semibold">Agentes mandando mensagem</h3>
+              <label class="mt-2 flex cursor-pointer items-start gap-3">
+                <input type="checkbox" class="mt-1 accent-frost" [checked]="any()" (change)="setAny($any($event.target).checked)">
+                <span><span class="block">Podem mandar para qualquer número sem me perguntar</span>
+                  <span class="block text-[13px] text-mute">Desligado, a primeira mensagem para quem nunca falou com vocês vira uma decisão na Triagem. Ligar aumenta o risco de bloqueio do número.</span></span>
+              </label>
+              <label class="mt-3 flex cursor-pointer items-start gap-3">
+                <input type="checkbox" class="mt-1 accent-frost" [checked]="notifyOn()" (change)="setNotify($any($event.target).checked)">
+                <span><span class="block">Avisar pelo WhatsApp quando um agente parar esperando por mim</span>
+                  <span class="block text-[13px] text-mute">Vai para os números acima (ou para você mesmo).</span></span>
+              </label>
+
+              @if (contacts().length) {
+                <h3 class="mt-7 font-semibold">Contatos recentes</h3>
+                <ul class="mt-2 divide-y divide-edge rounded-2xl border border-edge">
+                  @for (c of contacts(); track c.phone) {
+                    <li class="flex items-center gap-3 px-4 py-2.5 text-[13.5px]">
+                      <span class="w-44 shrink-0 font-mono">{{ fmt(c.phone) }}</span>
+                      <span class="min-w-0 flex-1 truncate text-mute">{{ c.name ? c.name + ': ' : '' }}{{ c.last_text ?? '(só mensagens enviadas)' }}</span>
+                      <span class="shrink-0 text-[12px] text-faint">{{ when(c) | ago }}</span>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
+        </section>
+      }
+    </div>
+  `,
+})
+export class ExtensionsPage {
+  private readonly ipc = inject(IpcService);
+  private readonly settings = inject(SettingsApiService);
+
+  protected readonly list = signal<ExtensionDto[]>([]);
+  protected readonly wa = signal<WaStatusDto | null>(null);
+  protected readonly contacts = signal<WaContactDto[]>([]);
+  protected readonly owners = signal<string[]>([]);
+  protected readonly any = signal(false);
+  protected readonly notifyOn = signal(true);
+  protected readonly phone = signal('');
+  protected readonly ownerInput = signal('');
+  protected readonly busy = signal(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly digits = digits;
+  protected readonly fmt = formatPhone;
+  protected readonly when = (c: WaContactDto) => new Date(c.last_in_at ?? c.last_out_at ?? Date.now());
+  private readonly waInstalled = computed(() => !!this.list().find(e => e.id === 'whatsapp')?.installed);
+
+  constructor() {
+    this.load();
+    const off = this.ipc.on('ext:changed', () => this.load());
+    inject(DestroyRef).onDestroy(off);
+    this.settings.get('wa:owners').then(v => this.owners.set(v ? JSON.parse(v) : []));
+    this.settings.get('wa:any').then(v => this.any.set(v === '1'));
+    this.settings.get('wa:notify').then(v => this.notifyOn.set(v !== '0'));
+  }
+
+  private async load(): Promise<void> {
+    this.list.set(await this.ipc.invoke('ext:list'));
+    if (this.waInstalled()) {
+      this.wa.set(await this.ipc.invoke('wa:status'));
+      this.contacts.set(await this.ipc.invoke('wa:contacts'));
+    }
+  }
+
+  private async run(fn: () => Promise<unknown>): Promise<void> {
+    this.busy.set(true);
+    this.error.set(null);
+    try { await fn(); await this.load(); } catch (e) { this.error.set(errorMessage(e)); } finally { this.busy.set(false); }
+  }
+
+  protected install(e: ExtensionDto): void { this.run(() => this.ipc.invoke('ext:install', e.id)); }
+  protected uninstall(e: ExtensionDto): void { this.run(() => this.ipc.invoke('ext:uninstall', e.id)); }
+  protected pair(): void { this.run(() => this.ipc.invoke('wa:pair', digits(this.phone()))); }
+  protected logout(): void { this.run(() => this.ipc.invoke('wa:logout')); }
+
+  private saveOwners(list: string[]): void {
+    this.owners.set(list);
+    this.settings.set('wa:owners', JSON.stringify(list));
+  }
+  protected addOwner(): void {
+    const n = digits(this.ownerInput());
+    if (n.length >= 12 && !this.owners().includes(n)) this.saveOwners([...this.owners(), n]);
+    this.ownerInput.set('');
+  }
+  protected removeOwner(n: string): void { this.saveOwners(this.owners().filter(x => x !== n)); }
+  protected setAny(v: boolean): void { this.any.set(v); this.settings.set('wa:any', v ? '1' : '0'); }
+  protected setNotify(v: boolean): void { this.notifyOn.set(v); this.settings.set('wa:notify', v ? '1' : '0'); }
+}

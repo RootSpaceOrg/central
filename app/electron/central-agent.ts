@@ -173,7 +173,7 @@ export function describe(name: string, input: any): string {
     delete_task: `Excluiu a tarefa #${input?.id ?? ''}`, list_ideas: 'Consultou as ideias', create_idea: `Guardou a ideia "${input?.title ?? ''}"`,
     update_idea: `Atualizou a ideia #${input?.id ?? ''}`, promote_idea: `Transformou a ideia #${input?.id ?? ''} em tarefa`, triage_agent: 'Viu o agente de triagem',
     list_decisions: 'Consultou as decisões', create_decision: `Criou a decisão "${input?.title ?? ''}"`, decide: `Registrou decisão #${input?.id ?? ''}`,
-    list_agent_runs: 'Consultou as execuções', get_agent_run: `Leu o log da execução #${input?.id ?? ''}`, start_agent: 'Colocou um agente para trabalhar', notify_agent: 'Avisou outro agente', take_over: `Passou a execução #${input?.run_id ?? ''} adiante`,
+    list_agent_runs: 'Consultou as execuções', get_agent_run: `Leu o log da execução #${input?.id ?? ''}`, start_agent: 'Colocou um agente para trabalhar', notify_agent: 'Avisou outro agente', whatsapp_send: `Mandou WhatsApp para ${input?.to ?? ''}`, take_over: `Passou a execução #${input?.run_id ?? ''} adiante`,
     stop_agent: `Interrompeu a execução #${input?.id ?? ''}`, start_turn: 'Começou um turno', list_turns: 'Consultou os turnos',
     list_routines: 'Consultou as rotinas', create_routine: `Criou a rotina "${input?.name ?? ''}"`, update_routine: `Editou a rotina #${input?.id ?? ''}`,
     delete_routine: `Excluiu a rotina #${input?.id ?? ''}`, run_routine_now: `Rodou a rotina #${input?.id ?? ''}`,

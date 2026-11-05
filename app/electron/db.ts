@@ -354,6 +354,25 @@ db.exec(`
   create index if not exists touches_by_run on touches(run_id);
   create index if not exists touches_by_project on touches(project_slug, at);
 
+  create table if not exists wa_contacts (
+    phone       text primary key,
+    chat        text,
+    name        text,
+    last_in_at  text,
+    last_out_at text,
+    last_text   text
+  );
+  create table if not exists wa_outbox (
+    id          integer primary key autoincrement,
+    to_number   text not null,
+    text        text not null,
+    proposal_id integer,
+    status      text not null default 'pending',
+    created_by  text,
+    error       text,
+    created_at  text not null default (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    sent_at     text
+  );
   create table if not exists settings (
     key   text primary key,
     value text not null

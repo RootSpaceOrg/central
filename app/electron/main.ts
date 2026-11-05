@@ -20,6 +20,8 @@ import { listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
+import { callExtension, installExtension, listExtensions, onExtensionsChange, startInstalled, uninstallExtension } from './extensions';
+import { inbound as waInbound, initWhatsApp, listContacts, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -191,6 +193,8 @@ function registerIpc(): void {
   handle('routines:fire', async id => { const r = await fireRoutine(id, emitRun, true); routinesChanged(); return r; });
 
   const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean) => send('chat:event', { chat_id, message, busy });
+  // WhatsApp (extensão): os donos conversam com a Central por lá; a resposta aparece aqui também
+  initWhatsApp({ notify: chatNotify, changed: () => { changed(); backlogChanged(); }, onStatus: () => send('ext:changed', null), centralId: () => get<{ id: number }>('select id from agents where builtin = 1')!.id });
   handle('agents:list', () => listAgents());
   handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });
   handle('agents:update', (id, patch) => { updateAgent(id, patch); agentsChanged(); });
@@ -260,6 +264,23 @@ function registerIpc(): void {
   handle('chat:stop', id => stopChat(id));
   handle('chat:delete', id => deleteChat(id));
 
+  // ---------- extensões ----------
+  handle('ext:list', () => listExtensions());
+  handle('ext:install', async id => { await installExtension(id); });
+  handle('ext:uninstall', async id => { await uninstallExtension(id); });
+  handle('wa:status', () => waStatus());
+  handle('wa:pair', async phone => { await callExtension('whatsapp', 'pair', { phone }); });
+  handle('wa:logout', async () => { await callExtension('whatsapp', 'logout'); });
+  handle('wa:contacts', () => listContacts());
+  // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp
+  if (CAPTURE) ipcMain.handle('wa:test-inbound', async (_e, m: Record<string, unknown>) => {
+    const sent: { to: string; text: string }[] = [];
+    waSetSender(async (to, text) => { sent.push({ to, text }); return {}; });
+    waInbound({ id: 't', chat: '5511900000000@s.whatsapp.net', phone: null, name: null, fromMe: false, self: false, text: '', at: Date.now(), ...m });
+    for (let i = 0; i < 240 && !sent.length; i++) await new Promise(r => setTimeout(r, 1000));
+    return sent;
+  });
+
   handle('settings:get', key => getSetting(key));
   handle('settings:set', (key, value) => { setSetting(key, value); if (key.startsWith('triage:')) backlogChanged(); });
 
@@ -316,6 +337,9 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   if (!CAPTURE) setupTray(() => win, navigate);
+  // extensões instaladas (WhatsApp…) ligam junto; o WhatsApp conversa com a Central pelos donos cadastrados
+  onExtensionsChange(() => send('ext:changed', null));
+  if (!CAPTURE || process.argv.includes('--extensions')) startInstalled();
   watchTurns(emitRun);
   // freio da cota: pausa perto do limite e retoma quando renova (testes só com --dispatch)
   if (!CAPTURE || process.argv.includes('--dispatch')) watchQuota(emitRun);

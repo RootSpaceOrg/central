@@ -80,6 +80,7 @@ export class App {
     { path: '/execucoes', label: 'Execuções', icon: 'activity' },
     { path: '/rotinas', label: 'Rotinas', icon: 'routine' },
     { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
+    { path: '/extensoes', label: 'Extensões (WhatsApp e outras integrações)', icon: 'puzzle' },
   ];
 
   /** número no ícone da navegação */

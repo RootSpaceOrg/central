@@ -44,6 +44,10 @@ export function createProposal(input: NewProposalInput & { next_action?: string 
   return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
 }
 
+/** Quem reage a uma decisão (ex.: WhatsApp manda a mensagem aprovada). true = tratou, o resto não roda. */
+const decidedHooks: ((p: ProposalDto, verdict: Verdict) => boolean)[] = [];
+export const onDecided = (fn: (p: ProposalDto, verdict: Verdict) => boolean) => { decidedHooks.push(fn); };
+
 /** Aprovar vira tarefa em "A fazer", pronta para um agente. */
 export function decide(id: number, verdict: Verdict, reason: string | null): void {
   if (!VERDICT[verdict]) throw new Error('Decisão inválida.');
@@ -52,6 +56,7 @@ export function decide(id: number, verdict: Verdict, reason: string | null): voi
   }
   run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
   const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
+  for (const h of decidedHooks) if (h(p, verdict)) return;
   // escolha sobre uma tarefa que já existe: a resposta volta para ela (vai para A fazer, o responsável segue) em vez de
   // virar uma tarefa nova que repete a pergunta
   const task = p.task_id ? get<{ id: number; body: string | null; column: string }>('select id, body, "column" from tasks where id = ?', p.task_id) : null;

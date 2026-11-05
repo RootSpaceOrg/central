@@ -848,6 +848,16 @@ export type AgentPriority = 'high' | 'normal' | 'low';
 
 export type AgentPatch = Partial<NewAgentInput>;
 
+export interface ExtensionDto { id: string; name: string; version: string; description: string; warning?: string; installed: boolean; running: boolean }
+export interface WaStatusDto {
+  state: 'disconnected' | 'pairing' | 'connecting' | 'open';
+  me: { id: string; lid: string | null; phone: string; name: string | null } | null;
+  /** código de pareamento para digitar no celular */
+  code: string | null;
+  installed: boolean;
+}
+export interface WaContactDto { phone: string; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null }
+
 export interface UpdateInfoDto {
   current: string;
   /** maior versão disponível acima da atual, ou null */
@@ -985,6 +995,14 @@ export interface Api {
   'turns:start': (input: NewTurnInput) => TurnDto;
   'turns:stop': (id: number) => void;
   'settings:get': (key: string) => string | null;
+  'ext:list': () => ExtensionDto[];
+  'ext:install': (id: string) => void;
+  'ext:uninstall': (id: string) => void;
+  'wa:status': () => WaStatusDto;
+  /** vincula o número: o código de 8 letras chega pelo status */
+  'wa:pair': (phone: string) => void;
+  'wa:logout': () => void;
+  'wa:contacts': () => WaContactDto[];
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];
   'routines:create': (input: NewRoutineInput) => RoutineDto;
@@ -1016,6 +1034,8 @@ export interface Api {
 
 /** eventos main → interface */
 export interface Events {
+  /** extensão instalada, ligada ou com status novo (WhatsApp conectou, código de pareamento) */
+  'ext:changed': null;
   'pty:data': { id: number; data: string };
   'pty:exit': { id: number; code: number };
   'run:event': RunEventDto;

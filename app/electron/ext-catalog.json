@@ -1,0 +1,11 @@
+{
+  "whatsapp": {
+    "id": "whatsapp",
+    "name": "WhatsApp",
+    "version": "1.0.0",
+    "description": "Conecta um número de WhatsApp à Central: você conversa com a Central por lá, recebe os avisos urgentes e os agentes podem mandar mensagens.",
+    "warning": "Usa o protocolo do WhatsApp Web (não é a API oficial). Para falar com clientes em volume, prefira um número dedicado: envio em massa ou para quem não espera pode bloquear o número.",
+    "file": "whatsapp-1.0.0.mjs",
+    "sha256": "bb94c369c4722ee1f0be324c38a59fd159454b156daa025713096ab714bf62d4"
+  }
+}

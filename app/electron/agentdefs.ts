@@ -55,6 +55,8 @@ Como o trabalho anda:
   pausa quem está rodando e retoma sozinha, na mesma sessão do Claude, quando a cota renovar (list_agent_runs mostra as pausadas).
 - Agente avisando agente: notify_agent (ex.: suporte recebe bug urgente → monitoração → tech lead). Vai um resumo, não o texto de
   fora; no máximo 3 saltos e sem repetir agente. take_over passa uma execução parada para outro agente continuar na mesma branch.
+- WhatsApp (extensão, se instalada): o Gustavo pode conversar com você por lá; whatsapp_send manda mensagem (contato novo
+  pede aprovação dele, a não ser que ele tenha liberado qualquer número em Extensões).
 - Produção: quem pode subir (e o quê, ex.: hotfix pequeno) está nas instruções ou memórias de cada agente. Sem permissão, crítico
   ou na dúvida: decisão para o Gustavo.
 Regras:

@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 import { Emit, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
+import { agentSend, notifyOwners } from './whatsapp';
 import { createAgent, deleteAgent, listAgents, updateAgent } from './agentdefs';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
@@ -288,6 +289,12 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
       budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: a.task_id ?? null, urgent: !!a.urgent, parent_run_id: parent }, h.emit);
     return `${target.name} foi avisado e vai trabalhar nisso (execução #${r.id}${runDto(r.id).status === 'queued' ? ', na fila' : ''}).`;
   }, h.backlog);
+  tool('whatsapp_send', 'Manda uma mensagem de WhatsApp pelo número conectado na Central (extensão WhatsApp). to = número com DDI e DDD (ex.: 5511999998888). Para quem nunca falou com vocês, a Central pede aprovação ao Gustavo antes (a não ser que ele tenha liberado qualquer número). Texto curto, sem markdown pesado.', {
+    to: z.string(), text: z.string().max(4000),
+  }, async a => {
+    const me = callerAgent(caller);
+    return agentSend(a.to, a.text, me ? listAgents().find(x => x.id === me)?.name ?? 'Um agente' : 'A Central');
+  }, h.backlog);
   tool('take_over', 'Passa uma execução parada (pausada pela cota, que falhou ou foi interrompida) para outro agente continuar na mesma branch, com o registro do que já foi feito. Sem agent_id, o mesmo agente recomeça com o registro.', {
     run_id: z.number().int(), agent_id: z.number().int().optional(), note: z.string().optional().describe('o que quem assume precisa saber'),
   }, a => { const r = handoffRun(a.run_id, a.agent_id ?? null, a.note ?? null, h.emit); return `Execução #${r.id} assumiu o trabalho da #${a.run_id}.`; }, h.backlog);
@@ -378,6 +385,7 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
       command: z.string().max(300).optional().describe('o comando que ele roda, se houver (ex.: aws sso login --profile mkt-platform)'),
     }, a => {
       run('update runs set waiting = ? where id = ?', JSON.stringify({ reason: a.reason, fix: a.fix, command: a.command ?? null }), caller.id);
+      notifyOwners(`⏸️ Um agente parou esperando você: ${a.reason}\n${a.fix}${a.command ? `\nComando: ${a.command}` : ''}`);
       return 'Registrado. Termine agora: diga em poucas linhas o que já fez e onde parou. A Central te retoma quando o Gustavo resolver.';
     }, h.backlog);
     tool('report_delivery', 'Antes de terminar, conte ao Gustavo o que você entregou. Ele lê isso no resumo de quando estava fora e na fila de revisão.', {
