@@ -1,4 +1,4 @@
-import { ChildProcess, execFile, spawn } from 'node:child_process';
+import { ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -354,6 +354,22 @@ export function pauseRun(id: number, reason: string, until: string | null, emit:
   event(id, 'system', `Pausada: ${reason}. ${until ? 'Volta sozinha quando a cota renovar.' : 'Volta sozinha quando o freio deixar.'}`, emit);
   emit.update(dto(id));
   emit.changed();
+}
+
+/**
+ * A Central vai fechar (atualização ou saída): pausa quem está rodando e encerra o processo do Claude (e os estagiários
+ * dele) antes de sair. No Windows o processo sobreviveria à Central e, ao reabrir, a retomada rodaria em paralelo com ele
+ * na mesma sessão e na mesma pasta. Pausada, ela volta sozinha na mesma sessão quando a Central abrir.
+ */
+export function pauseAllOnQuit(): void {
+  for (const { id, session_id } of all<{ id: number; session_id: string | null }>(`select id, session_id from runs where status in ('preparing','running')`)) {
+    const reason = 'a Central fechou (atualização ou saída)';
+    run(`update runs set status = 'queued', paused = ?, resume = ? where id = ?`, JSON.stringify({ reason, until: null, at: now() }), session_id ? reason : null, id);
+    run('insert into run_events (run_id, at, kind, text) values (?,?,?,?)', id, now(), 'system', 'A Central fechou: pausada, volta sozinha na mesma sessão quando ela abrir.');
+    const pid = procs.get(id)?.pid;
+    procs.delete(id);
+    if (pid) { try { execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* já saiu */ } }
+  }
 }
 
 /** "Retomar agora": tira a pausa; começa assim que o freio e as vagas deixarem. */

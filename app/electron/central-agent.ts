@@ -2,7 +2,7 @@
  * Conversas com os agentes da Central (a própria Central, Suporte KultivAi, Marketing…). Cada conversa é uma sessão do
  * Claude Code (usa a cota do plano), retomada com --resume na mesma pasta para manter o contexto.
  */
-import { ChildProcess, execFile, spawn } from 'node:child_process';
+import { ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
@@ -41,6 +41,12 @@ function save(chatId: number, role: ChatRole, text: string, notify: Notify): voi
   const { lastInsertRowid } = run('insert into chat_messages (chat_id, role, text, at) values (?,?,?,?)', chatId, role, text, now());
   run('update chats set updated_at = ? where id = ?', now(), chatId);
   notify(chatId, get<ChatMessageDto>('select * from chat_messages where id = ?', Number(lastInsertRowid))!, true);
+}
+
+/** A Central vai fechar: encerra as conversas respondendo (senão o Claude seguiria sozinho, sem ninguém ouvindo). */
+export function stopAllChats(): void {
+  for (const p of procs.values()) if (p.pid) { try { execFileSync('taskkill', ['/pid', String(p.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* já saiu */ } }
+  procs.clear();
 }
 
 export function stopChat(chatId: number): void {

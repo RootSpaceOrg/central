@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
 import { DB_PATH, DEV_ROOT, all, get, run } from './db';
-import { dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
+import { dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
@@ -13,7 +13,7 @@ import {
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getUsage } from './usage';
 import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
-import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat } from './central-agent';
+import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { listActivity, onActivity } from './activity';
@@ -381,7 +381,7 @@ app.whenReady().then(() => {
   setInterval(watchGithub, 15 * 60_000);
 });
 
-app.on('before-quit', () => { markQuitting(); stopAllExtensions(); });
+app.on('before-quit', () => { markQuitting(); pauseAllOnQuit(); stopAllChats(); stopAllExtensions(); });
 
 // uma Central só: abrir de novo traz a janela que já está rodando (na bandeja, por exemplo)
 // (só no app de verdade: dev e testes com --data rodam ao lado da instalada)
