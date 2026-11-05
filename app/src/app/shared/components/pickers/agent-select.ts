@@ -2,13 +2,13 @@ import { Component, computed, inject, input, model } from '@angular/core';
 
 import { AgentsService } from '../../services/agents/agents.service';
 import { ProjectsService } from '../../services/projects/projects.service';
-import { EntitySelect, SelectOption } from '../../ui/entity-select';
+import { Select, SelectOption } from '../../ui/select';
 
 /** Escolher agente vendo o ícone (o valor é o id em texto; '' = nenhum). */
 @Component({
   selector: 'app-agent-select',
-  imports: [EntitySelect],
-  template: `<app-entity-select [options]="options()" [(value)]="value" [noneLabel]="noneLabel()" [compact]="compact()"
+  imports: [Select],
+  template: `<app-select [options]="options()" [(value)]="value" [noneLabel]="noneLabel()" [compact]="compact()"
     placeholder="Escolher agente…" label="Agente" />`,
 })
 export class AgentSelect {

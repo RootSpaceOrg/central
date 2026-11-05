@@ -7,6 +7,7 @@ import { IpcService, errorMessage } from '../../../../../../shared/services/ipc/
 import { SettingsApiService } from '../../../../../../shared/services/settings/settings-api.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { Select, SelectOption } from '../../../../../../shared/ui/select';
 import { Switch } from '../../../../../../shared/ui/switch';
 
 const digits = (s: string) => s.replace(/\D/g, '');
@@ -22,7 +23,7 @@ type Tab = 'numbers' | 'chats' | 'people' | 'replies';
 /** Configuração do WhatsApp: números (e quem responde em cada), conversas, quem fala com os agentes e o jeito de responder. */
 @Component({
   selector: 'app-whatsapp-config',
-  imports: [Icon, AgoPipe, AgentSelect, Switch],
+  imports: [Icon, AgoPipe, AgentSelect, Switch, Select],
   host: { class: 'block' },
   template: `
     <nav class="flex gap-1 border-b border-edge" role="tablist" aria-label="Configuração do WhatsApp">
@@ -97,19 +98,9 @@ type Tab = 'numbers' | 'chats' | 'people' | 'replies';
           <div class="rounded-2xl border border-edge bg-panel px-4 py-3 text-[13px]"><p class="font-semibold text-text">Escutar</p><p class="mt-0.5 text-mute">Um agente lê os trechos e registra o que impacta os projetos como ideias ou decisões.</p></div>
         </div>
         <div class="mt-4 flex flex-wrap items-center gap-3">
-          <select class="field !w-80 !py-2 text-[13.5px]" aria-label="Configurar uma conversa" (focus)="loadGroups()" (change)="addChat($any($event.target).value); $any($event.target).value = ''">
-            <option value="">+ Configurar um grupo ou contato…</option>
-            @if (groups().length) {
-              <optgroup label="Grupos">
-                @for (g of groups(); track g.account + g.id) { <option [value]="'g|' + g.account + '|' + g.id + '|' + g.name">{{ g.name }} ({{ g.size }})</option> }
-              </optgroup>
-            }
-            @if (contactChats().length) {
-              <optgroup label="Contatos recentes">
-                @for (c of contactChats(); track c.phone) { <option [value]="'c|' + (c.account ?? 'main') + '|' + (c.chat ?? c.phone + '@s.whatsapp.net') + '|' + (c.name ?? fmt(c.phone))">{{ c.name ?? fmt(c.phone) }}</option> }
-              </optgroup>
-            }
-          </select>
+          <app-select class="w-96" [action]="true" [options]="chatOptions()" search="always" (opened)="loadGroups()" (picked)="addChat($event)"
+                      placeholder="Configurar um grupo ou contato…" label="Configurar uma conversa" searchPlaceholder="Buscar grupo ou contato…"
+                      [emptyLabel]="loadingGroups() ? 'Carregando grupos…' : 'Nenhum grupo ou contato novo.'" [minWidth]="380" />
           <span class="flex items-center gap-2 text-[13px] text-mute">A escuta lê depois de
             <input type="number" min="1" max="240" class="field !w-16 !py-1 text-center" aria-label="Minutos de conversa antes de ler" [value]="listenDelay()" (change)="setListenDelay($any($event.target).value)">
             min de conversa</span>
@@ -253,6 +244,15 @@ export class WhatsappConfig {
   protected readonly listenDelay = signal(10);
   /** contatos recentes que ainda não têm configuração própria */
   protected readonly contactChats = computed(() => this.contacts().filter(c => !this.chats().some(l => l.chat === (c.chat ?? `${c.phone}@s.whatsapp.net`))));
+  /** o que dá para configurar: grupos dos números conectados e contatos recentes ainda sem configuração */
+  protected readonly chatOptions = computed<SelectOption[]>(() => [
+    ...this.groups().map(g => ({ value: `g|${g.account}|${g.id}|${g.name}`, label: g.name, hint: `${g.size} participantes`, icon: 'users' as const, group: 'Grupos' })),
+    ...this.contactChats().map(c => ({
+      value: `c|${c.account ?? 'main'}|${c.chat ?? `${c.phone}@s.whatsapp.net`}|${c.name ?? formatPhone(c.phone)}`,
+      label: c.name ?? formatPhone(c.phone), hint: c.name ? formatPhone(c.phone) : c.last_text, icon: 'message' as const, group: 'Contatos recentes',
+    })),
+  ]);
+  protected readonly loadingGroups = signal(false);
   protected readonly phone = signal('');
   protected readonly ownerInput = signal('');
   protected readonly busy = signal(false);
@@ -296,9 +296,11 @@ export class WhatsappConfig {
 
   /** grupos de cada número conectado (carrega ao abrir a lista) */
   protected async loadGroups(): Promise<void> {
+    this.loadingGroups.set(true);
     const open = this.accounts().filter(a => a.state === 'open');
     const all = await Promise.all(open.map(a => this.ipc.invoke('wa:groups', a.account).then(gs => gs.map(g => ({ ...g, account: a.account })), () => [])));
     this.groups.set(all.flat().filter(g => !this.chats().some(l => l.chat === g.id)));
+    this.loadingGroups.set(false);
   }
   private saveChats(list: WaChatCfg[]): void {
     this.chats.set(list.map(c => ({ pending: 0, last_run: null, ...this.chats().find(x => x.account === c.account && x.chat === c.chat), ...c })));

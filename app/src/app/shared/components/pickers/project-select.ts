@@ -2,13 +2,13 @@ import { Component, computed, inject, input, model } from '@angular/core';
 
 import { STATUS_LABEL } from '../../services/projects/projects.model';
 import { ProjectsService } from '../../services/projects/projects.service';
-import { EntitySelect, SelectOption } from '../../ui/entity-select';
+import { Select, SelectOption } from '../../ui/select';
 
 /** Escolher projeto vendo o ícone de cada um. noneLabel liga a opção "sem projeto". Frentes aparecem como "Grupo › Frente". */
 @Component({
   selector: 'app-project-select',
-  imports: [EntitySelect],
-  template: `<app-entity-select [options]="options()" [(value)]="value" [noneLabel]="noneLabel()" [compact]="compact()"
+  imports: [Select],
+  template: `<app-select [options]="options()" [(value)]="value" [noneLabel]="noneLabel()" [compact]="compact()"
     [placeholder]="placeholder()" label="Projeto" />`,
 })
 export class ProjectSelect {

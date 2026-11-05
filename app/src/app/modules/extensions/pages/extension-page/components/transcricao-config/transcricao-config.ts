@@ -4,6 +4,7 @@ import { SttStatusDto } from '../../../../../../shared/contract';
 import { DictationService } from '../../../../../../shared/services/dictation/dictation.service';
 import { IpcService, errorMessage } from '../../../../../../shared/services/ipc/ipc.service';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { Select } from '../../../../../../shared/ui/select';
 import { Switch } from '../../../../../../shared/ui/switch';
 
 type Patch = { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null };
@@ -11,7 +12,7 @@ type Patch = { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiMode
 /** Configuração da Transcrição: motor (local ou OpenAI), o que baixar, e onde a transcrição é usada (ditado nos chats). */
 @Component({
   selector: 'app-transcricao-config',
-  imports: [Icon, Switch],
+  imports: [Icon, Switch, Select],
   host: { class: 'block' },
   template: `
     @let t = stt();
@@ -74,9 +75,7 @@ type Patch = { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiMode
             }
           </div>
           <h4 class="mt-5 text-[13px] font-semibold text-mute">Modelo</h4>
-          <select class="field mt-2 !w-72 text-[13.5px]" aria-label="Modelo da OpenAI" (change)="config({ openaiModel: $any($event.target).value })">
-            @for (m of openaiModels; track m) { <option [value]="m" [selected]="t?.openaiModel === m">{{ m }}</option> }
-          </select>
+          <app-select class="mt-2 block w-72" [options]="openaiOptions" [value]="t?.openaiModel ?? ''" (picked)="config({ openaiModel: $event })" label="Modelo da OpenAI" />
           <p class="mt-3 text-[12.5px] text-faint">Cobrado na sua conta da OpenAI por áudio transcrito. A chave só sai do seu PC para a própria OpenAI.</p>
         }
 
@@ -115,7 +114,11 @@ export class TranscricaoConfig {
     { id: 'small' as const, label: 'Melhor', hint: 'small · 488 MB · mais preciso' },
     { id: 'base' as const, label: 'Rápido', hint: 'base · 148 MB · responde antes' },
   ];
-  protected readonly openaiModels = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'];
+  protected readonly openaiOptions = [
+    { value: 'gpt-4o-transcribe', label: 'gpt-4o-transcribe', hint: 'Mais preciso' },
+    { value: 'gpt-4o-mini-transcribe', label: 'gpt-4o-mini-transcribe', hint: 'Mais barato' },
+    { value: 'whisper-1', label: 'whisper-1', hint: 'O clássico' },
+  ];
   protected readonly assetLabel: Record<string, string> = { whisper: 'o Whisper', ffmpeg: 'o ffmpeg', small: 'o modelo small', base: 'o modelo base' };
   protected readonly assetName = (n: string) => this.assetLabel[n] ?? n;
   protected readonly mb = (n: number) => Math.round(n / 1_048_576);

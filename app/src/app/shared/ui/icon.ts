@@ -5,7 +5,7 @@ import {
   Ellipsis, ExternalLink, File, Flag, Folder, FolderOpen, GitBranch, GitMerge, House, Inbox, KanbanSquare, Lightbulb,
   ListTree, MessageSquare, Moon, Pencil, Play, Plus, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
   BatteryLow, Zap, X, LayoutGrid, Maximize2, Minimize2, Columns2, Rows2, GripVertical, Waypoints, Building2, Coffee, Milestone, ArrowRight, RotateCw, RotateCcw, Crosshair, Rocket, Workflow, Puzzle, Copy,
-  Mic, MessageCircle, ArrowLeft,
+  Mic, MessageCircle, ArrowLeft, Search, Users,
 } from 'lucide-static';
 
 /** Nome usado no app → SVG do Lucide (strings estáticas do pacote, sem rede). */
@@ -71,6 +71,8 @@ const SVGS = {
   mic: Mic,
   message: MessageCircle,
   back: ArrowLeft,
+  search: Search,
+  users: Users,
 } as const;
 
 export type IconName = keyof typeof SVGS;
