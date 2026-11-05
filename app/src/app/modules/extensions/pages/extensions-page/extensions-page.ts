@@ -1,6 +1,6 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 
-import { ExtensionDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
+import { ExtensionDto, SttStatusDto, WaContactDto, WaStatusDto } from '../../../../shared/contract';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
@@ -144,6 +144,62 @@ export function formatPhone(n: string): string {
               }
             </div>
           }
+          @if (e.id === 'transcricao' && e.installed) {
+            @let t = stt();
+            <div class="mt-6 space-y-6 border-t border-edge pt-5">
+              <div>
+                <h3 class="font-semibold">Motor</h3>
+                <div class="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Motor de transcrição">
+                  @for (o of engines; track o.id) {
+                    <button type="button" role="radio" [attr.aria-checked]="t?.engine === o.id" (click)="config({ engine: o.id })"
+                            class="rounded-2xl border px-4 py-3 text-left" [class]="t?.engine === o.id ? 'border-frost/60 bg-frost/10' : 'border-edge bg-night hover:border-faint'">
+                      <span class="block font-semibold">{{ o.label }}</span><span class="mt-0.5 block text-[12.5px] text-mute">{{ o.hint }}</span></button>
+                  }
+                </div>
+              </div>
+
+              <div>
+                <h3 class="font-semibold">Motor local</h3>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <span class="text-[13px] text-mute">Modelo</span>
+                  @for (m of models; track m.id) {
+                    <button type="button" class="btn btn-sm" [class.!border-frost]="t?.model === m.id" [class.!text-frost]="t?.model === m.id" (click)="config({ model: m.id })">{{ m.label }}
+                      @if (t?.ext?.models?.[m.id]) { <app-icon name="check" [size]="13" class="text-yes" /> }</button>
+                  }
+                  <span class="flex-1"></span>
+                  @if (localReady()) { <span class="flex items-center gap-1.5 text-[13px] text-yes"><app-icon name="check" [size]="14" />Pronto</span> }
+                  @else if (!t?.ext?.progress) { <button type="button" class="btn btn-sm btn-primary" (click)="prepare()" [disabled]="busy()"><app-icon name="download" [size]="14" />Preparar ({{ prepareSize() }})</button> }
+                </div>
+                @if (t?.ext?.progress; as p) {
+                  <div class="mt-3">
+                    <p class="text-[12.5px] text-mute">Baixando {{ assetLabel[p.name] ?? p.name }}: {{ mb(p.done) }} de {{ mb(p.total) }} MB</p>
+                    <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-raise"><div class="h-full rounded-full bg-frost transition-all" [style.width.%]="(p.done / p.total) * 100"></div></div>
+                  </div>
+                }
+                @if (t?.ext?.error) { <p class="mt-2 text-[13px] text-no">{{ t!.ext!.error }}</p> }
+                <p class="mt-2 text-[12.5px] text-faint">Roda no seu PC, sem nuvem e sem gastar a cota do Claude. O ffmpeg baixado aqui também serve para vídeo (quadros + fala), com qualquer motor.</p>
+              </div>
+
+              <div>
+                <h3 class="font-semibold">OpenAI</h3>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  @if (t?.hasKey) {
+                    <span class="flex items-center gap-1.5 rounded-full bg-yes/12 px-3 py-1 text-[13px] text-yes"><app-icon name="check" [size]="13" />Chave guardada (criptografada pelo Windows)</span>
+                    <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="config({ key: null })">Remover</button>
+                  } @else {
+                    <input class="field !w-80 font-mono text-[13px]" type="password" autocomplete="off" placeholder="sk-..." aria-label="Chave da OpenAI" [value]="keyInput()" (input)="keyInput.set($any($event.target).value)">
+                    <button type="button" class="btn btn-sm" [disabled]="keyInput().trim().length < 20" (click)="saveKey()">Guardar chave</button>
+                  }
+                  <span class="flex-1"></span>
+                  <span class="text-[13px] text-mute">Modelo</span>
+                  <select class="field !w-56 !py-1 text-[13px]" aria-label="Modelo da OpenAI" (change)="config({ openaiModel: $any($event.target).value })">
+                    @for (m of openaiModels; track m) { <option [value]="m" [selected]="t?.openaiModel === m">{{ m }}</option> }
+                  </select>
+                </div>
+                <p class="mt-2 text-[12.5px] text-faint">Cobrado na sua conta da OpenAI por áudio transcrito. A chave só sai do seu PC para a própria OpenAI.</p>
+              </div>
+            </div>
+          }
         </section>
       }
     </div>
@@ -156,6 +212,22 @@ export class ExtensionsPage {
 
   protected readonly list = signal<ExtensionDto[]>([]);
   protected readonly wa = signal<WaStatusDto | null>(null);
+  protected readonly stt = signal<SttStatusDto | null>(null);
+  protected readonly keyInput = signal('');
+  protected readonly engines = [
+    { id: 'local' as const, label: 'Local (Whisper)', hint: 'No seu PC, grátis. Precisa preparar uma vez.' },
+    { id: 'openai' as const, label: 'OpenAI', hint: 'Na nuvem, com a sua chave. Mais preciso em áudio ruim.' },
+  ];
+  protected readonly models = [{ id: 'small' as const, label: 'Melhor (small, 488 MB)' }, { id: 'base' as const, label: 'Rápido (base, 148 MB)' }];
+  protected readonly openaiModels = ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'];
+  protected readonly assetLabel: Record<string, string> = { whisper: 'o Whisper', ffmpeg: 'o ffmpeg', small: 'o modelo small', base: 'o modelo base' };
+  protected readonly mb = (n: number) => Math.round(n / 1_048_576);
+  protected readonly localReady = computed(() => { const t = this.stt(); return !!t?.ext?.whisper && !!t.ext.ffmpeg && !!t.ext.models[t.model]; });
+  protected readonly prepareSize = computed(() => {
+    const t = this.stt(); if (!t) return '';
+    const mb = (t.ext?.whisper ? 0 : 9) + (t.ext?.ffmpeg ? 0 : 34) + (t.ext?.models[t.model] ? 0 : t.model === 'small' ? 465 : 141);
+    return `${mb} MB`;
+  });
   protected readonly accounts = computed(() => this.wa()?.accounts ?? []);
   protected readonly adding = signal(false);
   protected readonly contacts = signal<WaContactDto[]>([]);
@@ -182,6 +254,7 @@ export class ExtensionsPage {
 
   private async load(): Promise<void> {
     this.list.set(await this.ipc.invoke('ext:list'));
+    if (this.list().find(e => e.id === 'transcricao')?.installed) this.stt.set(await this.ipc.invoke('stt:status'));
     if (this.waInstalled()) {
       this.wa.set(await this.ipc.invoke('wa:status'));
       this.contacts.set(await this.ipc.invoke('wa:contacts'));
@@ -198,6 +271,10 @@ export class ExtensionsPage {
   protected uninstall(e: ExtensionDto): void { this.run(() => this.ipc.invoke('ext:uninstall', e.id)); }
   protected pair(): void { this.run(async () => { await this.ipc.invoke('wa:pair', null, digits(this.phone())); this.phone.set(''); this.adding.set(false); }); }
   protected logout(account: string): void { this.run(() => this.ipc.invoke('wa:logout', account)); }
+  protected config(patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }): void { this.run(() => this.ipc.invoke('stt:config', patch)); }
+  protected saveKey(): void { const k = this.keyInput().trim(); this.keyInput.set(''); this.config({ key: k }); }
+  // a preparação baixa centenas de MB: não prende a tela; o progresso chega pelo status
+  protected prepare(): void { this.error.set(null); this.ipc.invoke('stt:prepare').catch(e => this.error.set(errorMessage(e))).finally(() => this.load()); }
   protected setOpen(account: string, on: boolean): void { this.run(() => this.ipc.invoke('wa:setOpen', account, on)); }
   protected agentName(id: number | null): string { return id ? this.agents.byId().get(id)?.name ?? 'o agente' : 'a Central'; }
   protected isRestricted(id: number | null): boolean { return !!id && !!this.agents.byId().get(id)?.restricted; }

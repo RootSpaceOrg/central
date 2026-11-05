@@ -21,6 +21,7 @@ import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, set
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
+import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
 import { inbound as waInbound, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
@@ -274,11 +275,16 @@ function registerIpc(): void {
   handle('wa:setAgent', (account, agentId) => { setAccountAgent(account, agentId); send('ext:changed', null); });
   handle('wa:setOpen', (account, on) => { setAccountOpen(account, on); send('ext:changed', null); });
   handle('wa:contacts', () => listContacts());
+  handle('stt:status', () => sttStatus());
+  handle('stt:config', patch => { setSttConfig(patch); });
+  handle('stt:prepare', async () => { await prepareLocal(); });
+  // só nos testes (--capture): transcrever/analisar direto
+  if (CAPTURE) ipcMain.handle('stt:test', async (_e, kind: string, path: string) => (kind === 'video' ? analyzeVideo(path) : transcribeFile(path)));
   // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp
   if (CAPTURE) ipcMain.handle('wa:test-inbound', async (_e, m: Record<string, unknown>) => {
     const sent: { account: string; to: string; text: string }[] = [];
     waSetSender(async (account, to, text) => { sent.push({ account, to, text }); return {}; });
-    waInbound({ account: 'main', id: 't', chat: '5511900000000@s.whatsapp.net', phone: null, name: null, fromMe: false, self: false, text: '', at: Date.now(), ...m });
+    waInbound({ account: 'main', id: 't', chat: '5511900000000@s.whatsapp.net', phone: null, name: null, fromMe: false, self: false, text: '', at: Date.now(), ...m } as never);
     for (let i = 0; i < 240 && !sent.length; i++) await new Promise(r => setTimeout(r, 1000));
     return sent;
   });
@@ -341,6 +347,7 @@ app.whenReady().then(() => {
   if (!CAPTURE) setupTray(() => win, navigate);
   // extensões instaladas (WhatsApp…) ligam junto; o WhatsApp conversa com a Central pelos donos cadastrados
   onExtensionsChange(() => send('ext:changed', null));
+  initMedia(() => send('ext:changed', null));
   if (!CAPTURE || process.argv.includes('--extensions')) startInstalled();
   watchTurns(emitRun);
   // freio da cota: pausa perto do limite e retoma quando renova (testes só com --dispatch)

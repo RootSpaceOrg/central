@@ -13,6 +13,10 @@ import { sendChat } from './central-agent';
 import { all, get, now, run } from './db';
 import { callExtension, onExtensionEvent, running } from './extensions';
 import { digits, toWhatsApp } from './wa-format';
+import { agentCwd, getAgent } from './agentdefs';
+import { analyzeVideo, mediaReady, transcribeFile } from './media';
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import type { ChatMessageDto } from '../src/app/shared/contract';
 
 export { digits };
@@ -24,7 +28,8 @@ export const setSender = (fn: typeof sendOut) => { sendOut = fn; };
 type Notify = (chatId: number, msg: ChatMessageDto | null, live: boolean) => void;
 type Me = { id: string; lid: string | null; phone: string; name: string | null };
 export interface WaAccount { account: string; state: 'disconnected' | 'pairing' | 'connecting' | 'open'; me: Me | null; code: string | null; agent_id: number | null }
-interface WaMessage { account: string; id: string; chat: string; phone: string | null; name: string | null; fromMe: boolean; self: boolean; text: string; at: number }
+interface WaMedia { kind: 'image' | 'audio' | 'video' | 'document'; path: string | null; mime: string; seconds: number | null; name: string | null; voice?: boolean; tooBig?: boolean }
+interface WaMessage { account: string; id: string; chat: string; phone: string | null; name: string | null; fromMe: boolean; self: boolean; text: string; media?: WaMedia | null; at: number }
 
 /** estado de cada número (vem da extensão) */
 const accounts = new Map<string, Omit<WaAccount, 'agent_id'>>();
@@ -104,6 +109,38 @@ function touch(phone: string, m: WaMessage | null, dir: 'in' | 'out'): void {
     phone, m?.chat ?? null, m?.name ?? null, dir === 'in' ? now() : null, dir === 'out' ? now() : null, m?.text.slice(0, 500) ?? null, m?.account ?? null);
 }
 
+/**
+ * Mídia → texto que o agente entende: imagem e PDF ele abre (Read); áudio chega transcrito; vídeo vira quadros + fala.
+ * Agente de atuação restrita só lê a pasta media/ dele: o arquivo é copiado para lá.
+ */
+async function mediaText(m: WaMessage, agentId: number): Promise<string> {
+  const md = m.media;
+  if (!md) return m.text;
+  const caption = m.text ? `\nLegenda: ${m.text}` : '';
+  const secs = md.seconds ? ` de ${md.seconds}s` : '';
+  const label = { image: 'uma imagem', audio: md.voice ? 'um áudio' : 'um arquivo de áudio', video: 'um vídeo', document: `um documento${md.name ? ` (${md.name})` : ''}` }[md.kind];
+  if (md.tooBig || !md.path) return `[Mandou ${label} grande demais para abrir aqui (mais de 25 MB).]${caption}`;
+  const agent = getAgent(agentId);
+  const local = (file: string) => {
+    if (!agent?.restricted) return file;
+    const dir = join(agentCwd(agent), 'media');
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(file, join(dir, basename(file)));
+    return `media/${basename(file)}`;
+  };
+  if (md.kind === 'image' || md.kind === 'document') return `[Mandou ${label}: ${local(md.path)} (abra com Read para ver)]${caption}`;
+  if (!mediaReady()) return `[Mandou ${label}${secs}, mas a Central ainda não entende ${md.kind === 'audio' ? 'áudio' : 'vídeo'} (extensão Transcrição não instalada ou não preparada). Peça para escrever, se precisar.]${caption}`;
+  try {
+    if (md.kind === 'audio') return `[Mandou ${label}${secs}. Transcrição: "${(await transcribeFile(md.path)).text}"]${caption}`;
+    const out = agent?.restricted ? join(agentCwd(agent), 'media') : undefined;
+    const v = await analyzeVideo(md.path, out);
+    const frames = v.frames.map(f => (out ? `media/${basename(f)}` : f));
+    return `[Mandou ${label}${secs}. Quadros (abra com Read): ${frames.join(', ')}. Fala: ${v.transcript ? `"${v.transcript}"` : '(sem fala)'}]${caption}`;
+  } catch (e) {
+    return `[Mandou ${label}${secs}, mas não deu para entender: ${(e as Error).message}]${caption}`;
+  }
+}
+
 export function inbound(m: WaMessage): void {
   // o que você mandou do celular para outras pessoas não é conversa com a Central
   if (m.fromMe && !m.self) return;
@@ -115,10 +152,17 @@ export function inbound(m: WaMessage): void {
     if (m.phone) touch(m.phone, m, 'in');
     deps.changed();
     // número com "responder qualquer pessoa": quem escreveu conversa com o agente do número (com limite por pessoa)
-    if (openOf()[account] && m.phone && allowHit(m.phone)) talk(account, m.phone, m.chat, m.text, m.name ?? `+${m.phone}`, true);
+    if (openOf()[account] && m.phone && allowHit(m.phone)) withMedia(m, account, text => talk(account, m.phone!, m.chat, text, m.name ?? `+${m.phone}`, true));
     return;
   }
-  talk(account, m.self ? 'self' : m.phone!, m.chat, m.text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`);
+  withMedia(m, account, text => talk(account, m.self ? 'self' : m.phone!, m.chat, text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`));
+}
+
+/** texto puro segue na hora; com mídia, mostra "digitando" enquanto transcreve/abre e depois segue */
+function withMedia(m: WaMessage, account: string, go: (text: string) => void): void {
+  if (!m.media) return go(m.text);
+  callExtension(EXT, 'typing', { account, to: m.chat }).catch(() => {});
+  mediaText(m, agentFor(account)).then(go, () => go(m.text));
 }
 
 /** Dono escreveu: segue a conversa dele com o agente do número; o que chega enquanto ele responde vai junto depois. */

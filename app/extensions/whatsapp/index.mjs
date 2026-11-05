@@ -6,9 +6,9 @@
  *   extensão → Central: { id, result } | { id, error } | { event: 'status' | 'message' | 'log', data: { account, ... } }
  * Sem servidor e sem npm na máquina: é um arquivo só (empacotado com esbuild), baixado do release.
  */
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import makeWASocket, { DisconnectReason, jidNormalizedUser, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, normalizeMessageContent, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import pino from 'pino';
 
 const port = process.parentPort;
@@ -75,20 +75,42 @@ async function connect(a) {
       setTimeout(() => { if (s === a.sock) connect(a).catch(e => log(e.message)); }, code === DisconnectReason.restartRequired ? 200 : 3000);
     }
   });
-  s.ev.on('messages.upsert', ({ messages, type }) => {
+  s.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const m of messages) {
       const jid = m.key.remoteJid ?? '';
       if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue; // grupos e status ficam de fora
       if (sentIds.has(m.key.id)) continue;
-      const text = m.message?.conversation ?? m.message?.extendedTextMessage?.text ?? m.message?.imageMessage?.caption ?? null;
-      if (!text?.trim()) continue;
+      const c = normalizeMessageContent(m.message) ?? {};
+      const media = await saveMedia(a, s, m, c).catch(e => { log(`mídia: ${e.message}`); return null; });
+      const text = c.conversation ?? c.extendedTextMessage?.text ?? c.imageMessage?.caption ?? c.videoMessage?.caption ?? c.documentMessage?.caption ?? '';
+      if (!text.trim() && !media) continue;
       const pn = jid.endsWith('@s.whatsapp.net') ? jid : m.key.remoteJidAlt ?? m.key.senderPn ?? null;
       const me = a.state.me;
       const self = !!me && (jidNormalizedUser(jid) === me.id || (me.lid && jidNormalizedUser(jid) === me.lid));
-      emit('message', { account: a.id, id: m.key.id, chat: jid, phone: pn ? digits(pn.split('@')[0]) : null, name: m.pushName ?? null, fromMe: !!m.key.fromMe, self, text: text.trim(), at: Number(m.messageTimestamp ?? 0) * 1000 || Date.now() });
+      emit('message', { account: a.id, id: m.key.id, chat: jid, phone: pn ? digits(pn.split('@')[0]) : null, name: m.pushName ?? null, fromMe: !!m.key.fromMe, self, text: text.trim(), media, at: Number(m.messageTimestamp ?? 0) * 1000 || Date.now() });
     }
   });
+}
+
+/** mídia que os agentes entendem: imagem, áudio (inclusive de voz), vídeo e documento; até 25 MB */
+const MEDIA = { imageMessage: 'image', audioMessage: 'audio', videoMessage: 'video', documentMessage: 'document' };
+const EXT_OF = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'video/mp4': 'mp4', 'application/pdf': 'pdf' };
+async function saveMedia(a, s, m, c) {
+  const key = Object.keys(MEDIA).find(k => c[k]);
+  if (!key) return null;
+  const info = c[key];
+  const size = Number(info.fileLength ?? 0);
+  const kind = MEDIA[key];
+  const mime = String(info.mimetype ?? '').split(';')[0];
+  if (size > 25 * 1024 * 1024) return { kind, path: null, mime, seconds: info.seconds ?? null, name: info.fileName ?? null, tooBig: true };
+  const buf = await downloadMediaMessage(m, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: s.updateMediaMessage });
+  const dir = join(accountsDir, a.id, 'media');
+  mkdirSync(dir, { recursive: true });
+  const ext = EXT_OF[mime] ?? (info.fileName?.split('.').pop() || 'bin');
+  const path = join(dir, `${String(m.key.id).replace(/[^\w-]/g, '')}.${ext}`);
+  writeFileSync(path, buf);
+  return { kind, path, mime, seconds: info.seconds ?? null, name: info.fileName ?? null, voice: !!info.ptt };
 }
 
 /** destino: um chat que já falou com a gente (jid) ou um número (só dígitos, com DDI) */

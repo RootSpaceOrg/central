@@ -864,6 +864,15 @@ export interface WaAccountDto {
   open: boolean;
 }
 export interface WaStatusDto { installed: boolean; accounts: WaAccountDto[] }
+export interface SttStatusDto {
+  installed: boolean;
+  running: boolean;
+  engine: 'local' | 'openai';
+  model: 'small' | 'base';
+  openaiModel: string;
+  hasKey: boolean;
+  ext: { whisper: boolean; ffmpeg: boolean; models: { small: boolean; base: boolean }; progress: { name: string; done: number; total: number } | null; error: string | null } | null;
+}
 export interface WaContactDto { phone: string; name: string | null; last_in_at: string | null; last_out_at: string | null; last_text: string | null; account: string | null }
 
 export interface UpdateInfoDto {
@@ -1016,6 +1025,11 @@ export interface Api {
   /** responder qualquer pessoa que escrever nesse número (atendimento) */
   'wa:setOpen': (account: string, on: boolean) => void;
   'wa:contacts': () => WaContactDto[];
+  /** extensão Transcrição: motor, modelo, chave e o que já está baixado */
+  'stt:status': () => SttStatusDto;
+  'stt:config': (patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }) => void;
+  /** baixa o motor local (whisper.cpp, ffmpeg, modelo) */
+  'stt:prepare': () => void;
   'settings:set': (key: string, value: string) => void;
   'routines:list': () => RoutineDto[];
   'routines:create': (input: NewRoutineInput) => RoutineDto;

@@ -61,6 +61,8 @@ Como o trabalho anda:
 - Agente de atuação restrita (update_agent restricted): para falar com gente de fora (atendimento). Sem comandos nem
   arquivos; só a memória dele, chamar_gustavo e as ferramentas extras que o Gustavo liberar. Num número de WhatsApp com
   "responder qualquer pessoa", quem escrever conversa com o agente do número.
+- Áudio e vídeo (extensão Transcrição, se instalada): transcrever (arquivo de áudio → texto) e analisar_video (quadros +
+  fala). Imagens e PDFs você lê direto com Read. Áudios e vídeos que chegam pelo WhatsApp já vêm transcritos na mensagem.
 - Produção: quem pode subir (e o quê, ex.: hotfix pequeno) está nas instruções ou memórias de cada agente. Sem permissão, crítico
   ou na dúvida: decisão para o Gustavo.
 Regras:
@@ -146,6 +148,8 @@ export function deleteAgent(id: number): void {
 export const RESTRICTED_CENTRAL = ['remember', 'recall', 'forget', 'memory_recall', 'chamar_gustavo'];
 export const restrictedTools = (a: AgentDto) => [
   ...RESTRICTED_CENTRAL.map(t => `mcp__central__${t}`),
+  // só a pasta de mídia dele (imagens, PDFs, quadros de vídeo que chegam pelo WhatsApp)
+  'Read(./media/**)',
   ...a.tools.split(',').map(t => t.trim()).filter(Boolean),
 ];
 
