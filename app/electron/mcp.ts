@@ -297,7 +297,7 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
       budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: a.task_id ?? null, urgent: !!a.urgent, parent_run_id: parent }, h.emit);
     return `${target.name} foi avisado e vai trabalhar nisso (execução #${r.id}${runDto(r.id).status === 'queued' ? ', na fila' : ''}).`;
   }, h.backlog);
-  tool('whatsapp_send', 'Manda uma mensagem de WhatsApp por um número conectado na Central (extensão WhatsApp). to = número com DDI e DDD (ex.: 5511999998888). Sai pelo número em que você responde (ou o primeiro conectado); from_number escolhe outro. Para quem nunca falou com vocês, a Central pede aprovação ao Gustavo antes (a não ser que ele tenha liberado qualquer número). Texto curto, sem markdown pesado.', {
+  tool('whatsapp_send', 'Manda uma mensagem de WhatsApp por um número conectado na Central (extensão WhatsApp). to = número com DDI e DDD (ex.: 5511999998888) ou o nome de um grupo configurado na Central (ex.: "Clientes KultivAi"). Quando o Gustavo pedir na conversa da Central para você mandar algo num grupo ou contato, use esta ferramenta. Sai pelo número em que você responde (ou o primeiro conectado); from_number escolhe outro. Para quem nunca falou com vocês, a Central pede aprovação ao Gustavo antes (a não ser que ele tenha liberado qualquer número). Texto curto, sem markdown pesado.', {
     to: z.string(), text: z.string().max(4000), from_number: z.string().optional().describe('número conectado por onde sair, se houver mais de um'),
   }, async a => {
     const me = callerAgent(caller);

@@ -275,7 +275,19 @@ function talk(account: string, who: string, chat: string, text: string, name: st
 
 /** Ferramenta dos agentes: manda (ou pede aprovação para mandar) uma mensagem, pelo número em que o agente responde. */
 export async function agentSend(to: string, text: string, from: { name: string; agentId: number | null }, fromNumber?: string): Promise<string> {
+  // grupo: só os configurados em Extensões → WhatsApp → Conversas (pelo nome ou pelo id), pelo número que está nele
+  const g = to.trim().toLowerCase();
+  const group = chatCfgs().find(c => c.group && (c.chat.toLowerCase() === g || c.name.trim().toLowerCase() === g));
+  if (group) {
+    if (accounts.get(group.account)?.state !== 'open') throw new Error(`O número do grupo ${group.name} não está conectado agora.`);
+    await sendOut(group.account, group.chat, toWhatsApp(text));
+    return `Mensagem enviada no grupo ${group.name}.`;
+  }
   const n = digits(to);
+  if (/[a-z]/i.test(to) && n.length < 10) {
+    const names = chatCfgs().filter(c => c.group).map(c => c.name);
+    throw new Error(`Grupo "${to}" não está configurado. ${names.length ? `Grupos disponíveis: ${names.join(', ')}.` : 'Nenhum grupo configurado'} (o Gustavo configura em Extensões → WhatsApp → Conversas).`);
+  }
   if (n.length < 10) throw new Error('Número inválido: use DDI + DDD + número, ex.: 5511999998888.');
   const mine = Object.entries(agentsOf()).find(([acc, id]) => id === from.agentId && accounts.get(acc)?.state === 'open')?.[0];
   const byNumber = fromNumber ? [...accounts.values()].find(a => a.me?.phone === digits(fromNumber))?.account : undefined;

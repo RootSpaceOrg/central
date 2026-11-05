@@ -36,6 +36,7 @@ export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKin
 
 /** Ferramentas extras conhecidas, para sugerir no editor (o MCP precisa estar configurado no Claude Code). */
 export const TOOL_SUGGESTIONS: { value: string; label: string }[] = [
+  { value: 'mcp__central__whatsapp_send', label: 'Mandar WhatsApp (para agente restrito)' },
   { value: 'mcp__sentry', label: 'Sentry (erros de produção)' },
   { value: 'mcp__supabase', label: 'Supabase (banco)' },
   { value: 'mcp__stripe', label: 'Stripe (pagamentos)' },
