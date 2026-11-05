@@ -1,4 +1,4 @@
-import { Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 
 import { Prefs } from '../../contract';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
@@ -7,8 +7,16 @@ import { PrefsApiService } from '../../services/prefs/prefs-api.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { UpdateService } from '../../services/update/update.service';
 import { UsageService } from '../../services/usage/usage.service';
-import { Icon } from '../../ui/icon';
+import { Icon, IconName } from '../../ui/icon';
 import { CHAT_WIDTHS, ChatPrefsService, FONT_MAX, FONT_MIN } from '../../services/chat-prefs/chat-prefs.service';
+
+type Tab = 'general' | 'chat' | 'quota' | 'about';
+const TABS: { id: Tab; label: string; icon: IconName; hint: string }[] = [
+  { id: 'general', label: 'Geral', icon: 'settings', hint: 'Como a Central roda no Windows e quando ela te avisa.' },
+  { id: 'chat', label: 'Chat', icon: 'central', hint: 'Aparência das conversas com os agentes.' },
+  { id: 'quota', label: 'Cota do Claude', icon: 'timer', hint: 'Quando os agentes param de começar trabalho para não estourar a cota.' },
+  { id: 'about', label: 'Sobre', icon: 'download', hint: 'Versão, onde ficam os dados e atualizações.' },
+];
 
 const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
   { key: 'tray', title: 'Continuar rodando na bandeja', hint: 'Fechar a janela esconde a Central perto do relógio. Rotinas, turnos e agentes seguem trabalhando.' },
@@ -21,15 +29,34 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
   imports: [Icon],
   template: `
     <dialog #dlg (close)="dialogs.settings.set(false)" aria-labelledby="st-title"
-            class="m-auto w-[min(600px,92vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
-      <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-4">
-        <div>
-          <h2 id="st-title" class="font-display text-2xl font-semibold">Preferências</h2>
-          <p class="mt-1 text-mute">Versão {{ update.info()?.current }}. Dados em %APPDATA%\\Central.</p>
-        </div>
-        <button type="button" class="btn btn-ghost !p-2" (click)="dialogs.settings.set(false)" aria-label="Fechar"><app-icon name="close" /></button>
-      </header>
-      <ul class="space-y-2 px-8 pb-6">
+            class="m-auto h-[min(640px,88vh)] w-[min(920px,94vw)] overflow-hidden rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+      <div class="flex h-full">
+        <!-- navegação por tipo de ajuste -->
+        <nav class="flex w-56 shrink-0 flex-col border-r border-edge bg-night/40 px-3 py-6" aria-label="Seções das preferências">
+          <h2 id="st-title" class="px-3 font-display text-xl font-semibold">Preferências</h2>
+          <ul class="mt-5 space-y-1" role="tablist" aria-orientation="vertical">
+            @for (t of tabs; track t.id) {
+              <li><button type="button" role="tab" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)"
+                          class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[14px]"
+                          [class]="tab() === t.id ? 'bg-raise font-semibold text-text' : 'text-mute hover:bg-raise/50 hover:text-text'">
+                <app-icon [name]="t.icon" [size]="16" />{{ t.label }}</button></li>
+            }
+          </ul>
+          <p class="mt-auto px-3 text-[12px] text-faint">Versão {{ update.info()?.current }}</p>
+        </nav>
+
+        <div class="flex min-w-0 flex-1 flex-col">
+          <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-4">
+            <div>
+              <h3 class="font-display text-[20px] font-semibold">{{ current().label }}</h3>
+              <p class="mt-0.5 text-[13px] text-mute">{{ current().hint }}</p>
+            </div>
+            <button type="button" class="btn btn-ghost !p-2" (click)="dialogs.settings.set(false)" aria-label="Fechar"><app-icon name="close" /></button>
+          </header>
+          <div class="min-h-0 flex-1 overflow-y-auto px-8 pb-8" role="tabpanel">
+            @switch (tab()) {
+              @case ('general') {
+      <ul class="space-y-2">
         @for (o of options; track o.key) {
           <li class="flex items-center gap-4 rounded-2xl border border-edge px-4 py-3">
             <div class="flex-1">
@@ -44,7 +71,9 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
         }
         @if (error()) { <li role="alert" class="text-[13px] text-no">{{ error() }}</li> }
       </ul>
-      <section class="mx-8 mb-6 rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-chat">
+              }
+              @case ('chat') {
+<section class="rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-chat">
         <div class="flex items-baseline justify-between">
           <h3 id="st-chat" class="font-semibold">Chat das sessões</h3>
           <button type="button" class="text-[12px] text-faint hover:text-text" (click)="chat.reset()">Padrão</button>
@@ -69,7 +98,9 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
           <p class="leading-relaxed">Assim fica uma resposta: <b>texto</b>, listas e <code class="rounded bg-raise px-1 font-mono text-[0.86em] text-frost">código</code> acompanham o tamanho.</p>
         </div>
       </section>
-      <section class="mx-8 mb-6 rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-gov">
+              }
+              @case ('quota') {
+<section class="rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-gov">
         <div class="flex items-baseline justify-between">
           <h3 id="st-gov" class="font-semibold">Freio da cota do Claude</h3>
           <button type="button" class="text-[12px] text-faint hover:text-text" (click)="resetLimits()">Padrão</button>
@@ -95,11 +126,19 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
         </table>
         <p class="mt-2 text-[12px] text-faint">Pausadas voltam sozinhas, na mesma sessão, quando a cota renova. A cota conta também o que você usa fora da Central: deixe folga.</p>
       </section>
-      <footer class="flex items-center gap-2 border-t border-edge px-8 py-4">
-        <span class="font-mono text-[11.5px] text-faint">Projetos em {{ projects.devRoot() }}</span>
-        <span class="flex-1"></span>
-        <button type="button" class="btn btn-sm" (click)="dialogs.settings.set(false); dialogs.update.set(true)"><app-icon name="download" [size]="14" />Atualizações</button>
-      </footer>
+              }
+              @case ('about') {
+                <dl class="space-y-3 text-[13.5px]">
+                  <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Versão</dt><dd class="mt-0.5 font-semibold">{{ update.info()?.current }}</dd></div>
+                  <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Dados</dt><dd class="mt-0.5 font-mono text-[12.5px]">%APPDATA%\\Central</dd></div>
+                  <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Projetos</dt><dd class="mt-0.5 font-mono text-[12.5px]">{{ projects.devRoot() }}</dd></div>
+                </dl>
+                <button type="button" class="btn mt-4" (click)="dialogs.settings.set(false); dialogs.update.set(true)"><app-icon name="download" [size]="15" />Ver atualizações</button>
+              }
+            }
+          </div>
+        </div>
+      </div>
     </dialog>`,
 })
 export class SettingsDialog {
@@ -110,6 +149,9 @@ export class SettingsDialog {
   private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
   protected readonly options = OPTIONS;
+  protected readonly tabs = TABS;
+  protected readonly tab = signal<Tab>('general');
+  protected readonly current = computed(() => TABS.find(t => t.id === this.tab())!);
   protected readonly usage = inject(UsageService);
   protected readonly prios = [{ i: 0, label: 'Alta' }, { i: 1, label: 'Normal' }, { i: 2, label: 'Baixa' }];
   protected setLimit(kind: 'session' | 'week', i: number, v: string): void {
