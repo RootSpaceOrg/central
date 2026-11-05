@@ -38,7 +38,7 @@ export const installed = (id: string) => !!CATALOG[id] && existsSync(fileOf(id))
 export const running = (id: string) => procs.has(id);
 
 export function listExtensions() {
-  return Object.values(CATALOG).map(e => ({ ...e, installed: installed(e.id), running: running(e.id) }));
+  return Object.values(CATALOG).map(e => ({ ...e, installed: installed(e.id), running: running(e.id), enabled: getSetting(`ext:${e.id}:enabled`) !== '0' }));
 }
 
 /** Instala (ou atualiza): em dev copia do build local; instalado, baixa do release desta versão pelo gh. */
@@ -66,6 +66,14 @@ export async function installExtension(id: string): Promise<void> {
   setSetting(`ext:${id}:enabled`, '1');
   stopExtension(id);
   startExtension(id);
+  onChange();
+}
+
+/** Desabilitar para o processo e não liga mais ao abrir; a pasta (sessão do WhatsApp, modelos) fica para quando voltar. */
+export function setExtensionEnabled(id: string, on: boolean): void {
+  if (!installed(id)) throw new Error('Extensão não instalada.');
+  setSetting(`ext:${id}:enabled`, on ? '1' : '0');
+  if (on) startExtension(id); else stopExtension(id);
   onChange();
 }
 

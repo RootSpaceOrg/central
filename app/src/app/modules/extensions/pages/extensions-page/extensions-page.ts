@@ -36,7 +36,9 @@ export function formatPhone(n: string): string {
             <div class="min-w-0 flex-1">
               <h2 [id]="'ext-' + e.id" class="flex items-center gap-2 font-display text-xl font-semibold">{{ e.name }}
                 <span class="rounded-full bg-raise px-2 py-0.5 text-[12px] font-normal text-mute">v{{ e.version }}</span>
-                @if (e.installed) { <span class="rounded-full px-2 py-0.5 text-[12px] font-semibold" [class]="e.running ? 'bg-yes/15 text-yes' : 'bg-later/15 text-later'">{{ e.running ? 'instalada' : 'parada' }}</span> }
+                @if (e.installed) {
+                  <span class="rounded-full px-2 py-0.5 text-[12px] font-semibold" [class]="!e.enabled ? 'bg-raise text-mute' : e.running ? 'bg-yes/15 text-yes' : 'bg-later/15 text-later'">{{ !e.enabled ? 'desabilitada' : e.running ? 'ligada' : 'parada' }}</span>
+                }
               </h2>
               <p class="mt-1 text-[14px] leading-relaxed text-mute">{{ e.description }}</p>
               @if (e.warning) { <p class="mt-2 text-[13px] leading-relaxed text-later">{{ e.warning }}</p> }
@@ -44,11 +46,18 @@ export function formatPhone(n: string): string {
             @if (!e.installed) {
               <button type="button" class="btn btn-primary" (click)="install(e)" [disabled]="busy()"><app-icon name="download" [size]="15" />{{ busy() ? 'Instalando…' : 'Instalar' }}</button>
             } @else {
-              <button type="button" class="btn btn-ghost !text-no" (click)="uninstall(e)" [disabled]="busy()">Desinstalar</button>
+              <div class="flex gap-2">
+                <button type="button" class="btn" (click)="enable(e, !e.enabled)" [disabled]="busy()"
+                        [title]="e.enabled ? 'Para a extensão sem apagar nada (a sessão e os dados ficam para quando voltar)' : 'Liga de novo'">{{ e.enabled ? 'Desabilitar' : 'Habilitar' }}</button>
+                <button type="button" class="btn btn-ghost !text-no" (click)="uninstall(e)" [disabled]="busy()">Desinstalar</button>
+              </div>
             }
           </div>
 
-          @if (e.id === 'whatsapp' && e.installed) {
+          @if (e.installed && !e.enabled) {
+            <p class="mt-5 border-t border-edge pt-4 text-[13.5px] text-mute">Desabilitada: não roda e não liga quando a Central abre. {{ e.id === 'whatsapp' ? 'Os números continuam vinculados e voltam ao habilitar.' : 'O que foi baixado continua aqui.' }}</p>
+          }
+          @if (e.id === 'whatsapp' && e.installed && e.enabled) {
             <div class="mt-6 border-t border-edge pt-5">
               <h3 class="font-semibold">Números conectados</h3>
               <p class="mt-0.5 text-[13px] text-mute">Cada número tem quem responde nele. Na conversa "você mesmo" de cada número, também responde o agente dele.</p>
@@ -138,13 +147,22 @@ export function formatPhone(n: string): string {
                       <span class="w-44 shrink-0 font-mono">{{ fmt(c.phone) }}</span>
                       <span class="min-w-0 flex-1 truncate text-mute">{{ c.name ? c.name + ': ' : '' }}{{ c.last_text ?? '(só mensagens enviadas)' }}</span>
                       <span class="shrink-0 text-[12px] text-faint">{{ when(c) | ago }}</span>
+                      <button type="button" class="grid size-7 shrink-0 place-items-center rounded-lg text-faint hover:bg-raise hover:text-text" (click)="copy(c.phone)"
+                              [title]="copied() === c.phone ? 'Copiado' : 'Copiar número'" [attr.aria-label]="'Copiar ' + fmt(c.phone)">
+                        <app-icon [name]="copied() === c.phone ? 'check' : 'copy'" [size]="14" [class.text-yes]="copied() === c.phone" /></button>
+                      @if (owners().includes(c.phone)) {
+                        <span class="shrink-0 text-[12px] text-frost" title="Já pode conversar com os agentes">na lista</span>
+                      } @else {
+                        <button type="button" class="btn btn-sm shrink-0" (click)="addOwnerNumber(c.phone)" title="Pode conversar com os agentes (como você)">
+                          <app-icon name="plus" [size]="13" />Adicionar</button>
+                      }
                     </li>
                   }
                 </ul>
               }
             </div>
           }
-          @if (e.id === 'transcricao' && e.installed) {
+          @if (e.id === 'transcricao' && e.installed && e.enabled) {
             @let t = stt();
             <div class="mt-6 space-y-6 border-t border-edge pt-5">
               <div>
@@ -289,6 +307,12 @@ export class ExtensionsPage {
     if (n.length >= 12 && !this.owners().includes(n)) this.saveOwners([...this.owners(), n]);
     this.ownerInput.set('');
   }
+  protected addOwnerNumber(n: string): void { if (!this.owners().includes(n)) this.saveOwners([...this.owners(), n]); }
+  protected readonly copied = signal<string | null>(null);
+  protected copy(n: string): void {
+    this.ipc.invoke('app:copy', n).then(() => { this.copied.set(n); setTimeout(() => { if (this.copied() === n) this.copied.set(null); }, 1500); });
+  }
+  protected enable(e: ExtensionDto, on: boolean): void { this.run(() => this.ipc.invoke('ext:enable', e.id, on)); }
   protected removeOwner(n: string): void { this.saveOwners(this.owners().filter(x => x !== n)); }
   protected setAny(v: boolean): void { this.any.set(v); this.settings.set('wa:any', v ? '1' : '0'); }
   protected setNotify(v: boolean): void { this.notifyOn.set(v); this.settings.set('wa:notify', v ? '1' : '0'); }

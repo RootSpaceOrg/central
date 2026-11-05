@@ -851,7 +851,7 @@ export type AgentPriority = 'high' | 'normal' | 'low';
 
 export type AgentPatch = Partial<NewAgentInput>;
 
-export interface ExtensionDto { id: string; name: string; version: string; description: string; warning?: string; installed: boolean; running: boolean }
+export interface ExtensionDto { id: string; name: string; version: string; description: string; warning?: string; installed: boolean; running: boolean; enabled: boolean }
 export interface WaAccountDto {
   account: string;
   state: 'disconnected' | 'pairing' | 'connecting' | 'open';
@@ -1012,9 +1012,12 @@ export interface Api {
   'turns:start': (input: NewTurnInput) => TurnDto;
   'turns:stop': (id: number) => void;
   'settings:get': (key: string) => string | null;
+  'app:copy': (text: string) => void;
   'ext:list': () => ExtensionDto[];
   'ext:install': (id: string) => void;
   'ext:uninstall': (id: string) => void;
+  /** desabilita (para e não liga ao abrir, sem apagar nada) ou habilita de novo */
+  'ext:enable': (id: string, on: boolean) => void;
   'wa:status': () => WaStatusDto;
   /** vincula um número (account null = número novo): o código de 8 letras chega pelo status; devolve a conta */
   'wa:pair': (account: string | null, phone: string) => string;

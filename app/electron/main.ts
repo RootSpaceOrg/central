@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,7 +20,7 @@ import { listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
-import { callExtension, installExtension, listExtensions, onExtensionsChange, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
+import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
 import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
 import { inbound as waInbound, initWhatsApp, listContacts, pairAccount, setAccountAgent, setAccountOpen, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
@@ -98,6 +98,8 @@ const emitRun = {
 
 function registerIpc(): void {
   handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
+  // área de transferência do sistema (funciona mesmo sem a janela em foco, ao contrário do navigator.clipboard)
+  handle('app:copy', text => { clipboard.writeText(String(text)); });
   handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion() }));
 
   handle('projects:list', () => listProjects());
@@ -269,6 +271,7 @@ function registerIpc(): void {
   handle('ext:list', () => listExtensions());
   handle('ext:install', async id => { await installExtension(id); });
   handle('ext:uninstall', async id => { await uninstallExtension(id); });
+  handle('ext:enable', (id, on) => setExtensionEnabled(id, on));
   handle('wa:status', () => waStatus());
   handle('wa:pair', (account, phone) => pairAccount(account, phone));
   handle('wa:logout', async account => { await callExtension('whatsapp', 'logout', { account }); });
