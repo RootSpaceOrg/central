@@ -7,7 +7,7 @@
 import { UtilityProcess, app, utilityProcess } from 'electron';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -59,6 +59,8 @@ export async function installExtension(id: string): Promise<void> {
     rmSync(fileOf(id), { force: true });
     throw new Error('O arquivo baixado não confere com o esperado; não foi instalado.');
   }
+  // versões antigas do arquivo saem (a pasta guarda o resto: sessão, dados)
+  for (const f of readdirSync(dirOf(id))) if (f.startsWith(`${id}-`) && f.endsWith('.mjs') && f !== e.file) rmSync(join(dirOf(id), f), { force: true });
   setSetting(`ext:${id}:enabled`, '1');
   stopExtension(id);
   startExtension(id);
@@ -106,7 +108,12 @@ export function stopExtension(id: string): void {
 
 /** Liga as instaladas quando a Central abre. */
 export function startInstalled(): void {
-  for (const id of Object.keys(CATALOG)) if (installed(id) && getSetting(`ext:${id}:enabled`) !== '0') startExtension(id);
+  for (const id of Object.keys(CATALOG)) {
+    if (getSetting(`ext:${id}:enabled`) === '0') continue;
+    if (installed(id)) startExtension(id);
+    // estava instalada numa versão anterior: atualiza sozinha (a sessão do WhatsApp e os dados ficam na pasta)
+    else if (getSetting(`ext:${id}:enabled`) === '1') installExtension(id).catch(e => emit(id, 'log', `atualização: ${e.message}`));
+  }
 }
 
 export function callExtension<T = any>(id: string, call: string, args: Record<string, unknown> = {}, timeoutMs = 60_000): Promise<T> {

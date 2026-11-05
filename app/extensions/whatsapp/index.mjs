@@ -7,7 +7,7 @@
  */
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import makeWASocket, { Browsers, DisconnectReason, jidNormalizedUser, useMultiFileAuthState } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, jidNormalizedUser, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import pino from 'pino';
 
 const port = process.parentPort;
@@ -31,7 +31,9 @@ const digits = s => String(s ?? '').replace(/\D/g, '');
 
 async function connect() {
   const { state: auth, saveCreds } = await useMultiFileAuthState(authDir);
-  const s = makeWASocket({ auth, browser: Browsers.windows('Central'), logger: pino({ level: 'silent' }), markOnlineOnConnect: false, syncFullHistory: false });
+  // navegador padrão do Baileys (Chrome no Mac): o vínculo por código de pareamento só aceita um navegador conhecido;
+  // nome próprio ("Central") faz o celular dizer que o código está errado
+  const s = makeWASocket({ auth, logger: pino({ level: 'silent' }), markOnlineOnConnect: false, syncFullHistory: false });
   sock = s;
   s.ev.on('creds.update', saveCreds);
   s.ev.on('connection.update', async u => {
