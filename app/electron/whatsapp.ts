@@ -12,7 +12,7 @@ import { getSetting, onDecided, setSetting } from './backlog';
 import { sendChat } from './central-agent';
 import { all, get, now, run } from './db';
 import { callExtension, onExtensionEvent, running } from './extensions';
-import { digits, toWhatsApp } from './wa-format';
+import { digits, splitReply, toWhatsApp } from './wa-format';
 import { agentCwd, getAgent } from './agentdefs';
 import { analyzeVideo, mediaReady, transcribeFile } from './media';
 import { copyFileSync, mkdirSync } from 'node:fs';
@@ -67,7 +67,12 @@ const opened = () => [...accounts.values()].filter(a => a.state === 'open');
 export const owners = (): string[] => { try { return (JSON.parse(getSetting('wa:owners') ?? '[]') as string[]).map(digits).filter(Boolean); } catch { return []; } };
 const anyNumber = () => getSetting('wa:any') === '1';
 
-const intro = (who: string) => `(Mensagem de ${who} pelo WhatsApp. Responda curto, em texto simples do WhatsApp: *negrito* com um asterisco, listas com •,
+/** cada parágrafo da resposta vira uma mensagem (como uma pessoa manda), a não ser que desligue em Extensões */
+const splitOn = () => getSetting('wa:split') !== '0';
+const bubbles = () => (splitOn()
+  ? ' Cada parágrafo que você escrever (separado por linha em branco) sai como uma mensagem separada: quebre como uma pessoa quebraria, ou escreva tudo junto para mandar uma só. Se as suas instruções dizem como responder, siga elas.'
+  : '');
+const intro = (who: string) => `(Mensagem de ${who} pelo WhatsApp.${bubbles()} Responda curto, em texto simples do WhatsApp: *negrito* com um asterisco, listas com •,
 sem tabelas nem blocos de código. O que precisar de tela, diga onde está na Central.)`;
 
 let deps: { notify: Notify; changed: () => void; onStatus: () => void; centralId: () => number };
@@ -152,10 +157,10 @@ export function inbound(m: WaMessage): void {
     if (m.phone) touch(m.phone, m, 'in');
     deps.changed();
     // número com "responder qualquer pessoa": quem escreveu conversa com o agente do número (com limite por pessoa)
-    if (openOf()[account] && m.phone && allowHit(m.phone)) withMedia(m, account, text => talk(account, m.phone!, m.chat, text, m.name ?? `+${m.phone}`, true));
+    if (openOf()[account] && m.phone && allowHit(m.phone)) withMedia(m, account, text => soon(account, m.phone!, m.chat, text, m.name ?? `+${m.phone}`, true));
     return;
   }
-  withMedia(m, account, text => talk(account, m.self ? 'self' : m.phone!, m.chat, text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`));
+  withMedia(m, account, text => soon(account, m.self ? 'self' : m.phone!, m.chat, text, m.self ? 'Gustavo' : m.name ?? `+${m.phone}`));
 }
 
 /** texto puro segue na hora; com mídia, mostra "digitando" enquanto transcreve/abre e depois segue */
@@ -163,6 +168,22 @@ function withMedia(m: WaMessage, account: string, go: (text: string) => void): v
   if (!m.media) return go(m.text);
   callExtension(EXT, 'typing', { account, to: m.chat }).catch(() => {});
   mediaText(m, agentFor(account)).then(go, () => go(m.text));
+}
+
+/**
+ * Espera alguns segundos depois da última mensagem antes de chamar o agente: "oi, tudo bem?" + "preciso da sua ajuda"
+ * viram uma resposta só. 0 = responde na hora. (O que chega enquanto o agente responde já vai junto depois.)
+ */
+const gathering = new Map<string, { texts: string[]; timer?: ReturnType<typeof setTimeout> }>();
+function soon(account: string, who: string, chat: string, text: string, name: string, outside = false): void {
+  const wait = Math.max(0, Math.min(60, Number(getSetting('wa:wait') ?? 8) || 0));
+  if (!wait) return talk(account, who, chat, text, name, outside);
+  const k = `${account}:${who}`;
+  const g = gathering.get(k) ?? { texts: [] };
+  clearTimeout(g.timer);
+  g.texts.push(text);
+  g.timer = setTimeout(() => { gathering.delete(k); talk(account, who, chat, g.texts.join('\n'), name, outside); }, wait * 1000);
+  gathering.set(k, g);
 }
 
 /** Dono escreveu: segue a conversa dele com o agente do número; o que chega enquanto ele responde vai junto depois. */
@@ -186,14 +207,16 @@ function talk(account: string, who: string, chat: string, text: string, name: st
     if (msg?.role === 'error') last = `⚠️ ${msg.text}`;
     if (msg === null && !live) {
       clearInterval(keep);
-      sendOut(account, chat, toWhatsApp(last ?? 'Terminei, mas não tenho nada para dizer aqui. Veja a conversa na Central.')).catch(() => {});
+      const reply = toWhatsApp(last ?? 'Terminei, mas não tenho nada para dizer aqui. Veja a conversa na Central.');
+      // uma mensagem por parágrafo (a extensão manda em ordem, com "digitando" entre elas)
+      for (const part of splitOn() ? splitReply(reply) : [reply]) sendOut(account, chat, part).catch(() => {});
       const queued = waiting.get(key) ?? [];
       waiting.delete(key);
       if (queued.length) talk(account, who, chat, queued.join('\n\n'), name, outside);
     }
   };
   try {
-    const first = outside ? `(Mensagem de ${name} (+${who}), uma pessoa de fora, pelo WhatsApp. Responda como no WhatsApp: curto e educado.)` : intro(name);
+    const first = outside ? `(Mensagem de ${name} (+${who}), uma pessoa de fora, pelo WhatsApp.${bubbles()} Responda como no WhatsApp: curto e educado.)` : intro(name);
     const id = sendChat(chatId, agentId, chatId ? text : `${first}\n\n${text}`, notify, deps.changed);
     if (!chatId) {
       const phone = accounts.get(account)?.me?.phone;
