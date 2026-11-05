@@ -75,3 +75,22 @@ ok(phaseOf('Whatever', {}) === null, 'desconhecida não muda a fase');
   t2.stop(); void a;
 }
 console.log('fases ok');
+
+// estagiário em segundo plano: o "lançado" não é fim; termina com o aviso de conclusão
+{
+  let a3 = null; const fim = [];
+  const t3 = new ActivityTracker(n => n, x => { a3 = x; }, txt => fim.push(txt));
+  t3.handle({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu1', name: 'Agent', input: { description: 'infra', subagent_type: 'general-purpose', run_in_background: true } }] } });
+  t3.handle({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'Async agent launched successfully. agentId: abc123 (internal ID)' }] } });
+  ok(!t3.activity.subagents[0].finished_at, 'lançado em segundo plano continua ativo');
+  t3.handle({ type: 'assistant', parent_tool_use_id: 'tu1', message: { content: [{ type: 'tool_use', id: 'x1', name: 'Bash', input: { command: 'ls' } }] } });
+  ok(t3.activity.subagents[0].steps === 1 && !t3.activity.subagents[0].finished_at, 'passos do estagiário em segundo plano contam');
+  t3.handle({ type: 'user', message: { content: [{ type: 'text', text: '<task-notification><task-id>abc123</task-id><status>completed</status></task-notification>' }] } });
+  ok(!!t3.activity.subagents[0].finished_at && fim.length === 1, 'aviso de conclusão termina o estagiário');
+  // em primeiro plano continua igual: a resposta da chamada é o fim
+  t3.handle({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu2', name: 'Agent', input: { description: 'api' } }] } });
+  t3.handle({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu2', content: 'pronto, fiz X' }] } });
+  ok(!!t3.activity.subagents[1].finished_at, 'primeiro plano termina com a resposta');
+  t3.stop(); void a3;
+}
+console.log('segundo plano ok');

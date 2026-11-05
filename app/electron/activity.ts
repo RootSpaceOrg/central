@@ -48,21 +48,60 @@ export class ActivityTracker {
   /** É passo de subagente? (o histórico mostra recuado) */
   isSubagentStep(msg: any): boolean { return !!msg.parent_tool_use_id; }
 
+  /**
+   * Subagente em segundo plano (run_in_background): a chamada volta na hora ("lançado, agentId X"), mas ele segue
+   * trabalhando. Só termina quando chega o aviso de conclusão dele (task-notification com o id) ou se ficar 3 min sem
+   * dar passo nenhum.
+   */
+  private readonly background = new Map<string, { agentId: string | null; lastStep: number }>();
+
+  private finish(sub: ActivityDto['subagents'][number]): void {
+    sub.finished_at = new Date().toISOString();
+    sub.step = null;
+    this.background.delete(sub.id);
+    const ms = Date.parse(sub.finished_at) - Date.parse(sub.started_at);
+    this.onSubagentDone(`Subagente "${sub.description}" (${sub.type}) terminou em ${secs(ms)}, ${sub.steps} passo${sub.steps === 1 ? '' : 's'}`);
+  }
+
   handle(msg: any): void {
     const parent: string | null = msg.parent_tool_use_id ?? null;
     let changed = false;
+    // aviso de conclusão de um subagente em segundo plano (vem como texto com o id dele)
+    if (this.background.size) {
+      const raw = JSON.stringify(msg);
+      if (raw.includes('task-notification') || raw.includes('task_notification')) {
+        for (const [id, bg] of this.background) {
+          if (!bg.agentId || !raw.includes(bg.agentId)) continue;
+          const sub = this.activity.subagents.find(s => s.id === id && !s.finished_at);
+          if (sub) { this.finish(sub); changed = true; }
+        }
+      }
+      // ficou 3 min sem passo: conta como terminado (não fica "trabalhando" para sempre)
+      for (const [id, bg] of this.background) {
+        if (Date.now() - bg.lastStep < 180_000) continue;
+        const sub = this.activity.subagents.find(s => s.id === id && !s.finished_at);
+        if (sub) { this.finish(sub); changed = true; } else this.background.delete(id);
+      }
+    }
     if (msg.type === 'assistant') {
       for (const b of msg.message?.content ?? []) {
         if (b.type !== 'tool_use' || INTERNAL.has(b.name)) continue;
         if (!parent) { const ph = phaseOf(b.name, b.input); if (ph && ph !== this.activity.phase) { this.activity.phase = ph; changed = true; } }
         if (PLAN.has(b.name)) { if (!parent && this.plan(b.name, b.input)) changed = true; continue; }
         const sub = parent ? this.activity.subagents.find(s => s.id === parent) : null;
-        if (sub) { sub.step = this.describe(b.name, b.input); sub.steps++; changed = true; }
+        if (sub) {
+          // passo de quem já tinha sido dado como terminado: está trabalhando (segundo plano)
+          if (sub.finished_at) { sub.finished_at = null; if (!this.background.has(sub.id)) this.background.set(sub.id, { agentId: null, lastStep: Date.now() }); }
+          const bg = this.background.get(sub.id);
+          if (bg) bg.lastStep = Date.now();
+          sub.step = this.describe(b.name, b.input); sub.steps++; changed = true;
+        }
         else if (!parent && SUBAGENT.has(b.name)) {
           this.activity.subagents.push({
             id: b.id, type: b.input?.subagent_type ?? 'subagente', description: b.input?.description ?? 'Subagente',
             started_at: new Date().toISOString(), finished_at: null, step: null, steps: 0,
           });
+          if (b.input?.run_in_background) this.background.set(b.id, { agentId: null, lastStep: Date.now() });
           changed = true;
         } else if (!parent) { this.activity.step = this.describe(b.name, b.input); changed = true; }
       }
@@ -72,11 +111,15 @@ export class ActivityTracker {
         if (b.type !== 'tool_result') continue;
         const sub = this.activity.subagents.find(s => s.id === b.tool_use_id && !s.finished_at);
         if (!sub) continue;
-        sub.finished_at = new Date().toISOString();
-        sub.step = null;
+        // segundo plano: a resposta é só "lançado"; guarda o id dele para reconhecer o aviso de conclusão
+        const bg = this.background.get(sub.id);
+        const text = typeof b.content === 'string' ? b.content : JSON.stringify(b.content ?? '');
+        if (bg || /async agent launched|running in the background|agentId:/i.test(text)) {
+          this.background.set(sub.id, { agentId: /agentId:\s*([\w-]+)/.exec(text)?.[1] ?? bg?.agentId ?? null, lastStep: Date.now() });
+          continue;
+        }
+        this.finish(sub);
         changed = true;
-        const ms = Date.parse(sub.finished_at) - Date.parse(sub.started_at);
-        this.onSubagentDone(`Subagente "${sub.description}" (${sub.type}) terminou em ${secs(ms)}, ${sub.steps} passo${sub.steps === 1 ? '' : 's'}`);
       }
     }
     if (changed) this.emit();
