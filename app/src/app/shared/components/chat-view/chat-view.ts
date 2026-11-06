@@ -5,6 +5,7 @@ import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
 import { CHAT_MODELS, EFFORTS } from '../../services/agents/agents.service';
 import { ContextMenuService } from '../../services/context-menu/context-menu.service';
 import { DictationService, Recording } from '../../services/dictation/dictation.service';
+import { AskService } from '../../services/ask/ask.service';
 import { IpcService, errorMessage } from '../../services/ipc/ipc.service';
 import { ChatImage } from '../chat-image/chat-image';
 import { LiveService, elapsed } from '../../services/live/live.service';
@@ -89,6 +90,28 @@ export class ChatView implements OnDestroy {
   protected readonly withoutOptions = (t: string) => t.replace(OPTS, '').trim();
   /** só a última mensagem (com o agente parado) tem botões ativos: responder uma pergunta antiga confunde */
   protected readonly lastId = computed(() => this.s().messages().at(-1)?.id ?? null);
+
+  // ---------- acesso pedido pelo Claude e YOLO ----------
+  private readonly ask = inject(AskService);
+  protected readonly chatInfo = computed(() => { const id = this.s().current(); return id ? this.s().lookup(id) ?? null : null; });
+  protected readonly grantsOf = (t: string): { kind: 'dir' | 'tool'; value: string; label: string }[] => { try { return JSON.parse(t).grants ?? []; } catch { return []; } };
+  /** só o último pedido tem "Liberar e continuar" (os antigos já passaram) */
+  protected readonly lastPermId = computed(() => [...this.s().messages()].reverse().find(m => m.role === 'permission')?.id ?? null);
+  protected granted(g: { kind: 'dir' | 'tool'; value: string }): boolean {
+    const c = this.chatInfo();
+    return !!c && (c.yolo || (g.kind === 'dir' ? c.addDirs : c.allowTools).includes(g.value));
+  }
+  protected async grantAll(grants: { kind: 'dir' | 'tool'; value: string }[]): Promise<void> {
+    for (const g of grants) if (!this.granted(g)) await this.s().grant(g.kind, g.value);
+    this.send(`Liberei o acesso que você pediu (${grants.map(g => g.value).join(', ')}). Pode continuar de onde parou.`);
+  }
+  protected async toggleYolo(on: boolean): Promise<void> {
+    if (!on && !(await this.ask.confirm('Ligar o YOLO nesta conversa?', {
+      message: 'O Claude passa a fazer tudo sem pedir permissão: qualquer pasta, qualquer comando (inclusive apagar arquivos). Vale só para esta conversa, a partir da próxima mensagem.',
+      confirmLabel: 'Ligar YOLO', danger: true,
+    }))) return;
+    this.s().setYolo(!on);
+  }
 
   /** ditado: fala → texto na caixa (extensão Transcrição) */
   protected readonly dictation = inject(DictationService);

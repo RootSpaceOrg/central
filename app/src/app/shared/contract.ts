@@ -782,6 +782,11 @@ export interface LiveActivityDto extends ActivityDto { scope: 'chat' | 'run'; re
 export interface ChatDto {
   id: number;
   agent_id: number;
+  /** JSON: pastas e comandos liberados nesta conversa */
+  add_dirs?: string | null;
+  allow_tools?: string | null;
+  /** sem pedir permissão para nada */
+  yolo?: number;
   /** conversa de uma sessão de projeto: trabalha na pasta do projeto e pode editar código */
   project_slug: string | null;
   title: string;
@@ -796,7 +801,8 @@ export interface ChatDto {
 /** Escolhas da conversa enviadas junto com cada mensagem (ficam salvas na conversa). */
 export interface ChatOptions { model: string; effort: string }
 
-export type ChatRole = 'user' | 'assistant' | 'tool' | 'error';
+/** permission: o Claude pediu algo que ninguém pôde aprovar; texto = JSON { grants: [{ kind, value, label }] } */
+export type ChatRole = 'user' | 'assistant' | 'tool' | 'error' | 'permission';
 
 export interface ChatMessageDto {
   id: number;
@@ -1072,6 +1078,8 @@ export interface Api {
   'mcp:list': (force: boolean) => { list: McpServerDto[]; checked_at: string | null };
   'mcp:add': (input: { name: string; type: 'http' | 'sse' | 'stdio'; target: string; env?: Record<string, string> }) => void;
   'mcp:remove': (name: string) => void;
+  'chat:grant': (chatId: number, kind: 'dir' | 'tool', value: string) => void;
+  'chat:yolo': (chatId: number, on: boolean) => void;
   /** imagem colada no chat → caminho salvo (vai na mensagem como [[img:caminho]]) */
   'chat:attach': (bytes: Uint8Array, ext: string) => string;
   /** miniatura de uma imagem do chat (data URL) */

@@ -16,6 +16,8 @@ export class ChatApiService {
   rename(chatId: number, title: string) { return this.ipc.invoke('chat:rename', chatId, title); }
   stop(chatId: number) { return this.ipc.invoke('chat:stop', chatId); }
   remove(chatId: number) { return this.ipc.invoke('chat:delete', chatId); }
+  grant(chatId: number, kind: 'dir' | 'tool', value: string) { return this.ipc.invoke('chat:grant', chatId, kind, value); }
+  yolo(chatId: number, on: boolean) { return this.ipc.invoke('chat:yolo', chatId, on); }
   onStream(cb: (e: { chat_id: number; text: string }) => void) { return this.ipc.on('chat:stream', cb); }
   onEvent(cb: (e: { chat_id: number; message: ChatMessageDto | null; busy: boolean }) => void) { return this.ipc.on('chat:event', cb); }
 }

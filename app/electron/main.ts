@@ -14,7 +14,7 @@ import {
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
-import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
+import { chatFromRun, deleteChat, grantChat, setChatYolo, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { claimOf, listActivity, onActivity } from './activity';
@@ -309,6 +309,8 @@ function registerIpc(): void {
   handle('stt:status', () => sttStatus());
   handle('stt:config', patch => { setSttConfig(patch); });
   handle('stt:prepare', async () => { await prepareLocal(); });
+  handle('chat:grant', (chatId, kind, value) => grantChat(chatId, { kind, value }));
+  handle('chat:yolo', (chatId, on) => setChatYolo(chatId, on));
   // MCPs do Claude Code (Preferências → MCPs)
   handle('mcp:list', force => listMcpServers(!!force));
   handle('mcp:add', input => addMcpServer(input));

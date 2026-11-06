@@ -61,6 +61,30 @@
               </div>
             </div>
           }
+          @case ('permission') {
+            @let grants = grantsOf(m.text);
+            <div class="ml-10 rounded-2xl border border-later/40 bg-later/10 px-4 py-3">
+              <p class="text-[0.92em] font-semibold text-later">O Claude precisou de acesso e ninguém pôde aprovar na hora</p>
+              <ul class="mt-2 space-y-1.5">
+                @for (g of grants; track g.value) {
+                  <li class="flex items-center gap-2 text-[0.88em]">
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate font-mono" [title]="g.value">{{ g.kind === 'dir' ? g.value : g.value }}</span>
+                      <span class="block truncate text-faint" [title]="g.label">{{ g.label }}</span>
+                    </span>
+                    @if (granted(g)) { <span class="flex items-center gap-1 text-yes"><app-icon name="check" [size]="13" />liberado</span> }
+                    @else { <button type="button" class="btn btn-sm" (click)="chat.grant(g.kind, g.value)">{{ g.kind === 'dir' ? 'Liberar pasta' : 'Permitir' }}</button> }
+                  </li>
+                }
+              </ul>
+              @if (m.id === lastPermId() && !chat.currentBusy()) {
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                  <button type="button" class="btn btn-sm btn-primary" (click)="grantAll(grants)">Liberar e continuar</button>
+                  <span class="text-[0.82em] text-faint">Vale só nesta conversa. Para não ter que liberar nada, use o YOLO lá embaixo.</span>
+                </div>
+              }
+            </div>
+          }
           @case ('error') {
             <p class="ml-10 rounded-xl bg-no/10 px-3 py-2 text-[0.92em] text-no">{{ m.text }}</p>
           }
@@ -155,6 +179,13 @@
                 [title]="'Modelo desta conversa: ' + modelLabel()" aria-label="Modelo">{{ modelLabel() }}<app-icon name="chevron" [size]="11" class="rotate-90" /></button>
         <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-mute hover:bg-raise hover:text-text" (click)="pickEffort($event)"
                 title="Nível de raciocínio (quanto o Claude pensa antes de agir)" aria-label="Nível de raciocínio">{{ effortLabel() }}<app-icon name="chevron" [size]="11" class="rotate-90" /></button>
+        @if (chatInfo(); as ci) {
+          @if (!chat.agent()?.restricted) {
+            <button type="button" (click)="toggleYolo(ci.yolo)" [attr.aria-pressed]="ci.yolo"
+                    class="rounded-lg px-2 py-1 text-[12px] font-semibold transition-colors" [class]="ci.yolo ? 'bg-no/20 text-no hover:bg-no/30' : 'text-faint hover:bg-raise hover:text-text'"
+                    [title]="ci.yolo ? 'YOLO ligado: o Claude não pede permissão para nada nesta conversa. Clique para desligar.' : 'YOLO: o Claude faz tudo sem pedir permissão (qualquer pasta, qualquer comando) nesta conversa'">YOLO</button>
+          }
+        }
         <label class="grid size-8 cursor-pointer place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" title="Anexar imagem (ou cole um print com Ctrl+V)">
           <app-icon name="image" [size]="16" /><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple class="sr-only" (change)="onPick($event)" aria-label="Anexar imagem"></label>
         <span class="flex-1"></span>

@@ -3,13 +3,14 @@
  * Claude Code (usa a cota do plano), retomada com --resume na mesma pasta para manter o contexto.
  */
 import { ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
 import type { ChatDto, ChatMessageDto, ChatOptions, ChatRole } from '../src/app/shared/contract';
 import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, restrictedTools, sessionPromptFile } from './agentdefs';
 import { CHAT_MEDIA, DEV_ROOT, all, get, now, run } from './db';
 import { splitImages, userContent } from './chat-images';
+import { Grant, blockedDirs, grantsFrom, safeGrant } from './permissions';
 import { reopenDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
@@ -31,7 +32,7 @@ const inbox = new Map<number, { open: boolean; later: string[] }>();
 const userLine = (text: string) => `${JSON.stringify({ type: 'user', message: { role: 'user', content: userContent(text, CHAT_MEDIA) } })}\n`;
 
 export const listChats = (agentId: number | null) => all<ChatDto>(
-  `select id, agent_id, project_slug, title, created_at, updated_at, model, effort from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
+  `select id, agent_id, project_slug, title, created_at, updated_at, model, effort, add_dirs, allow_tools, yolo from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
 export const listMessages = (chatId: number) => all<ChatMessageDto>('select * from chat_messages where chat_id = ? order by id', chatId);
 export const deleteChat = (chatId: number) => { stopChat(chatId); run('delete from chats where id = ?', chatId); };
 export function renameChat(chatId: number, title: string): void {
@@ -91,8 +92,8 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
     else (box ?? inbox.set(chatId, { open: false, later: [] }).get(chatId)!).later.push(msg);
     return chatId;
   }
-  const chat = chatId ? get<{ agent_id: number | null; session_id: string | null; cwd: string | null; project_slug: string | null }>(
-    'select agent_id, session_id, cwd, project_slug from chats where id = ?', chatId) : null;
+  const chat = chatId ? get<{ agent_id: number | null; session_id: string | null; cwd: string | null; project_slug: string | null; add_dirs: string | null; allow_tools: string | null; yolo: number }>(
+    'select agent_id, session_id, cwd, project_slug, add_dirs, allow_tools, yolo from chats where id = ?', chatId) : null;
   if (chatId && !chat) throw new Error('Conversa não encontrada.');
   const agent = getAgent(chat?.agent_id ?? agentId) ?? centralAgent();
   const slug = chat ? chat.project_slug : projectSlug;
@@ -114,10 +115,14 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--append-system-prompt-file', `"${slug ? sessionPromptFile(slug) : agentPromptFile(agent)}"`];
   // continuação de uma execução (pedir ajuste): edita no worktree dela como a execução editava
   const fromRun = !!chat?.cwd && !!get('select 1 from runs where worktree_path = ?', chat.cwd);
+  // o que você liberou nesta conversa (pastas e comandos que o Claude pediu) e o YOLO; agente restrito não ganha nada disso
+  const extraTools = agent.restricted ? [] : parseList(chat?.allow_tools);
   if (agent.restricted) args.push('--allowedTools', `"${restrictedTools(agent).join(',')}"`);
-  else if (slug || fromRun) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SESSION_TOOLS, ...agentTools(agent)])].join(',')}"`);
+  else if (chat?.yolo) args.push('--permission-mode', 'bypassPermissions');
+  else if (slug || fromRun) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SESSION_TOOLS, ...agentTools(agent), ...extraTools])].join(',')}"`);
   else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
-  else args.push('--allowedTools', `"${agentTools(agent).join(',')}"`);
+  else args.push('--allowedTools', `"${[...agentTools(agent), ...extraTools].join(',')}"`);
+  if (!agent.restricted) for (const d of parseList(chat?.add_dirs)) args.push('--add-dir', `"${d}"`);
   const model = chosen.model || agent.model;
   if (model) args.push('--model', model);
   if (chosen.effort) args.push('--effort', chosen.effort);
@@ -131,6 +136,8 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   child.stdin.write(userLine(msg));
 
   let answered = false;
+  /** pastas que o Claude Code barrou nos comandos desta vez (viram "Liberar pasta" no fim) */
+  let blocked: Grant[] = [];
   let idle = false;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   const closeInput = () => { const box = inbox.get(id); if (box?.open) { box.open = false; child.stdin.end(); } };
@@ -180,6 +187,14 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
       if (m.type === 'result') closeInput();
       else closeTimer = setTimeout(closeInput, 60_000);
     }
+    // pediu algo que ninguém pôde aprovar (pasta fora, comando fora da lista): a tela mostra o botão de liberar
+    if (m.type === 'user') for (const b of m.message?.content ?? []) if (b.type === 'tool_result') blocked.push(...blockedDirs(typeof b.content === 'string' ? b.content : JSON.stringify(b.content ?? '')));
+    if (m.type === 'result' && (m.permission_denials?.length || blocked.length)) {
+      const all = [...blocked, ...grantsFrom(m.permission_denials ?? [])];
+      blocked = [];
+      const grants = all.filter((g, i) => all.findIndex(x => x.kind === g.kind && x.value === g.value) === i).filter(g => !(g.kind === 'dir' ? parseList(chatRow(id)?.add_dirs) : parseList(chatRow(id)?.allow_tools)).includes(g.value));
+      if (grants.length) save(id, 'permission', JSON.stringify({ grants }), notify);
+    }
     if (m.type === 'result' && m.is_error && !answered) {
       save(id, 'error', m.result || 'O agente não conseguiu responder.', notify);
     }
@@ -202,6 +217,28 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
     if (runId) reopenDelivery(runId).then(onCentralChange, () => {});
   });
   return id;
+}
+
+const parseList = (v: string | null | undefined): string[] => { try { return v ? JSON.parse(v) : []; } catch { return []; } };
+const chatRow = (id: number) => get<{ add_dirs: string | null; allow_tools: string | null }>('select add_dirs, allow_tools from chats where id = ?', id);
+
+/** Libera numa conversa o que o Claude pediu: pasta (--add-dir) ou comando/ferramenta (--allowedTools). Vale da próxima vez que ele abrir. */
+export function grantChat(chatId: number, g: Pick<Grant, 'kind' | 'value'>): void {
+  if (!safeGrant(g)) throw new Error('Isso não dá para liberar daqui.');
+  const row = chatRow(chatId);
+  if (!row) throw new Error('Conversa não encontrada.');
+  if (g.kind === 'dir') mkdirSync(g.value, { recursive: true }); // pasta que ele ia criar: o Claude só aceita pasta que existe
+  const col = g.kind === 'dir' ? 'add_dirs' : 'allow_tools';
+  const list = parseList(row[col]);
+  if (!list.includes(g.value)) run(`update chats set ${col} = ? where id = ?`, JSON.stringify([...list, g.value]), chatId);
+}
+
+/** YOLO: o Claude não pede permissão para nada nesta conversa (sem limite de pasta nem de comando). */
+export function setChatYolo(chatId: number, on: boolean): void {
+  const agent = get<{ restricted: number }>('select a.restricted from chats c join agents a on a.id = c.agent_id where c.id = ?', chatId);
+  if (!agent) throw new Error('Conversa não encontrada.');
+  if (on && agent.restricted) throw new Error('Agente de atuação restrita não tem YOLO: ele fala com gente de fora.');
+  run('update chats set yolo = ? where id = ?', on ? 1 : 0, chatId);
 }
 
 /** "Consultou as tarefas", "Criou uma ideia"… para mostrar no chat e nos logs o que foi feito. */

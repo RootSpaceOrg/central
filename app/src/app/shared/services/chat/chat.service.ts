@@ -7,7 +7,7 @@ import { ChatApiService } from './chat-api.service';
 import { ChatPrefsService } from '../chat-prefs/chat-prefs.service';
 import { SettingsApiService } from '../settings/settings-api.service';
 
-export interface Chat { id: number; agentId: number; projectSlug: string | null; title: string; updatedAt: Date; model: string; effort: string }
+export interface Chat { id: number; agentId: number; projectSlug: string | null; title: string; updatedAt: Date; model: string; effort: string; addDirs: string[]; allowTools: string[]; yolo: boolean }
 export interface ChatMessage { id: number; role: ChatRole; text: string; at: Date }
 
 /** Mensagens agrupadas para a tela: falas, e os passos (ferramentas) entre elas viram um bloco recolhível. */
@@ -17,7 +17,9 @@ export type ChatItem =
 
 const toChat = (d: ChatDto): Chat => ({
   id: d.id, agentId: d.agent_id, projectSlug: d.project_slug, title: d.title, updatedAt: new Date(d.updated_at), model: d.model ?? '', effort: d.effort ?? '',
+  addDirs: list(d.add_dirs), allowTools: list(d.allow_tools), yolo: !!d.yolo,
 });
+const list = (v: string | null | undefined): string[] => { try { return v ? JSON.parse(v) : []; } catch { return []; } };
 const toMessage = (d: ChatMessageDto): ChatMessage => ({ id: d.id, role: d.role, text: d.text, at: new Date(d.at) });
 
 /** Uma conversa aberta na tela: a do painel/tela Agentes (o próprio ChatService) ou a de uma aba de sessão do projeto. */
@@ -119,6 +121,19 @@ export class ChatSession {
   stop(): void {
     const id = this.current();
     if (id) this.api.stop(id);
+  }
+
+  /** libera nesta conversa o que o Claude pediu (pasta ou comando); vale da próxima vez que ele abrir */
+  async grant(kind: 'dir' | 'tool', value: string): Promise<void> {
+    const id = this.current();
+    if (!id) return;
+    try { await this.api.grant(id, kind, value); this.reload(); } catch (e) { this.error.set(errorMessage(e)); }
+  }
+
+  async setYolo(on: boolean): Promise<void> {
+    const id = this.current();
+    if (!id) return;
+    try { await this.api.yolo(id, on); this.reload(); } catch (e) { this.error.set(errorMessage(e)); }
   }
 }
 
