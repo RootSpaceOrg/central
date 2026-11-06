@@ -22,7 +22,7 @@ const DOT: Record<RunStatus, string> = {
   selector: 'app-runs-page',
   imports: [RouterLink, Icon, AgoPipe, MdLitePipe, ProjectAvatar, AgentSelect],
   templateUrl: './runs-page.html',
-  host: { class: 'grid h-full grid-cols-[360px_minmax(0,1fr)]' },
+  host: { class: 'flex h-full min-h-0 flex-col' },
 })
 export class RunsPage {
   protected readonly runs = inject(RunsService);
@@ -39,11 +39,68 @@ export class RunsPage {
   protected readonly dot = DOT;
   protected readonly isActive = isActive;
 
+  /** ?projeto= e ?agente= (links de outras telas chegam assim); a situação fica na tela */
   protected readonly filter = computed(() => this.query()?.get('projeto') ?? null);
-  protected readonly list = computed(() => {
+  protected readonly agentFilter = computed(() => Number(this.query()?.get('agente')) || null);
+  protected readonly status = signal<'all' | 'active' | 'attention' | 'done'>('all');
+
+  /** projeto-pai da execução ('-' = sem projeto): as frentes contam como o projeto */
+  private groupOf(r: Run): string { return r.projectSlug ? this.projects.bySlug().get(r.projectSlug)?.parentSlug ?? r.projectSlug : '-'; }
+  /** precisa de você: esperando (login, acesso), pausada, ou falhou/foi interrompida e ninguém assumiu */
+  protected attention(r: Run): boolean { return !!r.waiting || !!r.paused || ((r.status === 'failed' || r.status === 'killed') && !this.handedOff(r)); }
+
+  private readonly byProject = computed(() => {
     const f = this.filter();
-    return f ? this.runs.runs().filter(r => r.projectSlug === f) : this.runs.runs();
+    return f ? this.runs.runs().filter(r => r.projectSlug === f || this.groupOf(r) === f) : this.runs.runs();
   });
+  protected readonly projectChips = computed(() => {
+    const n = new Map<string, { n: number; live: number }>();
+    for (const r of this.runs.runs()) {
+      const k = this.groupOf(r), c = n.get(k) ?? { n: 0, live: 0 };
+      c.n++; if (isActive(r.status)) c.live++;
+      n.set(k, c);
+    }
+    const order = this.projects.living().map(p => p.slug);
+    const slugs = [...n.keys()].filter(k => k !== '-').sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    return [...slugs.map(s => ({ id: s, project: this.project(s), ...n.get(s)! })), ...(n.has('-') ? [{ id: '-', project: null, ...n.get('-')! }] : [])];
+  });
+  protected readonly agentTabs = computed(() => {
+    const n = new Map<number, { n: number; live: number }>();
+    for (const r of this.byProject()) {
+      if (!r.agentId) continue;
+      const c = n.get(r.agentId) ?? { n: 0, live: 0 };
+      c.n++; if (isActive(r.status)) c.live++;
+      n.set(r.agentId, c);
+    }
+    return [...n].map(([id, c]) => ({ agent: this.agent(id), id, ...c })).filter(x => x.agent).sort((a, b) => b.live - a.live || b.n - a.n);
+  });
+  private readonly byAgent = computed(() => { const a = this.agentFilter(); return a ? this.byProject().filter(r => r.agentId === a) : this.byProject(); });
+  protected readonly statusChips = computed(() => {
+    const l = this.byAgent();
+    return [
+      { id: 'all' as const, label: 'Todas', n: l.length },
+      { id: 'active' as const, label: 'Rodando', n: l.filter(r => isActive(r.status)).length },
+      { id: 'attention' as const, label: 'Precisam de você', n: l.filter(r => this.attention(r)).length },
+      { id: 'done' as const, label: 'Concluídas', n: l.filter(r => r.status === 'succeeded' && !r.waiting).length },
+    ];
+  });
+  protected readonly list = computed(() => {
+    const l = this.byAgent();
+    switch (this.status()) {
+      case 'active': return l.filter(r => isActive(r.status));
+      case 'attention': return l.filter(r => this.attention(r));
+      case 'done': return l.filter(r => r.status === 'succeeded' && !r.waiting);
+      default: return l;
+    }
+  });
+  protected setProject(slug: string | null): void { this.router.navigate([], { queryParams: { projeto: slug, agente: null }, queryParamsHandling: 'merge' }); }
+  protected setAgent(id: number | null): void { this.router.navigate([], { queryParams: { agente: id }, queryParamsHandling: 'merge' }); }
+
+  /** esperando você (login, acesso): resolvido, retoma de onde parou e abre a conversa */
+  protected async resume(r: Run): Promise<void> {
+    this.chatError.set(null);
+    try { this.chat.openInPanel(await this.runs.resume(r.id)); } catch (e) { this.chatError.set((e as Error).message); }
+  }
   protected readonly selected = computed<Run | null>(() => {
     const id = Number(this.query()?.get('run'));
     return this.runs.runs().find(r => r.id === id) ?? this.list()[0] ?? null;
