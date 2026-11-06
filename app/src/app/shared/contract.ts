@@ -936,6 +936,7 @@ export interface Api {
   'proposals:list': (statuses: ProposalStatus[]) => ProposalDto[];
   'proposals:create': (input: NewProposalInput) => ProposalDto;
   'proposals:decide': (id: number, verdict: Verdict, reason: string | null) => void;
+  'proposals:delete': (id: number) => void;
   'runs:list': (slug: string | null) => RunDto[];
   'runs:start': (input: NewRunInput) => RunDto;
   'runs:kill': (id: number) => void;

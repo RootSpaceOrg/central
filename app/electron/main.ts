@@ -8,7 +8,7 @@ import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
 import { imageDataUrl, saveImage } from './chat-images';
 import { continueRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
-  createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
+  createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
@@ -155,6 +155,7 @@ function registerIpc(): void {
   handle('proposals:list', statuses => listProposals(statuses));
   handle('proposals:create', input => { const p = createProposal(input); changed(); return p; });
   handle('proposals:decide', (id, verdict, reason) => { decide(id, verdict, reason); backlogChanged(); changed(); });
+  handle('proposals:delete', id => { deleteProposal(id); backlogChanged(); changed(); });
 
   handle('runs:list', slug => listRuns(slug));
   handle('runs:start', input => startRun(input, emitRun));

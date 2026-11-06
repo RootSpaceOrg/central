@@ -21,6 +21,8 @@ const CENTRAL_SUGGESTIONS = [
 ];
 
 const IMG = /\[\[img:([^\]\n]+)\]\]/g;
+/** bloco ```opcoes do agente: cada linha vira um botão de resposta */
+const OPTS = /```opcoes\s*\n([\s\S]*?)```/;
 
 /**
  * O Claude aceita imagens de até ~5 MB: print grande (4K em PNG) vira JPEG com no máximo 2000 px no lado maior.
@@ -83,6 +85,10 @@ export class ChatView implements OnDestroy {
     return e?.value ? e.label : 'Raciocínio';
   });
   protected readonly text = signal('');
+  protected readonly optionsOf = (t: string) => (OPTS.exec(t)?.[1] ?? '').split('\n').map(l => l.trim()).filter(Boolean).slice(0, 6);
+  protected readonly withoutOptions = (t: string) => t.replace(OPTS, '').trim();
+  /** só a última mensagem (com o agente parado) tem botões ativos: responder uma pergunta antiga confunde */
+  protected readonly lastId = computed(() => this.s().messages().at(-1)?.id ?? null);
 
   /** ditado: fala → texto na caixa (extensão Transcrição) */
   protected readonly dictation = inject(DictationService);

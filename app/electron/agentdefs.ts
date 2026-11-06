@@ -189,6 +189,7 @@ export function agentPromptFile(a: AgentDto): string {
       : !a.project_slug && !a.builtin ? 'Você pode criar e editar arquivos só na sua pasta de trabalho. Para mexer em código de projeto, crie tarefas ou coloque um agente para trabalhar (start_agent).'
       : 'Você não edita arquivos de código: para isso, crie tarefas ou coloque um agente para trabalhar (start_agent).',
   ];
+  parts.push(OPTIONS_RULE);
   // agente de projeto: mapa do código + memória (o foco é o papel dele)
   if (a.project_slug) parts.push(contextBlock(a.project_slug, [a.description ?? '', a.instructions], 1500));
   parts.push(memoryBlock(a.id));
@@ -222,6 +223,16 @@ function restrictedPromptFile(a: AgentDto, project: { name: string; description:
   return file;
 }
 
+/** Perguntas com opções viram botões no chat da Central (e lista numerada no WhatsApp). */
+export const OPTIONS_RULE = `## Perguntas com opções
+Quando você perguntar algo ao Gustavo com respostas prováveis, termine a mensagem com um bloco assim (uma opção por linha,
+curta e completa; no máximo 5). A tela mostra cada linha como um botão, e o clique manda a opção como resposta dele:
+\`\`\`opcoes
+Ver o status dos projetos
+Revisar as ideias novas
+\`\`\`
+Não numere as opções nem repita a lista no texto.`;
+
 /** Sessão do Gustavo dentro de um projeto: ele conduz, o Claude lê, edita e roda build/teste/git na pasta. */
 export const SESSION_TOOLS = [...BASE_TOOLS, 'Write', 'Edit', 'Bash(git:*)', 'Bash(gh:*)', 'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)',
   'Bash(python:*)', 'Bash(pytest:*)', 'Bash(uv:*)', 'Bash(dotnet:*)', 'Bash(cat:*)', 'Bash(grep:*)', 'Bash(find:*)'];
@@ -238,6 +249,7 @@ Você pode ler e editar código e rodar build, testes e git. Nunca faça push pa
 Ao terminar algo, diga o que mudou em poucas linhas. O que ficar pendente vira tarefa no backlog deste projeto.
 Se a conversa começou fora da Central (sessão importada do Claude Code ou do Orca), agora ela faz parte da Central:
 use as ferramentas \`central\` para consultar backlog, ideias e decisões antes de responder sobre o que está pendente.`,
+    OPTIONS_RULE,
   ].join('\n\n');
   const dir = join(app.getPath('userData'), 'agents');
   mkdirSync(dir, { recursive: true });

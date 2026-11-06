@@ -3,8 +3,12 @@
 export const digits = (s: string | null | undefined) => String(s ?? '').replace(/\D/g, '');
 
 /** Markdown da Central → texto do WhatsApp (*negrito*, • listas, sem cabeçalhos nem código). */
+/** bloco de opções (botões na Central) vira lista numerada */
+const optionsToList = (md: string) => md.replace(/```opcoes\s*\n([\s\S]*?)```/g, (_, body: string) =>
+  body.split('\n').map(l => l.trim()).filter(Boolean).map((l, i) => `${i + 1}. ${l}`).join('\n'));
+
 export function toWhatsApp(md: string): string {
-  return md
+  return optionsToList(md)
     .replace(/\*\*([^*\n]+)\*\*/g, '*$1*')
     .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')
     .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '$1 ($2)')

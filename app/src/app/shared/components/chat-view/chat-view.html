@@ -41,7 +41,19 @@
             <div class="group flex gap-3">
               @if (agent) { <app-project-avatar [project]="agent" [size]="28" class="mt-0.5" /> }
               <div class="min-w-0 flex-1">
-                <div class="md selectable" [innerHTML]="m.text | markdown"></div>
+                <div class="md selectable" [innerHTML]="withoutOptions(m.text) | markdown"></div>
+                @if (optionsOf(m.text); as opts) {
+                  @if (opts.length) {
+                    @let live = m.id === lastId() && !chat.currentBusy();
+                    <div class="mt-2.5 flex flex-wrap gap-2" role="group" aria-label="Respostas sugeridas">
+                      @for (o of opts; track $index) {
+                        <button type="button" (click)="send(o)" [disabled]="!live"
+                                class="rounded-full border px-3.5 py-1.5 text-left text-[0.93em] transition-colors"
+                                [class]="live ? 'border-frost/50 text-frost hover:bg-frost/10' : 'border-edge text-faint'">{{ o }}</button>
+                      }
+                    </div>
+                  }
+                }
                 <div class="mt-1 flex items-center gap-3 text-[0.8em] text-faint opacity-0 transition-opacity group-hover:opacity-100">
                   <span>{{ time(m.at) }}</span>
                   <button type="button" class="hover:text-text" (click)="copy(m.id, m.text)">{{ copied() === m.id ? 'Copiado' : 'Copiar' }}</button>

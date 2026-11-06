@@ -46,6 +46,12 @@ export function createProposal(input: NewProposalInput & { next_action?: string 
   return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
 }
 
+/** Apaga uma decisão (e a mensagem de WhatsApp que esperava por ela). Tarefas e execuções ligadas só perdem o vínculo. */
+export function deleteProposal(id: number): void {
+  run(`delete from wa_outbox where proposal_id = ? and status = 'pending'`, id);
+  if (!run('delete from proposals where id = ?', id).changes) throw new Error('Decisão não encontrada.');
+}
+
 /** Quem reage a uma decisão (ex.: WhatsApp manda a mensagem aprovada). true = tratou, o resto não roda. */
 const decidedHooks: ((p: ProposalDto, verdict: Verdict) => boolean)[] = [];
 export const onDecided = (fn: (p: ProposalDto, verdict: Verdict) => boolean) => { decidedHooks.push(fn); };

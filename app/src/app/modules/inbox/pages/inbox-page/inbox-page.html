@@ -168,6 +168,7 @@
     <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="batch('approve')"><app-icon name="check" [size]="14" />Aprovar</button>
     <button type="button" class="btn btn-sm btn-ghost !text-later" (click)="batch('defer')">Depois</button>
     <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="batch('reject')">{{ focus.tab() === 'idea' ? 'Descartar' : 'Recusar' }}</button>
+    @if (focus.tab() === 'decision') { <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="removeSelected()" title="Excluir de vez (some também do histórico)"><app-icon name="delete" [size]="14" />Excluir</button> }
     <button type="button" class="btn btn-sm btn-ghost" (click)="clearSel()" aria-label="Limpar seleção"><app-icon name="close" [size]="14" /></button>
   </div>
 }
@@ -189,6 +190,9 @@
         <span class="tabular-nums text-faint">{{ position() + 1 }} de {{ flat().length }}</span>
         <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-text disabled:opacity-30" [disabled]="position() <= 0" (click)="move(-1)" aria-label="Anterior" title="Anterior (←)"><app-icon name="chevron" [size]="14" class="rotate-180" /></button>
         <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-text disabled:opacity-30" [disabled]="position() >= flat().length - 1" (click)="move(1)" aria-label="Próximo" title="Próximo (→)"><app-icon name="chevron" [size]="14" /></button>
+        @if (item.kind === 'decision') {
+          <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-no" (click)="removeCurrent()" aria-label="Excluir decisão" title="Excluir de vez (some também do histórico)"><app-icon name="delete" [size]="15" /></button>
+        }
         <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-text" (click)="close()" aria-label="Fechar" title="Fechar (Esc)"><app-icon name="close" [size]="15" /></button>
       </div>
 

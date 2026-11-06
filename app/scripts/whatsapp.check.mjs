@@ -17,6 +17,7 @@ ok(f.toWhatsApp('## Resumo\n- um\n- dois') === '*Resumo*\n• um\n• dois', 'ca
 ok(f.toWhatsApp('veja [o PR](https://github.com/x/pull/1)') === 'veja o PR (https://github.com/x/pull/1)', 'link mostra a url');
 ok(f.toWhatsApp('rode `npm test`') === 'rode npm test', 'código sem crase');
 ok(f.digits('+55 (11) 99999-8888') === '5511999998888', 'só dígitos');
+ok(f.toWhatsApp('Qual?\n\n```opcoes\nVer status\nNada\n```') === 'Qual?\n\n1. Ver status\n2. Nada', 'opções viram lista numerada');
 
 // resposta em mensagens curtas
 ok(JSON.stringify(f.splitReply('Oi!\n\nTudo ótimo por aqui.\n\nO que você precisa?')) === JSON.stringify(['Oi!', 'Tudo ótimo por aqui.', 'O que você precisa?']), 'cada parágrafo do agente é uma mensagem');

@@ -54,6 +54,16 @@ export class ProposalsService {
     });
   }
 
+  /** apaga de vez (sai da Triagem e do histórico) */
+  remove(p: Proposal): void {
+    this.inbox.update(list => list.filter(x => x.id !== p.id));
+    this.approved.update(list => list.filter(x => x.id !== p.id));
+    this.api.remove(p.id).catch(e => {
+      this.error.set(`A decisão não foi apagada: ${errorMessage(e)}`);
+      this.load();
+    });
+  }
+
   async create(title: string, body: string, projectSlug: string | null): Promise<void> {
     await this.api.create({ title, body: body || null, project_slug: projectSlug });
     this.load();

@@ -19,7 +19,7 @@ import { agentSend, notifyOwners } from './whatsapp';
 import { analyzeVideo, transcribeFile } from './media';
 import { RESTRICTED_CENTRAL, createAgent, deleteAgent, getAgent, listAgents, updateAgent } from './agentdefs';
 import {
-  createIdea, createProposal, createTask, decide, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
+  createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
@@ -239,6 +239,9 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), next_action: z.string().optional(), tier: z.number().int().min(0).max(2).optional(),
     task_id: z.number().int().optional(), summary: z.string().optional(), options: z.array(z.string()).max(4).optional(),
   }, a => createProposal({ summary: a.summary ?? null, options: a.options ?? null, title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, next_action: a.next_action ?? null, tier: a.tier ?? null, source: 'central', task_id: a.task_id ?? null }), () => { h.backlog(); h.projects(); });
+  tool('delete_decision', 'Apaga uma decisão de vez (some da Triagem e do histórico). Só quando o Gustavo pedir para apagar/excluir; para dizer não, use decide com reject.', {
+    id: z.number().int(),
+  }, a => { deleteProposal(a.id); return `Decisão #${a.id} apagada.`; }, () => { h.backlog(); h.projects(); });
   tool('decide', 'Registra a decisão do Gustavo sobre uma decisão (só quando ele disser o que quer). approve cria tarefa em todo.', {
     id: z.number().int(), verdict: z.enum(['approve', 'defer', 'reject']), reason: z.string().optional(),
   }, a => decide(a.id, a.verdict, a.reason ?? null), () => { h.backlog(); h.projects(); });

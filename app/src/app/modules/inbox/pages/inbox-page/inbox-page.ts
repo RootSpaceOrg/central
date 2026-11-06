@@ -5,6 +5,7 @@ import { AgentSelect } from '../../../../shared/components/pickers/agent-select'
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
 import { DirectionService } from '../../../../shared/services/direction/direction.service';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
+import { AskService } from '../../../../shared/services/ask/ask.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { LiveService } from '../../../../shared/services/live/live.service';
 import { IDEA_SOURCE_LABEL, Idea, IdeasService } from '../../../../shared/services/ideas/ideas.service';
@@ -80,6 +81,7 @@ export class InboxPage {
   private readonly agents = inject(AgentsService);
   protected readonly live = inject(LiveService);
   private readonly settings = inject(SettingsApiService);
+  private readonly ask = inject(AskService);
 
   protected readonly key = keyOf;
   protected readonly stuck = stuck;
@@ -142,6 +144,24 @@ export class InboxPage {
     this.selected.set(s);
   }
   protected clearSel(): void { this.selected.set(new Set()); }
+
+  /** excluir de vez (recusar deixa no histórico; isto apaga) */
+  protected async removeCurrent(): Promise<void> {
+    const item = this.current();
+    if (item?.kind !== 'decision') return;
+    if (!(await this.ask.confirm('Excluir esta decisão?', { message: `"${item.p.title}" some da Triagem e do histórico.`, confirmLabel: 'Excluir', danger: true }))) return;
+    const l = this.flat(), at = this.position();
+    const next = l[at + 1] ?? l[at - 1];
+    this.proposals.remove(item.p);
+    if (next && next !== item) this.open(next); else this.close();
+  }
+  protected async removeSelected(): Promise<void> {
+    const sel = this.flat().filter(q => q.kind === 'decision' && this.selected().has(keyOf(q))) as { kind: 'decision'; p: Proposal }[];
+    if (!sel.length) return;
+    if (!(await this.ask.confirm(`Excluir ${sel.length} ${sel.length === 1 ? 'decisão' : 'decisões'}?`, { message: 'Somem da Triagem e do histórico.', confirmLabel: 'Excluir', danger: true }))) return;
+    for (const q of sel) this.proposals.remove(q.p);
+    this.clearSel();
+  }
   protected allIn(list: Item[]): boolean { return list.every(q => this.selected().has(keyOf(q))); }
 
   /** aprovar em lote pula o que precisa de você: ideia sem projeto e decisão com opções (falta escolher uma) */
