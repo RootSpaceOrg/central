@@ -110,20 +110,24 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     if (!p) throw new Error('Projeto não encontrado.');
     return { ...p, icon_value: p.icon_kind === 'image' ? '(imagem)' : p.icon_value, spark: undefined, repos: listRepos(slug), recent_commits: recent(slug, 14, 40).map(c => `${c.committed_at.slice(0, 10)} ${c.repo_name}: ${c.subject}`), open_tasks: listTasks(slug).filter(t => t.column !== 'done').map(t => ({ id: t.id, title: t.title, column: t.column })) };
   });
-  tool('create_project', 'Cria um projeto (pasta em Development). folder é opcional: padrão Development/<NomeSemEspacos>.', {
+  tool('create_project', 'Cria um projeto (pasta em Development). folder é opcional: padrão Development/<NomeSemEspacos>. Com parent_slug, cria uma frente (subprojeto) dentro desse projeto, com a pasta dentro da pasta dele; um nível só (frente não tem frente).', {
     name: z.string(), folder: z.string().optional(), status: z.enum(['active', 'maintenance', 'frozen']).optional(),
     color: z.string().optional().describe('hex, ex.: #3FBF8A'), description: z.string().optional(),
+    parent_slug: z.string().optional().describe('projeto de cima: o novo vira uma frente dele'),
   }, a => {
-    const folder = a.folder ?? join(app.getPath('home'), 'Development', a.name.normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^A-Za-z0-9]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(''));
-    const p = createProject({ name: a.name, folder, status: a.status ?? 'active', color: a.color ?? '#7FA2FF', description: a.description ?? null });
+    const pascal = a.name.normalize('NFD').replace(/\p{M}/gu, '').split(/[^A-Za-z0-9]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join('');
+    const parent = a.parent_slug ? get<{ folder: string }>('select folder from projects where slug = ?', a.parent_slug) : null;
+    if (a.parent_slug && !parent) throw new Error(`Projeto ${a.parent_slug} não encontrado.`);
+    const folder = a.folder ?? join(parent?.folder ?? join(app.getPath('home'), 'Development'), pascal);
+    const p = createProject({ name: a.name, folder, status: a.status ?? 'active', color: a.color ?? '#7FA2FF', description: a.description ?? null, parent_slug: a.parent_slug ?? null });
     syncProjects(p.slug, h.projects);
     return p;
   }, h.projects);
-  tool('update_project', 'Edita um projeto: nome, status (active, maintenance, frozen, dead), cor, descrição, ícone ou pasta.', {
+  tool('update_project', 'Edita um projeto: nome, status (active, maintenance, frozen, dead), cor, descrição, ícone, pasta ou o projeto de cima (parent_slug: vira frente dele; null tira da frente).', {
     slug: z.string(), name: z.string().optional(), status: z.enum(['active', 'maintenance', 'frozen', 'dead']).optional(),
     color: z.string().optional(), description: z.string().optional(),
     icon_kind: z.enum(['letter', 'emoji', 'lucide']).optional(), icon_value: z.string().optional().describe('emoji ou nome de ícone Lucide em kebab-case'),
-    folder: z.string().optional(),
+    folder: z.string().optional(), parent_slug: z.string().nullable().optional().describe('projeto de cima (frente); null = solta'),
   }, ({ slug, ...patch }) => { updateProject(slug, patch); if (patch.folder) syncProjects(slug, h.projects); }, h.projects);
   tool('delete_project', 'Remove um projeto da Central (a pasta e os repositórios continuam no disco). Só use se o Gustavo pediu explicitamente.', {
     slug: z.string(), confirm: z.literal(true).describe('precisa ser true'),
