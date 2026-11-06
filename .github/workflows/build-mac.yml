@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - name: Instalar
         working-directory: app
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Gerar o .dmg
         working-directory: app
         run: npm run dist:mac
