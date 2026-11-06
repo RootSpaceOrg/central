@@ -16,7 +16,7 @@ import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray }
 import { chatFromRun, deleteChat, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
-import { listActivity, onActivity } from './activity';
+import { claimOf, listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
 import { digest, listDeliveries, reviewDelivery, reviewBoard } from './deliveries';
 import { dispatchTodo, dispatchTriage } from './dispatch';
@@ -67,7 +67,7 @@ const dispatchNow = () => {
   if (CAPTURE && !process.argv.includes('--dispatch')) return; // testes não disparam agentes sozinhos (a não ser que peçam)
   const quota = () => getUsage(false).then(u => u.limits.find(l => l.kind === 'session')?.percent ?? null, () => null);
   dispatchTodo({
-    quota, setting: getSetting, setSetting,
+    quota, setting: getSetting, setSetting, claimed: id => !!claimOf(id),
     start: ({ small, ...input }) => startRun({ ...input, budget_usd: small ? SIZE_BUDGET.small : SIZE_BUDGET.large, proposal_id: null }, emitRun),
   }).catch(() => {});
   // agente de triagem: lê as ideias novas e deixa uma recomendação (gatilho em Triagem)

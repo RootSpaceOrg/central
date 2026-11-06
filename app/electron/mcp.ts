@@ -28,7 +28,7 @@ import { digest, listDeliveries, reportDelivery } from './deliveries';
 import { releaseStatus } from './release';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
 import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
-import { setStatus } from './activity';
+import { claimOf, setStatus } from './activity';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
@@ -447,7 +447,13 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
       task_id: z.number().int().optional().describe('tarefa do backlog em que está trabalhando, se houver'),
     }, a => {
       const task = a.task_id ? get<{ id: number; title: string }>('select id, title from tasks where id = ?', a.task_id) ?? null : null;
-      return setStatus(caller.kind, caller.id, a.phase, a.doing, task) ? 'ok' : 'Esta sessão não está sendo acompanhada.';
+      // outra frente já está nesta tarefa: avisa antes que as duas se atropelem na mesma worktree
+      const other = task ? get<{ id: number }>(`select id from runs where task_id = ? and status in ('queued','preparing','running') and id <> ? order by id limit 1`, task.id, caller.kind === 'run' ? caller.id : -1) : null;
+      const claim = task ? claimOf(task.id) : null;
+      if (!setStatus(caller.kind, caller.id, a.phase, a.doing, task)) return 'Esta sessão não está sendo acompanhada.';
+      if (other) return `Atenção: a tarefa #${task!.id} já está com a execução #${other.id}. Não trabalhe nela em paralelo: pare, ou combine com notify_agent.`;
+      if (claim && !(claim.scope === caller.kind && claim.ref === caller.id)) return `Atenção: a tarefa #${task!.id} já está sendo feita em outra conversa. Não trabalhe nela em paralelo.`;
+      return 'ok';
     });
   }
   return s;

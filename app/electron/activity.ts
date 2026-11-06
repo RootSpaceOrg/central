@@ -222,7 +222,19 @@ export function setStatus(scope: Scope, ref: number, phase: Phase, doing: string
   const t = trackers.get(`${scope}:${ref}`);
   if (!t) return false;
   t.declare(phase, doing, task);
+  if (task) claims.set(task.id, { scope, ref, at: Date.now() });
   return true;
+}
+
+/**
+ * Quem disse (set_status com task_id) que está fazendo cada tarefa. Uma conversa não é execução: sem isto a fila não
+ * sabe que a tarefa já tem dono e abre outra execução para ela. Vale enquanto quem declarou estiver vivo (até 30 min).
+ */
+const claims = new Map<number, { scope: Scope; ref: number; at: number }>();
+export function claimOf(taskId: number): { scope: Scope; ref: number } | null {
+  const c = claims.get(taskId);
+  if (!c || !trackers.has(`${c.scope}:${c.ref}`) || Date.now() - c.at > 30 * 60_000) return null;
+  return { scope: c.scope, ref: c.ref };
 }
 
 export function untrack(scope: Scope, ref: number, t: ActivityTracker | null): void {

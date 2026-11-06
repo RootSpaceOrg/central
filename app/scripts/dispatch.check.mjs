@@ -84,6 +84,14 @@ started = [];
 await d.dispatchTodo(sdeps2);
 ok(!started.length, 'não escolheu nenhuma: não pergunta de novo com a mesma lista');
 db.exec("update tasks set \"column\" = 'review' where id in (2, 3); update projects set todo_parallel = 2 where slug = 'kultivai'");
+// tarefa que uma conversa disse estar fazendo (set_status) não ganha execução da fila; sem a conversa, ganha
+db.exec("insert into tasks (id, project_slug, \"column\", title, priority, position) values (20, 'kultivai', 'todo', 'Da conversa', 0, 0)");
+started = [];
+await d.dispatchTodo({ ...sdeps2, claimed: id => id === 20 });
+ok(!started.some(s => s.task_id === 20), 'tarefa com dono numa conversa: a fila não abre outra');
+await d.dispatchTodo({ ...sdeps2, claimed: () => false });
+ok(started.some(s => s.task_id === 20), 'sem dono: a fila abre');
+db.exec("update tasks set \"column\" = 'review' where id = 20; update runs set status = 'succeeded' where task_id = 20");
 
 // develop → main
 ok(r.webUrl('git@github.com:RootSpaceOrg/mkt-platform-api.git') === 'https://github.com/RootSpaceOrg/mkt-platform-api', 'remote ssh');

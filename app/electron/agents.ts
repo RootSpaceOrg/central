@@ -56,6 +56,9 @@ function queueRun(input: NewRunInput & RunExtra, turnId: number | null, routineI
   const agent = input.agent_id ? getAgent(input.agent_id) : null;
   if (input.agent_id && !agent) throw new Error('Agente não encontrado.');
   if (agent?.restricted) throw new Error(`${agent.name} tem atuação restrita: só conversa (atendimento), não executa tarefas.`);
+  // uma tarefa, uma execução por vez: a fila e o start_agent podiam abrir duas para a mesma (e elas se atropelavam)
+  const busy = input.task_id ? get<{ id: number }>(`select id from runs where task_id = ? and status in ('queued','preparing','running') order by id limit 1`, input.task_id) : null;
+  if (busy) throw new Error(`A tarefa #${input.task_id} já está com a execução #${busy.id}: não abri outra. Para entrar nela, use notify_agent ou continue_run.`);
   const slug = input.project_slug || agent?.project_slug || null;
   const project = slug ? get<{ folder: string }>('select folder from projects where slug = ?', slug) : null;
   if (slug && !project) throw new Error('Projeto não encontrado.');

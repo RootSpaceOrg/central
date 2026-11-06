@@ -31,6 +31,8 @@ export interface DispatchDeps {
   setting?: (key: string) => string | null;
   setSetting?: (key: string, value: string) => void;
   now?: () => Date;
+  /** tarefa que uma conversa viva disse estar fazendo (set_status) */
+  claimed?: (taskId: number) => boolean;
 }
 
 let lastSkip = '';
@@ -96,7 +98,9 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
          and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.status = 'failed' and r.finished_at > ?)))
          and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
          and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
-       order by t.picked_at is null, t.priority, t.position, t.id`, o.slug, since);
+       order by t.picked_at is null, t.priority, t.position, t.id`, o.slug, since)
+      // tarefa que uma conversa disse estar fazendo (set_status) já tem dono
+      .filter(t => !deps.claimed?.(t.id));
     const go = (t: typeof ready[number]) => {
       try {
         deps.start({ project_slug: o.slug, agent_id: o.agent, repo_path: t.repo_path, prompt: `${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: o.permission, task_id: t.id });
