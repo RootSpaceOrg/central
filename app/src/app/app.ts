@@ -1,4 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { IS_WIN } from './shared/services/ipc/ipc.service';
 import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { QuickBar } from './shared/components/quick-bar/quick-bar';
 import { Component, computed, inject, signal } from '@angular/core';
@@ -53,6 +54,8 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
   templateUrl: './app.html',
 })
 export class App {
+  /** botões da janela: à direita no Windows, à esquerda no Mac */
+  protected readonly isWin = IS_WIN;
   protected readonly projects = inject(ProjectsService);
   protected readonly proposals = inject(ProposalsService);
   protected readonly runs = inject(RunsService);
@@ -133,6 +136,13 @@ export class App {
   protected readonly tick = signal(0);
 
   constructor() {
+    // Mac: Cmd+J, Cmd+K e Cmd+Enter fazem o que Ctrl faz no Windows (os atalhos escutam Ctrl); Cmd+C/V/X/A/Z seguem nativos
+    if (!IS_WIN) document.addEventListener('keydown', e => {
+      if (!e.metaKey || e.ctrlKey || !['j', 'k', 'enter'].includes(e.key.toLowerCase())) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      (e.target ?? document).dispatchEvent(new KeyboardEvent('keydown', { key: e.key, code: e.code, ctrlKey: true, shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
+    }, true);
     // clicar no fundo escuro de qualquer modal fecha, como o Esc (requestClose dispara o mesmo cancel/close que cada
     // modal já trata). Só se o clique começou e terminou fora da caixa: arrastar uma seleção até fora não fecha.
     const backdrop = (e: MouseEvent): HTMLDialogElement | null => {

@@ -50,10 +50,7 @@ export const sttStatus = () => ({ installed: installed(EXT), running: running(EX
 export const mediaReady = () => running(EXT) && (sttConfig().engine === 'openai' ? sttConfig().hasKey : !!extStatus?.whisper && !!extStatus.ffmpeg && !!extStatus.models[sttConfig().model]);
 
 /** motor local: whisper + ffmpeg + modelo; com a OpenAI, só o ffmpeg (para vídeo) */
-export const prepareLocal = () => process.platform !== 'win32' && sttConfig().engine === 'local'
-  ? Promise.reject(new Error('O motor local (Whisper) ainda não funciona no Mac. Use o motor da OpenAI por enquanto.'))
-  : prepareLocalNow();
-const prepareLocalNow = () => callExtension(EXT, 'setup', sttConfig().engine === 'openai' ? { only: 'ffmpeg' } : { model: sttConfig().model }, 30 * 60_000);
+export const prepareLocal = () => callExtension(EXT, 'setup', sttConfig().engine === 'openai' ? { only: 'ffmpeg' } : { model: sttConfig().model }, 30 * 60_000);
 
 const engineArgs = () => { const c = sttConfig(); return { engine: c.engine, model: c.model, openaiModel: c.openaiModel, apiKey: c.engine === 'openai' ? apiKey() : undefined }; };
 

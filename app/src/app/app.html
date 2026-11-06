@@ -1,12 +1,12 @@
 <div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[minmax(0,1fr)]' : 'grid-rows-[40px_minmax(0,1fr)_26px]'">
-  <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
-  <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
+  <!-- barra de título (os botões da janela são do sistema: à direita no Windows, à esquerda no Mac) -->
+  <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night" [class]="isWin ? 'pl-4 pr-[150px]' : 'pl-[84px] pr-4'">
     <img src="logo.png" alt="" class="size-6 rounded-lg" />
     <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
     <span class="flex-1"></span>
     <button type="button" class="no-drag flex w-[min(380px,40vw)] items-center gap-2 rounded-lg border border-edge bg-panel px-3 py-1 text-[12.5px] text-faint transition hover:border-faint hover:text-mute"
             (click)="openPalette()" aria-label="Buscar ou executar um comando">
-      <app-icon name="spark" [size]="13" />Buscar ou fazer algo…<span class="flex-1"></span><kbd class="font-mono text-[11px]">Ctrl K</kbd>
+      <app-icon name="spark" [size]="13" />Buscar ou fazer algo…<span class="flex-1"></span><kbd class="font-mono text-[11px]">{{ isWin ? 'Ctrl K' : '⌘K' }}</kbd>
     </button>
     <span class="flex-1"></span>
     <!-- comandos rápidos (rodar com um clique) -->

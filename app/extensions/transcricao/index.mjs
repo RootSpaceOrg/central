@@ -1,7 +1,8 @@
 /**
  * Extensão Transcrição da Central: áudio vira texto e vídeo vira quadros + fala, para os agentes entenderem.
  * - Motor local: whisper.cpp (roda no PC, sem nuvem e sem gastar cota) + ffmpeg para converter áudio e tirar quadros.
- *   Os programas e o modelo são baixados na primeira vez (com hash conferido) para a pasta da extensão.
+ *   Windows: os programas e o modelo são baixados na primeira vez (com hash conferido) para a pasta da extensão.
+ *   Mac: whisper-cli e ffmpeg vêm do Homebrew (instala sozinho se faltar); o modelo é baixado igual.
  * - Motor OpenAI (opcional): gpt-4o-transcribe pela API, com a chave que você cadastrar (a Central manda a chave em
  *   cada pedido; a extensão não guarda).
  * Mensagens: Central → { id, call: 'status' | 'setup' | 'transcribe' | 'video', args } ; extensão → { id, result | error }
@@ -31,10 +32,20 @@ const ASSETS = {
   small: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin', sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b', size: 487_601_967, file: 'ggml-small.bin' },
   base: { url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin', sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe', size: 147_951_465, file: 'ggml-base.bin' },
 };
-const paths = {
+const WIN = process.platform === 'win32';
+/** Mac/Linux: programa instalado no sistema (Homebrew em /opt/homebrew ou /usr/local, ou no PATH) */
+const sysBin = name => [...(process.env.PATH ?? '').split(':'), '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean)
+  .map(d => join(d, name)).find(p => existsSync(p)) ?? join('/opt/homebrew/bin', name);
+const BREW = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'].find(p => existsSync(p)) ?? null;
+const paths = WIN ? {
   whisper: join(bin, 'whisper', 'Release', 'whisper-cli.exe'),
   ffmpeg: join(bin, 'ffmpeg', 'ffmpeg-9.0.2-essentials_build', 'bin', 'ffmpeg.exe'),
   ffprobe: join(bin, 'ffmpeg', 'ffmpeg-9.0.2-essentials_build', 'bin', 'ffprobe.exe'),
+  model: m => join(bin, ASSETS[m].file),
+} : {
+  get whisper() { return sysBin('whisper-cli'); },
+  get ffmpeg() { return sysBin('ffmpeg'); },
+  get ffprobe() { return sysBin('ffprobe'); },
   model: m => join(bin, ASSETS[m].file),
 };
 const have = { whisper: () => existsSync(paths.whisper), ffmpeg: () => existsSync(paths.ffmpeg), model: m => existsSync(paths.model(m)) };
@@ -79,6 +90,17 @@ async function download(key) {
   } else renameSync(out, join(bin, a.file));
 }
 
+/** Mac: instala pelo Homebrew o que ainda não existe (total 0 = a tela mostra "instalando", sem MB) */
+async function brewInstall(formulas) {
+  const need = formulas.filter(f => !(f === 'ffmpeg' ? have.ffmpeg() : have.whisper()));
+  if (!need.length) return;
+  if (!BREW) throw new Error(`Falta ${need.join(' e ')}. Instale o Homebrew (brew.sh) e clique em Preparar de novo, ou rode: brew install ${need.join(' ')}`);
+  progress = { name: 'brew', done: 0, total: 0 };
+  push();
+  await run(BREW, ['install', ...need], { maxBuffer: 16 * 1024 * 1024, env: { ...process.env, HOMEBREW_NO_AUTO_UPDATE: '1' } })
+    .catch(e => { throw new Error(`brew install ${need.join(' ')} falhou: ${String(e.stderr || e.message).trim().split('\n').slice(-2).join(' ')}`); });
+}
+
 /** Prepara o motor local: baixa o que falta (programas + o modelo escolhido). Pode rodar de novo para trocar de modelo. */
 async function setup({ model = 'small', only } = {}) {
   if (only !== 'ffmpeg' && !ASSETS[model]?.file) throw new Error('Modelo inválido: small ou base.');
@@ -86,8 +108,11 @@ async function setup({ model = 'small', only } = {}) {
   setupError = null;
   setting = (async () => {
     try {
-      if (only !== 'ffmpeg' && !have.whisper()) await download('whisper');
-      if (!have.ffmpeg()) await download('ffmpeg');
+      if (!WIN) await brewInstall(only === 'ffmpeg' ? ['ffmpeg'] : ['whisper-cpp', 'ffmpeg']);
+      else {
+        if (only !== 'ffmpeg' && !have.whisper()) await download('whisper');
+        if (!have.ffmpeg()) await download('ffmpeg');
+      }
       if (only !== 'ffmpeg' && !have.model(model)) await download(model);
       return status();
     } catch (e) { setupError = e.message; throw e; }

@@ -39,6 +39,10 @@ import { createProject, deleteProject, listProjects, listRepos, recent, reorderP
 import {
   cloneRepo, createTerminal, githubRepos, killAllTerminals, killTerminal, listDir, readFile, resizeTerminal, writeFile, writeTerminal,
 } from './workspace';
+import { fixPath } from './proc';
+
+// macOS: o PATH do terminal (claude, git, gh) antes de qualquer agente rodar
+fixPath();
 
 const DEV = process.argv.includes('--dev');
 const arg = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
@@ -434,6 +438,8 @@ app.on('before-quit', () => { markQuitting(); pauseAllOnQuit(); stopAllChats(); 
 // (só no app de verdade: dev e testes com --data rodam ao lado da instalada)
 if (!CAPTURE && !DEV && !arg('data') && !app.requestSingleInstanceLock()) app.exit(0);
 app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
+// Mac: clicar no ícone do Dock com a janela escondida (na bandeja) traz ela de volta
+app.on('activate', () => { if (win) { win.show(); win.focus(); } });
 
 app.on('window-all-closed', () => {
   killAllTerminals();

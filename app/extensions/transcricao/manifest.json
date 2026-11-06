@@ -1,7 +1,7 @@
 {
   "id": "transcricao",
   "name": "Transcrição",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Áudio vira texto e vídeo vira quadros + fala, para os agentes entenderem (áudios do WhatsApp, gravações de reunião, vídeos). Motor local (Whisper, no seu PC, sem gastar cota) ou OpenAI.",
-  "warning": "O motor local baixa uns 530 MB na preparação (whisper.cpp, ffmpeg e o modelo). Áudio longo pode levar alguns minutos no processador."
+  "warning": "O motor local baixa uns 530 MB na preparação (whisper.cpp, ffmpeg e o modelo; no Mac, whisper e ffmpeg vêm do Homebrew). Áudio longo pode levar alguns minutos no processador."
 }

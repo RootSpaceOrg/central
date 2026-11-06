@@ -31,9 +31,9 @@ type Patch = { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiMode
       @if (downloading()) {
         @let p = t.ext?.progress;
         <div class="mt-3 px-1">
-          <p class="text-[12.5px] text-mute">{{ p ? 'Baixando ' + assetName(p.name) + ': ' + mb(p.done) + ' de ' + mb(p.total) + ' MB' : 'Começando…' }}</p>
+          <p class="text-[12.5px] text-mute">{{ !p ? 'Começando…' : !p.total ? 'Instalando whisper e ffmpeg pelo Homebrew (alguns minutos)…' : 'Baixando ' + assetName(p.name) + ': ' + mb(p.done) + ' de ' + mb(p.total) + ' MB' }}</p>
           <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-raise">
-            <div class="h-full rounded-full bg-frost transition-all" [class.animate-pulse]="!p" [style.width.%]="p ? (p.done / p.total) * 100 : 4"></div></div>
+            <div class="h-full rounded-full bg-frost transition-all" [class.animate-pulse]="!p || !p.total" [style.width.%]="p && p.total ? (p.done / p.total) * 100 : 4"></div></div>
         </div>
       }
       @if (t.ext?.error) { <p class="mt-3 rounded-2xl bg-no/10 px-5 py-3 text-[13.5px] text-no">{{ t.ext!.error }}</p> }

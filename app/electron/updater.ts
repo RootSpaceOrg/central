@@ -17,7 +17,7 @@ import { childEnv } from './workspace';
 
 const execFileP = promisify(execFile);
 const REPO = 'RootSpaceOrg/central';
-const INSTALLER = /^Central Setup (\d+\.\d+\.\d+)\.exe$/;
+const INSTALLER = process.platform === 'darwin' ? /^Central-(\d+\.\d+\.\d+)-\w+\.dmg$/ : /^Central Setup (\d+\.\d+\.\d+)\.exe$/;
 const REMOTE_TTL = 10 * 60_000;
 let building = false;
 let remote: { at: number; version: string | null; publishedAt: string | null; error: string | null } | null = null;
@@ -87,6 +87,7 @@ export async function installUpdate(): Promise<void> {
   if (!info.latest) throw new Error('Nenhuma versão nova encontrada.');
   // Mac: baixa o .dmg da versão e abre (arrastar para Aplicativos, como todo app de Mac)
   if (process.platform === 'darwin') {
+    if (info.installer_path) { await shell.openPath(info.installer_path); return; } // gerado aqui (a partir do código)
     const dir = join(app.getPath('temp'), 'central-update', info.latest);
     mkdirSync(dir, { recursive: true });
     const dmg = `Central-${info.latest}-${process.arch}.dmg`;
@@ -126,7 +127,7 @@ export function buildUpdate(publish: boolean, log: (line: string) => void, done:
   // sobe a versão de correção (0.4.1 → 0.4.2) para o instalador novo ser maior que o instalado
   step('npm', ['version', 'patch', '--no-git-tag-version'], code => {
     if (code !== 0) return finish(false, 'Não deu para subir a versão.');
-    step('npm', ['run', 'dist'], async code => {
+    step('npm', ['run', process.platform === 'darwin' ? 'dist:mac' : 'dist'], async code => {
       const local = localLatest();
       if (code !== 0 || !local) return finish(false, `O build falhou (código ${code}). Veja o log acima.`);
       if (!publish) return finish(true, `Versão ${local.version} pronta para instalar.`);
