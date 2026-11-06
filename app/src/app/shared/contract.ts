@@ -861,6 +861,8 @@ export type AgentPriority = 'high' | 'normal' | 'low';
 
 export type AgentPatch = Partial<NewAgentInput>;
 
+/** connector = do claude.ai; plugin = de um plugin do Claude Code; own = adicionado por você */
+export interface McpServerDto { name: string; target: string; status: 'connected' | 'auth' | 'failed' | 'unknown'; kind: 'connector' | 'plugin' | 'own'; tools_prefix: string }
 export interface ExtensionDto { id: string; name: string; version: string; description: string; warning?: string; installed: boolean; running: boolean; enabled: boolean }
 export interface WaAccountDto {
   account: string;
@@ -1066,6 +1068,10 @@ export interface Api {
   'stt:config': (patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }) => void;
   /** baixa o motor local (whisper.cpp, ffmpeg, modelo) */
   'stt:prepare': () => void;
+  /** servidores MCP do Claude Code (os que os agentes enxergam); force = checa de novo agora */
+  'mcp:list': (force: boolean) => { list: McpServerDto[]; checked_at: string | null };
+  'mcp:add': (input: { name: string; type: 'http' | 'sse' | 'stdio'; target: string; env?: Record<string, string> }) => void;
+  'mcp:remove': (name: string) => void;
   /** imagem colada no chat → caminho salvo (vai na mensagem como [[img:caminho]]) */
   'chat:attach': (bytes: Uint8Array, ext: string) => string;
   /** miniatura de uma imagem do chat (data URL) */

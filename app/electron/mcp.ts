@@ -29,6 +29,7 @@ import { releaseStatus } from './release';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
 import { callerAgent, createMemory, forgetMemory, recallMemories } from './memories';
 import { claimOf, setStatus } from './activity';
+import { listMcpServers } from './mcp-servers';
 import { createProject, deleteProject, listProjects, listRepos, recent, syncProjects, updateProject } from './projects';
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
@@ -310,6 +311,9 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
     const me = callerAgent(caller);
     return agentSend(a.to, a.text, { name: me ? listAgents().find(x => x.id === me)?.name ?? 'Um agente' : 'A Central', agentId: me }, a.from_number);
   }, h.backlog);
+  tool('list_mcp_servers', 'Servidores MCP disponíveis no Claude Code desta máquina (conectores do claude.ai, plugins e os do Gustavo), com o status (connected, auth = precisa o Gustavo autorizar, failed). tools_prefix é como as ferramentas dele aparecem (ex.: mcp__sentry): é o que vai em "Ferramentas extras" de um agente (update_agent tools) para liberar.', {
+    refresh: z.boolean().optional().describe('checar de novo agora (leva uns segundos)'),
+  }, async a => (await listMcpServers(!!a.refresh)).list);
   tool('chamar_gustavo', 'Chama o Gustavo (ou a equipe) para um caso que você não deve resolver sozinho: exceção, reembolso, algo técnico, pessoa irritada, ou o que não souber. Vira uma decisão na Triagem e um aviso no WhatsApp dele.', {
     resumo: z.string().max(1500).describe('o caso em poucas linhas: quem é, o que quer, o que você já disse'),
     sugestao: z.string().max(500).optional().describe('o que você acha que deveria ser feito'),

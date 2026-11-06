@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { Api, Events } from '../src/app/shared/contract';
 import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
 import { imageDataUrl, saveImage } from './chat-images';
+import { addMcpServer, listMcpServers, removeMcpServer } from './mcp-servers';
 import { continueRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
@@ -308,6 +309,10 @@ function registerIpc(): void {
   handle('stt:status', () => sttStatus());
   handle('stt:config', patch => { setSttConfig(patch); });
   handle('stt:prepare', async () => { await prepareLocal(); });
+  // MCPs do Claude Code (Preferências → MCPs)
+  handle('mcp:list', force => listMcpServers(!!force));
+  handle('mcp:add', input => addMcpServer(input));
+  handle('mcp:remove', name => removeMcpServer(name));
   // imagens nos chats: a tela salva o print colado e mostra as miniaturas
   handle('chat:attach', (bytes, ext) => saveImage(CHAT_MEDIA, bytes, ext));
   handle('chat:image', path => imageDataUrl(CHAT_MEDIA, path));

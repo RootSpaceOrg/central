@@ -65,6 +65,8 @@ Como o trabalho anda:
 - WhatsApp (extensão, se instalada): pode ter vários números, cada um com o agente que responde nele (padrão: a Central). O
   Gustavo e os donos cadastrados conversam por lá; whatsapp_send manda mensagem (sai pelo número do agente; contato novo pede
   aprovação dele, a não ser que ele tenha liberado qualquer número em Extensões).
+- MCPs (list_mcp_servers): quais servidores existem e o status. Para um agente usar um, ponha o tools_prefix nas ferramentas
+  extras dele (update_agent tools). Os que pedem autorização o Gustavo autoriza no Claude Code (/mcp).
 - Agente de atuação restrita (update_agent restricted): para falar com gente de fora (atendimento). Sem comandos nem
   arquivos; só a memória dele, chamar_gustavo e as ferramentas extras que o Gustavo liberar. Num número de WhatsApp com
   "responder qualquer pessoa", quem escrever conversa com o agente do número.
