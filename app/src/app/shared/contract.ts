@@ -1065,6 +1065,10 @@ export interface Api {
   'stt:config': (patch: { engine?: 'local' | 'openai'; model?: 'small' | 'base'; openaiModel?: string; key?: string | null }) => void;
   /** baixa o motor local (whisper.cpp, ffmpeg, modelo) */
   'stt:prepare': () => void;
+  /** imagem colada no chat → caminho salvo (vai na mensagem como [[img:caminho]]) */
+  'chat:attach': (bytes: Uint8Array, ext: string) => string;
+  /** miniatura de uma imagem do chat (data URL) */
+  'chat:image': (path: string) => string;
   /** ditado: áudio gravado no chat (webm) → texto */
   'stt:dictate': (audio: Uint8Array) => string;
   'settings:set': (key: string, value: string) => void;

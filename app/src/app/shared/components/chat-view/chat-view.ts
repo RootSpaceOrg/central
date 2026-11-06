@@ -5,7 +5,8 @@ import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
 import { CHAT_MODELS, EFFORTS } from '../../services/agents/agents.service';
 import { ContextMenuService } from '../../services/context-menu/context-menu.service';
 import { DictationService, Recording } from '../../services/dictation/dictation.service';
-import { errorMessage } from '../../services/ipc/ipc.service';
+import { IpcService, errorMessage } from '../../services/ipc/ipc.service';
+import { ChatImage } from '../chat-image/chat-image';
 import { LiveService, elapsed } from '../../services/live/live.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { Icon } from '../../ui/icon';
@@ -19,6 +20,22 @@ const CENTRAL_SUGGESTIONS = [
   'Quais projetos estão parados há mais de duas semanas?',
 ];
 
+const IMG = /\[\[img:([^\]\n]+)\]\]/g;
+
+/**
+ * O Claude aceita imagens de até ~5 MB: print grande (4K em PNG) vira JPEG com no máximo 2000 px no lado maior.
+ * Imagem pequena segue como veio.
+ */
+async function fitImage(file: File): Promise<Blob> {
+  const ok = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type);
+  if (ok && file.size <= 3.5 * 1024 * 1024) return file;
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const c = new OffscreenCanvas(Math.round(bmp.width * k), Math.round(bmp.height * k));
+  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+}
+
 /** quantos itens a conversa desenha de cada vez (o resto entra ao rolar para cima) */
 const PAGE = 60;
 
@@ -28,7 +45,7 @@ const drafts = new WeakMap<ChatSession, Map<string, string>>();
 /** Conversa com o agente atual do ChatService: mensagens, passos recolhíveis e caixa de mensagem. */
 @Component({
   selector: 'app-chat-view',
-  imports: [Icon, MarkdownPipe, ProjectAvatar],
+  imports: [Icon, MarkdownPipe, ProjectAvatar, ChatImage],
   templateUrl: './chat-view.html',
   host: { class: 'flex min-h-0 flex-col', '(keydown)': 'zoomKey($event)' },
 })
@@ -203,10 +220,60 @@ export class ChatView implements OnDestroy {
   }
 
   protected send(text = this.text()): void {
-    if (!text.trim()) return; // respondendo: a mensagem entra na mesma sessão (ele lê assim que terminar o passo atual)
-    this.s().send(text.trim());
+    const imgs = this.attachments();
+    if (!text.trim() && !imgs.length) return; // respondendo: a mensagem entra na mesma sessão (ele lê assim que terminar o passo atual)
+    // as imagens vão como marcadores no texto; a Central troca por blocos de imagem para o Claude
+    this.s().send([text.trim(), ...imgs.map(a => `[[img:${a.path}]]`)].filter(Boolean).join('\n'));
     this.setText('');
+    for (const a of imgs) URL.revokeObjectURL(a.url);
+    this.attachments.set([]);
     this.atBottom = true;
+  }
+
+  // ---------- imagens: colar print, arrastar ou escolher arquivo ----------
+  private readonly ipc = inject(IpcService);
+  protected readonly attachments = signal<{ path: string; url: string }[]>([]);
+  protected readonly attaching = signal(false);
+  protected readonly dropping = signal(false);
+  /** texto da mensagem sem os marcadores, e as imagens dela */
+  protected readonly plain = (t: string) => t.replace(IMG, '').replace(/\n{3,}/g, '\n\n').trim();
+  protected readonly imagesOf = (t: string) => [...t.matchAll(IMG)].map(m => m[1]);
+
+  protected onPaste(e: ClipboardEvent): void {
+    const files = [...(e.clipboardData?.files ?? [])].filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    files.forEach(f => this.attach(f));
+  }
+  protected onDrop(e: DragEvent): void {
+    this.dropping.set(false);
+    const files = [...(e.dataTransfer?.files ?? [])].filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    files.forEach(f => this.attach(f));
+  }
+  protected onPick(e: Event): void {
+    const input = e.target as HTMLInputElement;
+    [...(input.files ?? [])].forEach(f => this.attach(f));
+    input.value = '';
+  }
+  protected removeAttachment(path: string): void {
+    this.attachments.update(l => l.filter(a => { if (a.path === path) URL.revokeObjectURL(a.url); return a.path !== path; }));
+  }
+  private async attach(file: File): Promise<void> {
+    this.attaching.set(true);
+    this.micError.set(null);
+    try {
+      const blob = await fitImage(file);
+      const ext = blob.type === 'image/jpeg' ? 'jpg' : (blob.type.split('/')[1] ?? 'png');
+      const path = await this.ipc.invoke('chat:attach', new Uint8Array(await blob.arrayBuffer()), ext);
+      this.attachments.update(l => [...l, { path, url: URL.createObjectURL(blob) }]);
+      this.input()?.nativeElement.focus({ preventScroll: true });
+    } catch (err) {
+      this.micError.set(errorMessage(err));
+    } finally {
+      this.attaching.set(false);
+    }
   }
 
   /** Direto ao fim (sem animação: a rolagem suave gerava eventos no meio do caminho que soltavam o "grudado no fim"). */

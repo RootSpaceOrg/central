@@ -4,7 +4,8 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
-import { DB_PATH, DEV_ROOT, all, get, run } from './db';
+import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
+import { imageDataUrl, saveImage } from './chat-images';
 import { continueRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
@@ -306,6 +307,9 @@ function registerIpc(): void {
   handle('stt:status', () => sttStatus());
   handle('stt:config', patch => { setSttConfig(patch); });
   handle('stt:prepare', async () => { await prepareLocal(); });
+  // imagens nos chats: a tela salva o print colado e mostra as miniaturas
+  handle('chat:attach', (bytes, ext) => saveImage(CHAT_MEDIA, bytes, ext));
+  handle('chat:image', path => imageDataUrl(CHAT_MEDIA, path));
   // ditado nos chats: o áudio gravado na tela vira texto pelo motor escolhido (o ffmpeg da extensão abre o webm)
   handle('stt:dictate', async audio => {
     const file = join(app.getPath('temp'), `central-ditado-${Date.now()}.webm`);

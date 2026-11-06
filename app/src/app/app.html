@@ -1,4 +1,4 @@
-<div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[1fr]' : 'grid-rows-[40px_1fr_26px]'">
+<div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[minmax(0,1fr)]' : 'grid-rows-[40px_minmax(0,1fr)_26px]'">
   <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
   <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
     <img src="logo.png" alt="" class="size-6 rounded-lg" />
@@ -16,7 +16,7 @@
   <!-- modo foco: só o conteúdo (a Grade) na tela cheia -->
   <div class="grid min-h-0" [class]="layout.focus() ? 'grid-cols-[1fr]' : 'grid-cols-[56px_252px_1fr]'">
     <!-- barra de atividades -->
-    <nav [hidden]="layout.focus()" class="flex flex-col items-center gap-1.5 border-r border-edge bg-night py-3" aria-label="Seções">
+    <nav [hidden]="layout.focus()" class="flex min-h-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-edge bg-night py-3 [scrollbar-width:none]" aria-label="Seções">
       <!-- agente Central: sempre à mão, destacado -->
       <button type="button" (click)="chat.toggle()" [attr.aria-pressed]="chat.open()" aria-label="Agente Central (Ctrl+J)"
               class="nav-item group mb-2 !bg-frost/12 !text-frost hover:!bg-frost/20" [class.!bg-frost]="chat.open()" [class.!text-night]="chat.open()">

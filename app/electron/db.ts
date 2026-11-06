@@ -10,6 +10,8 @@ if (dataDir) app.setPath('userData', dataDir);
 
 export const DEV_ROOT = join(homedir(), 'Development');
 export const DB_PATH = join(app.getPath('userData'), 'central.db');
+/** imagens coladas nos chats */
+export const CHAT_MEDIA = join(app.getPath('userData'), 'chat-media');
 
 // Numa instalação nova a pasta ainda não existe quando o banco abre.
 mkdirSync(app.getPath('userData'), { recursive: true });

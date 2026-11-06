@@ -8,7 +8,8 @@ import { createInterface } from 'node:readline';
 
 import type { ChatDto, ChatMessageDto, ChatOptions, ChatRole } from '../src/app/shared/contract';
 import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, restrictedTools, sessionPromptFile } from './agentdefs';
-import { DEV_ROOT, all, get, now, run } from './db';
+import { CHAT_MEDIA, DEV_ROOT, all, get, now, run } from './db';
+import { splitImages, userContent } from './chat-images';
 import { reopenDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
 import { childEnv } from './workspace';
@@ -26,7 +27,8 @@ const procs = new Map<number, ChildProcess>();
  * vai como próxima mensagem quando o processo terminar.
  */
 const inbox = new Map<number, { open: boolean; later: string[] }>();
-const userLine = (text: string) => `${JSON.stringify({ type: 'user', message: { role: 'user', content: text } })}\n`;
+// com [[img:…]] no texto, a imagem vai junto como bloco de imagem (o Claude vê o print)
+const userLine = (text: string) => `${JSON.stringify({ type: 'user', message: { role: 'user', content: userContent(text, CHAT_MEDIA) } })}\n`;
 
 export const listChats = (agentId: number | null) => all<ChatDto>(
   `select id, agent_id, project_slug, title, created_at, updated_at, model, effort from chats where (? is null or agent_id = ?) order by updated_at desc limit 200`, agentId, agentId);
@@ -101,7 +103,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
     if (slug && (!folder || !existsSync(folder))) throw new Error('A pasta do projeto não existe.');
     cwd = folder ?? agentCwd(agent);
     chatId = Number(run('insert into chats (agent_id, title, cwd, project_slug) values (?,?,?,?)',
-      agent.id, msg.replace(/\s+/g, ' ').slice(0, 70), cwd, slug).lastInsertRowid);
+      agent.id, (splitImages(msg, CHAT_MEDIA).text || 'Imagem').replace(/\s+/g, ' ').slice(0, 70), cwd, slug).lastInsertRowid);
   }
   const id = chatId;
   if (options) run('update chats set model = ?, effort = ? where id = ?', options.model, options.effort, id);
