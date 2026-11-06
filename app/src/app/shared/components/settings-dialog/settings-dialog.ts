@@ -9,6 +9,7 @@ import { UpdateService } from '../../services/update/update.service';
 import { UsageService } from '../../services/usage/usage.service';
 import { Icon, IconName } from '../../ui/icon';
 import { McpSettings } from '../mcp-settings/mcp-settings';
+import { DataTransferService } from '../../services/data-transfer/data-transfer.service';
 import { CHAT_WIDTHS, ChatPrefsService, FONT_MAX, FONT_MIN } from '../../services/chat-prefs/chat-prefs.service';
 
 /** Presets do freio. Com 100%, só para quando a cota acaba de fato. */
@@ -160,6 +161,17 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
                   <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Projetos</dt><dd class="mt-0.5 font-mono text-[12.5px]">{{ projects.devRoot() }}</dd></div>
                 </dl>
                 <button type="button" class="btn mt-4" (click)="dialogs.settings.set(false); dialogs.update.set(true)"><app-icon name="download" [size]="15" />Ver atualizações</button>
+                <section class="mt-6 rounded-2xl border border-edge px-4 py-4" aria-labelledby="st-data">
+                  <h3 id="st-data" class="font-semibold">Seus dados</h3>
+                  <p class="mt-0.5 text-[13px] text-mute">Para usar a Central em outro computador (ex.: do Windows para o Mac): exporte aqui e importe lá. Vai tudo: projetos, backlog, ideias, decisões, agentes, memórias, rotinas e conversas. Importar substitui os dados de onde você importa (os de antes ficam como backup).</p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm" (click)="data.export()"><app-icon name="download" [size]="14" />Exportar…</button>
+                    <button type="button" class="btn btn-sm" (click)="data.import()"><app-icon name="folder-open" [size]="14" />Importar…</button>
+                  </div>
+                  @if (data.message(); as m) { <p class="mt-2 text-[12.5px] text-yes selectable">{{ m }}</p> }
+                  @if (data.error(); as e) { <p role="alert" class="mt-2 text-[12.5px] text-no">{{ e }}</p> }
+                  <p class="mt-2 text-[12px] text-faint">Conversas mudam de computador sem a sessão do Claude (o histórico do Claude fica no computador de origem): as mensagens continuam, e a próxima resposta começa uma sessão nova. O WhatsApp precisa conectar o número de novo.</p>
+                </section>
               }
             }
           </div>
@@ -201,6 +213,7 @@ export class SettingsDialog {
   protected readonly prefs = signal<Prefs | null>(null);
   /** pasta de dados (muda conforme o sistema) */
   protected readonly dataDir = signal('');
+  protected readonly data = inject(DataTransferService);
   protected readonly error = signal<string | null>(null);
 
   constructor() {

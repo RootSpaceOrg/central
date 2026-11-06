@@ -1081,6 +1081,14 @@ export interface Api {
   'mcp:list': (force: boolean) => { list: McpServerDto[]; checked_at: string | null };
   'mcp:add': (input: { name: string; type: 'http' | 'sse' | 'stdio'; target: string; env?: Record<string, string> }) => void;
   'mcp:remove': (name: string) => void;
+  /** exportar todos os dados num arquivo (devolve o caminho; null = cancelou) */
+  'data:export': () => string | null;
+  /** escolher um arquivo exportado: devolve quantos projetos, tarefas… ele tem (null = cancelou) */
+  'data:pickImport': () => { path: string; counts: Record<string, number> } | null;
+  /** substitui os dados por os do arquivo (caminhos ajustados para este computador) e reabre a Central */
+  'data:import': (path: string) => void;
+  /** pastas dentro de Development com repositório git que ainda não são projeto */
+  'projects:discover': () => { name: string; folder: string; repos: number }[];
   'chat:grant': (chatId: number, kind: 'dir' | 'tool', value: string) => void;
   'chat:yolo': (chatId: number, on: boolean) => void;
   /** imagem colada no chat → caminho salvo (vai na mensagem como [[img:caminho]]) */

@@ -281,6 +281,11 @@ export function seedAgents(): void {
   run('update chats set agent_id = ?, cwd = coalesce(cwd, ?) where agent_id is null', centralAgent().id, DEV_ROOT);
   if (get('select 1 from settings where key = ?', 'seed:agents:v1')) return;
   run(`insert into settings (key, value) values ('seed:agents:v1', ?)`, new Date().toISOString());
+  // instalação nova (sem projetos): só a Central; os agentes de exemplo eram do primeiro uso no PC do Gustavo
+  if (!get('select 1 from projects')) {
+    run(`insert into settings (key, value) values ('seed:agents:v2', ?) on conflict (key) do nothing`, new Date().toISOString());
+    return;
+  }
   const kultivai = get('select 1 from projects where slug = ?', 'kultivai') ? 'kultivai' : null;
   const examples: NewAgentInput[] = [
     {

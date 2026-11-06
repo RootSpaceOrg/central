@@ -1,12 +1,13 @@
 import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
 import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
 import { imageDataUrl, saveImage } from './chat-images';
 import { addMcpServer, listMcpServers, removeMcpServer } from './mcp-servers';
+import { adaptImport, discoverProjects, exportData, inspectImport, swapDatabase } from './data-transfer';
 import { continueRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
@@ -315,6 +316,30 @@ function registerIpc(): void {
   handle('stt:prepare', async () => { await prepareLocal(); });
   handle('chat:grant', (chatId, kind, value) => grantChat(chatId, { kind, value }));
   handle('chat:yolo', (chatId, on) => setChatYolo(chatId, on));
+  // levar a Central para outro computador (Preferências → Sobre) e achar projetos na primeira abertura
+  handle('data:export', async () => {
+    const r = await dialog.showSaveDialog(win!, { title: 'Exportar dados da Central', defaultPath: join(app.getPath('documents'), `central-dados-${new Date().toISOString().slice(0, 10)}.db`), filters: [{ name: 'Dados da Central', extensions: ['db'] }] });
+    if (r.canceled || !r.filePath) return null;
+    exportData(r.filePath);
+    return r.filePath;
+  });
+  handle('data:pickImport', async () => {
+    const r = await dialog.showOpenDialog(win!, { title: 'Importar dados da Central', properties: ['openFile'], filters: [{ name: 'Dados da Central', extensions: ['db'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    return { path: r.filePaths[0], counts: inspectImport(r.filePaths[0]) };
+  });
+  handle('data:import', path => {
+    inspectImport(path);
+    const prepared = join(app.getPath('temp'), `central-import-${Date.now()}.db`);
+    copyFileSync(path, prepared);
+    adaptImport(prepared);
+    // fecha tudo que usa o banco antes de trocar, e abre de novo já com os dados novos
+    pauseAllOnQuit(); stopAllChats(); stopAllExtensions(); killAllTerminals();
+    swapDatabase(prepared);
+    if (!CAPTURE) app.relaunch(); // nos testes, a próxima abertura confere
+    app.exit(0);
+  });
+  handle('projects:discover', () => discoverProjects());
   // MCPs do Claude Code (Preferências → MCPs)
   handle('mcp:list', force => listMcpServers(!!force));
   handle('mcp:add', input => addMcpServer(input));

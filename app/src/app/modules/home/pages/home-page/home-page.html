@@ -8,6 +8,8 @@
       @if (finished().length) { Desde {{ since() | ago }}, os agentes concluíram {{ finished().length }} {{ finished().length === 1 ? 'tarefa' : 'tarefas' }}. }
     </p>
 
+    @if (projects.loaded() && !projects.projects().length) { <app-welcome class="mt-8" /> }
+
     @if (awaySince(); as s) { <app-away-digest [since]="s" (seen)="markSeen()" /> }
 
     <!-- esperando você: revisar, decidir, falhas -->

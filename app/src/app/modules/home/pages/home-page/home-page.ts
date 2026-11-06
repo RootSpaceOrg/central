@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Welcome } from './components/welcome/welcome';
 import { Router, RouterLink } from '@angular/router';
 
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -34,7 +35,7 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
  */
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, AwayDigest, DeliveryCard],
+  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, AwayDigest, DeliveryCard, Welcome],
   templateUrl: './home-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })
