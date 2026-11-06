@@ -45,6 +45,9 @@ export class ActivityTracker {
     onChange(this.activity);
   }
 
+  /** algum estagiário em segundo plano ainda trabalhando */
+  hasBackground(): boolean { return this.background.size > 0; }
+
   /** É passo de subagente? (o histórico mostra recuado) */
   isSubagentStep(msg: any): boolean { return !!msg.parent_tool_use_id; }
 

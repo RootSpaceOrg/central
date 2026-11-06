@@ -131,6 +131,9 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   child.stdin.write(userLine(msg));
 
   let answered = false;
+  let idle = false;
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  const closeInput = () => { const box = inbox.get(id); if (box?.open) { box.open = false; child.stdin.end(); } };
   const tracker = track('chat', id, describe, text => save(id, 'tool', text, notify));
   let streaming = '';
   let streamTimer: ReturnType<typeof setTimeout> | undefined;
@@ -167,8 +170,16 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
         }
       }
     }
-    // respondeu: fecha a entrada (o Claude termina e sai); o que chegar depois disto vai na próxima vez
-    if (m.type === 'result') { const box = inbox.get(id); if (box?.open) { box.open = false; child.stdin.end(); } }
+    // respondeu: fecha a entrada (o Claude termina e sai); o que chegar depois disto vai na próxima vez. Com estagiário
+    // em segundo plano, a entrada fica aberta: quando ele termina, o aviso acorda o agente para seguir ("assim que o
+    // estagiário terminar, faço o merge"). Se o aviso não virar uma vez nova em 60 s, fecha assim mesmo.
+    if (m.type === 'result') idle = true;
+    else if (m.type === 'assistant' && !m.parent_tool_use_id) idle = false;
+    clearTimeout(closeTimer);
+    if (idle && !tracker.hasBackground()) {
+      if (m.type === 'result') closeInput();
+      else closeTimer = setTimeout(closeInput, 60_000);
+    }
     if (m.type === 'result' && m.is_error && !answered) {
       save(id, 'error', m.result || 'O agente não conseguiu responder.', notify);
     }
@@ -176,6 +187,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   let stderr = '';
   child.stderr.on('data', d => { stderr = (stderr + d).slice(-2000); });
   child.on('close', code => {
+    clearTimeout(closeTimer);
     procs.delete(id);
     const later = inbox.get(id)?.later ?? [];
     inbox.delete(id);
