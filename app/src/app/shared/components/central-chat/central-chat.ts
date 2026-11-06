@@ -1,7 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { AgentsService } from '../../services/agents/agents.service';
 import { ChatService } from '../../services/chat/chat.service';
 import { AgoPipe } from '../../ui/ago.pipe';
 import { Icon } from '../../ui/icon';
@@ -17,14 +16,13 @@ import { ChatView } from '../chat-view/chat-view';
 })
 export class CentralChat {
   protected readonly chat = inject(ChatService);
-  private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
 
   protected readonly history = signal(false);
   protected readonly agentValue = computed(() => String(this.chat.agent()?.id ?? ''));
 
   protected toggle(): void {
-    if (!this.chat.open() && !this.chat.agentId() && this.agents.central()) this.chat.selectAgent(this.agents.central()!.id);
+    if (!this.chat.open() && !this.chat.agentId()) this.chat.restoreLast();
     this.chat.toggle();
   }
 

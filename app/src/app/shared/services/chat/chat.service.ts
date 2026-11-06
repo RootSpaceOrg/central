@@ -5,6 +5,7 @@ import { AgentsService } from '../agents/agents.service';
 import { errorMessage } from '../ipc/ipc.service';
 import { ChatApiService } from './chat-api.service';
 import { ChatPrefsService } from '../chat-prefs/chat-prefs.service';
+import { SettingsApiService } from '../settings/settings-api.service';
 
 export interface Chat { id: number; agentId: number; projectSlug: string | null; title: string; updatedAt: Date; model: string; effort: string }
 export interface ChatMessage { id: number; role: ChatRole; text: string; at: Date }
@@ -133,6 +134,10 @@ export class ChatService extends ChatSession {
   readonly draft = signal<string | null>(null);
   private readonly live = new Set<ChatSession>([this]);
   private readonly prefs = inject(ChatPrefsService);
+  private readonly settings = inject(SettingsApiService);
+  /** última conversa aberta (no painel ou na tela Agentes) e a última de cada agente: lembradas entre aberturas */
+  private last: { agentId: number | null; chatId: number | null; byAgent: Record<number, number> } = { agentId: null, chatId: null, byAgent: {} };
+  private readonly ready: Promise<void>;
 
   readonly agentChats = computed(() => this.chats().filter(c => c.agentId === this.agent()?.id && !c.projectSlug));
   projectChats(slug: string) { return this.chats().filter(c => c.projectSlug === slug); }
@@ -158,6 +163,26 @@ export class ChatService extends ChatSession {
       if (!busy || !this.chats().some(c => c.id === chat_id)) this.loadChats();
     });
     this.loadChats();
+    this.ready = Promise.all([this.settings.get('chat:last'), this.api.list(null)]).then(([v, list]) => {
+      this.chats.set(list.map(toChat));
+      try { if (v) this.last = { agentId: null, chatId: null, byAgent: {}, ...JSON.parse(v) }; } catch { /* valor antigo */ }
+    }, () => {});
+  }
+
+  /** Abre onde parou: a última conversa (ou o último agente); sem histórico, a Central. Não troca o que já está aberto. */
+  async restoreLast(): Promise<void> {
+    await this.ready;
+    if (this.agentId()) return;
+    const { chatId, agentId } = this.last;
+    if (chatId && this.chats().some(c => c.id === chatId)) this.select(chatId);
+    else if (agentId && this.agents.byId().get(agentId)) this.selectAgent(agentId);
+    else if (this.agents.central()) this.selectAgent(this.agents.central()!.id);
+  }
+
+  private remember(agentId: number, chatId: number | null): void {
+    if (chatId) this.last.byAgent = { ...this.last.byAgent, [agentId]: chatId };
+    this.last = { ...this.last, agentId, chatId };
+    this.settings.set('chat:last', JSON.stringify(this.last));
   }
 
   /** Conversa independente (aba de sessão do projeto). Chame release() quando a aba fechar. */
@@ -183,17 +208,21 @@ export class ChatService extends ChatSession {
     this.api.list(null).then(list => this.chats.set(list.map(toChat)));
   }
 
-  /** Muda de agente: mostra a conversa mais recente dele (ou uma nova). */
+  /** Muda de agente: mostra a última conversa que você abriu com ele (ou a mais recente, ou uma nova). */
   selectAgent(agentId: number): void {
     if (this.agentId() === agentId && this.current() && this.chats().find(c => c.id === this.current())?.agentId === agentId) return;
     this.agentId.set(agentId);
-    this.select(this.chats().find(c => c.agentId === agentId && !c.projectSlug)?.id ?? null);
+    const seen = this.last.byAgent[agentId];
+    const chatId = seen && this.chats().some(c => c.id === seen && c.agentId === agentId) ? seen : this.chats().find(c => c.agentId === agentId && !c.projectSlug)?.id ?? null;
+    this.select(chatId);
+    if (!chatId) this.remember(agentId, null);
   }
 
   override select(chatId: number | null): void {
     const chat = chatId ? this.chats().find(c => c.id === chatId) : null;
     if (chat) this.agentId.set(chat.agentId);
     super.select(chatId);
+    if (chat && !chat.projectSlug) this.remember(chat.agentId, chat.id);
   }
 
   /** Abre o painel numa conversa nova com o agente, com o texto já escrito para o Gustavo completar. */

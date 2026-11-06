@@ -1,122 +1,143 @@
-<!-- lista de agentes -->
-<section class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-labelledby="ag-list">
-  <div class="flex items-center justify-between gap-3 px-5 pt-6 pb-3">
-    <h1 id="ag-list" class="font-display text-2xl font-bold tracking-tight">Agentes</h1>
-    <button type="button" class="btn btn-primary btn-sm" (click)="dialog.set({ agent: null })"><app-icon name="plus" [size]="14" />Novo</button>
-  </div>
-  <ul class="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-4">
-    @for (a of agents.agents(); track a.id) {
-      <li>
-        <button type="button" (click)="pick(a)" (contextmenu)="agentMenu($event, a)" [attr.aria-current]="selected()?.id === a.id"
-                class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-raise/70"
-                [class.bg-raise]="selected()?.id === a.id">
-          <app-project-avatar [project]="a" [size]="36" class="transition-transform duration-150 group-hover:scale-105" />
-          <span class="min-w-0 flex-1">
-            <span class="block truncate font-semibold">{{ a.name }}</span>
-            <span class="block truncate text-[12.5px] text-mute">
-              @if (a.builtin) { Organiza tudo } @else if (project(a.projectSlug); as p) { {{ p.name }} } @else { Sem projeto }
-            </span>
-          </span>
-          @if (a.routines) { <span class="flex items-center gap-1 text-[11.5px] text-faint" title="Rotinas"><app-icon name="routine" [size]="12" />{{ a.routines }}</span> }
+<!-- topo: projetos e os agentes em abas -->
+<header class="border-b border-edge bg-panel">
+  <div class="flex items-center gap-3 px-6 pt-4">
+    <h1 class="font-display text-[20px] font-bold tracking-tight">Agentes</h1>
+    <nav class="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none]" aria-label="Projeto">
+      @for (f of filters(); track f.id) {
+        <button type="button" (click)="setFilter(f.id)" [attr.aria-pressed]="filter() === f.id"
+                class="flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] transition-colors"
+                [class]="filter() === f.id ? 'border-frost/60 bg-frost/15 font-semibold text-text' : 'border-transparent text-mute hover:text-text'">
+          @if (f.project; as p) { <app-project-avatar [project]="p" [size]="16" />{{ p.name }} }
+          @else { {{ f.id === 'all' ? 'Todos' : 'Sem projeto' }} }
+          <span class="tabular-nums text-faint">{{ f.n }}</span>
         </button>
-      </li>
+      }
+    </nav>
+    <button type="button" class="btn btn-primary btn-sm shrink-0" (click)="dialog.set({ agent: null, projectSlug: filter() !== 'all' && filter() !== '-' ? filter() : undefined })"><app-icon name="plus" [size]="14" />Novo agente</button>
+  </div>
+  <div class="flex gap-1 overflow-x-auto px-4 pt-3 [scrollbar-width:none]" role="tablist" aria-label="Agentes" (wheel)="$any($event.currentTarget).scrollLeft = $any($event.currentTarget).scrollLeft + $event.deltaY">
+    @for (a of visible(); track a.id) {
+      <button type="button" role="tab" [attr.aria-selected]="selected()?.id === a.id" (click)="pick(a)" (contextmenu)="agentMenu($event, a)"
+              class="group -mb-px flex shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-3 py-2 transition-colors"
+              [class]="selected()?.id === a.id ? 'border-edge bg-night text-text' : 'border-transparent text-mute hover:bg-raise/60 hover:text-text'"
+              [title]="a.description ?? a.name">
+        <span class="relative">
+          <app-project-avatar [project]="a" [size]="24" />
+          @if (busy().has(a.id)) { <span class="pulse absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-panel bg-frost" aria-label="trabalhando"></span> }
+        </span>
+        <span class="max-w-44 truncate text-[13.5px] font-semibold">{{ a.name }}</span>
+        @if (filter() === 'all' && !a.builtin && project(a.projectSlug); as p) { <app-project-avatar [project]="p" [size]="14" class="opacity-70" /> }
+      </button>
     }
-  </ul>
-  <p class="border-t border-edge px-5 py-3 text-[12px] text-faint">Clique com o botão direito num agente para mais opções.</p>
-</section>
+  </div>
+</header>
 
-<!-- agente selecionado -->
+<!-- agente escolhido -->
 @if (selected(); as a) {
-  <section class="flex min-h-0 flex-col" aria-label="Agente">
-    <header class="flex items-start gap-4 border-b border-edge px-8 pt-6 pb-5">
-      <app-project-avatar [project]="a" [size]="48" />
+  <section class="flex min-h-0 flex-1 flex-col bg-night" [attr.aria-label]="a.name">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-edge px-6 py-3">
+      <app-project-avatar [project]="a" [size]="40" />
       <div class="min-w-0 flex-1">
-        <h2 class="truncate font-display text-[24px] font-bold leading-tight tracking-tight">{{ a.name }}</h2>
-        @if (a.description) { <p class="mt-0.5 line-clamp-2 text-mute">{{ a.description }}</p> }
-        <div class="mt-2.5 flex flex-wrap gap-1.5 text-[12px]">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="truncate font-display text-[19px] font-bold leading-tight">{{ a.name }}</h2>
           @if (project(a.projectSlug); as p) {
-            <a [routerLink]="['/projetos', p.slug]" class="flex items-center gap-1.5 rounded-full border border-edge px-2.5 py-0.5 hover:border-faint" [style.color]="p.color">
-              <app-project-avatar [project]="p" [size]="14" />{{ p.name }}</a>
-          } @else if (!a.builtin) { <span class="rounded-full border border-edge px-2.5 py-0.5 text-mute">Sem projeto</span> }
-          <span class="rounded-full border border-edge px-2.5 py-0.5 text-mute">{{ a.permission === 'full' ? 'Liberdade total' : 'Segura' }}</span>
-          @if (a.model) { <span class="rounded-full border border-edge px-2.5 py-0.5 text-mute">{{ modelLabel(a.model) }}</span> }
-          @for (t of a.tools; track t) { <span class="rounded-full border border-frost/30 bg-frost/10 px-2.5 py-0.5 font-mono text-frost">{{ t }}</span> }
+            <a [routerLink]="['/projetos', p.slug]" class="flex items-center gap-1.5 rounded-full border border-edge px-2 py-0.5 text-[12px] hover:border-faint" [style.color]="p.color">
+              <app-project-avatar [project]="p" [size]="13" />{{ p.name }}</a>
+          }
+          <span class="rounded-full border border-edge px-2 py-0.5 text-[12px] text-mute">{{ a.restricted ? 'Atuação restrita' : a.permission === 'full' ? 'Liberdade total' : 'Segura' }}</span>
+          @if (a.model) { <span class="rounded-full border border-edge px-2 py-0.5 text-[12px] text-mute">{{ modelLabel(a.model) }}</span> }
         </div>
+        @if (a.description) { <p class="mt-0.5 truncate text-[13px] text-mute">{{ a.description }}</p> }
       </div>
-      <div class="flex shrink-0 flex-wrap justify-end gap-2">
+      <div class="flex shrink-0 gap-2">
         <button type="button" class="btn btn-sm" (click)="newRun(a)"><app-icon name="play" [size]="14" />Tarefa</button>
         <button type="button" class="btn btn-sm" (click)="newRoutine(a)"><app-icon name="routine" [size]="14" />Rotina</button>
         <button type="button" class="btn btn-sm" (click)="dialog.set({ agent: a })"><app-icon name="edit" [size]="14" />Editar</button>
       </div>
-    </header>
+    </div>
 
-    <div class="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)]">
-      <!-- sessões -->
-      <aside class="flex min-h-0 flex-col border-r border-edge" aria-label="Sessões">
-        <div class="flex items-center gap-1 px-3 pt-3 pb-2" role="tablist">
-          <button type="button" role="tab" [attr.aria-selected]="pane() === 'conversas'" (click)="pane.set('conversas')"
-                  class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'conversas' ? 'bg-raise' : 'text-mute hover:text-text'">Conversas</button>
-          <button type="button" role="tab" [attr.aria-selected]="pane() === 'execucoes'" (click)="pane.set('execucoes')"
-                  class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'execucoes' ? 'bg-raise' : 'text-mute hover:text-text'">Execuções</button>
-          <button type="button" role="tab" [attr.aria-selected]="pane() === 'memoria'" (click)="pane.set('memoria')"
-                  class="flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors" [class]="pane() === 'memoria' ? 'bg-raise' : 'text-mute hover:text-text'">Memória</button>
+    <!-- abas do agente -->
+    <div class="flex items-center gap-1 border-b border-edge px-5" role="tablist" aria-label="O que ver">
+      @for (t of [{ id: 'conversas', label: 'Conversa', n: null }, { id: 'execucoes', label: 'Execuções', n: agentRuns().length }, { id: 'memoria', label: 'Memória', n: memories.of(a.id).length }]; track t.id) {
+        <button type="button" role="tab" [attr.aria-selected]="pane() === t.id" (click)="pane.set($any(t.id))"
+                class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13.5px] font-semibold transition-colors"
+                [class]="pane() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+          {{ t.label }}@if (t.n) { <span class="rounded-full bg-raise px-1.5 text-[11.5px] font-normal tabular-nums text-faint">{{ t.n }}</span> }
+        </button>
+      }
+      <span class="flex-1"></span>
+      @if (pane() === 'conversas') {
+        <span class="hidden min-w-0 truncate px-2 text-[12.5px] text-faint lg:block">{{ chat.current() ? (chat.chats().find(c => c.id === chat.current())?.title ?? '') : 'Conversa nova' }}</span>
+        <button type="button" class="btn btn-sm btn-ghost" (click)="chat.newChat(a.id)"><app-icon name="plus" [size]="14" />Nova conversa</button>
+        <button type="button" class="btn btn-sm btn-ghost" (click)="toggleHistory()" [attr.aria-pressed]="history()" [class.!bg-raise]="history()">
+          <app-icon name="summary" [size]="14" />Histórico <span class="tabular-nums text-faint">{{ chat.agentChats().length }}</span></button>
+      }
+    </div>
+
+    @switch (pane()) {
+      @case ('conversas') {
+        <div class="flex min-h-0 flex-1">
+          <app-chat-view class="min-h-0 min-w-0 flex-1" />
+          @if (history()) {
+            <aside class="flex w-80 shrink-0 flex-col border-l border-edge bg-panel" aria-label="Histórico de conversas">
+              <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+                @for (c of chat.agentChats(); track c.id) {
+                  <li class="group flex items-center gap-1 rounded-lg transition-colors hover:bg-raise/70" [class.bg-raise]="c.id === chat.current()">
+                    <button type="button" class="min-w-0 flex-1 px-3 py-2 text-left" (click)="chat.select(c.id)" (dblclick)="rename(c.id, c.title)" title="Duplo clique renomeia">
+                      <span class="flex items-center gap-1.5">
+                        @if (chat.busy().has(c.id)) { <span class="pulse size-1.5 shrink-0 rounded-full bg-frost"></span> }
+                        <span class="truncate text-[13.5px]">{{ c.title }}</span>
+                      </span>
+                      <span class="text-[11.5px] text-faint">{{ c.updatedAt | ago }}</span>
+                    </button>
+                    <button type="button" class="mr-1 rounded p-1 text-faint opacity-0 hover:text-no group-hover:opacity-100" (click)="chat.remove(c.id)" aria-label="Apagar conversa">
+                      <app-icon name="delete" [size]="14" /></button>
+                  </li>
+                } @empty {
+                  <li class="px-3 py-4 text-[13px] text-mute">Nenhuma conversa com {{ a.name }} ainda.</li>
+                }
+              </ul>
+            </aside>
+          }
         </div>
-        @if (pane() === 'conversas') {
-          <button type="button" (click)="chat.newChat(a.id)" class="mx-3 mb-2 flex items-center gap-2 rounded-xl border border-dashed border-edge px-3 py-2 text-[13px] text-mute transition hover:border-faint hover:text-text"
-                  [class.!border-frost]="!chat.current()" [class.!text-frost]="!chat.current()"><app-icon name="plus" [size]="14" />Nova conversa</button>
-          <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-            @for (c of chat.agentChats(); track c.id) {
-              <li class="group flex items-center gap-1 rounded-lg transition-colors hover:bg-raise/70" [class.bg-raise]="c.id === chat.current()">
-                <button type="button" class="min-w-0 flex-1 px-3 py-2 text-left" (click)="chat.select(c.id)" (dblclick)="rename(c.id, c.title)">
-                  <span class="flex items-center gap-1.5">
-                    @if (chat.busy().has(c.id)) { <span class="pulse size-1.5 shrink-0 rounded-full bg-frost"></span> }
-                    <span class="truncate text-[13.5px]">{{ c.title }}</span>
-                  </span>
-                  <span class="text-[11.5px] text-faint">{{ c.updatedAt | ago }}</span>
-                </button>
-                <button type="button" class="mr-1 rounded p-1 text-faint opacity-0 hover:text-no group-hover:opacity-100" (click)="chat.remove(c.id)" aria-label="Apagar conversa">
-                  <app-icon name="delete" [size]="14" /></button>
-              </li>
-            } @empty {
-              <li class="px-3 py-4 text-[13px] text-mute">Nenhuma conversa ainda.</li>
-            }
-          </ul>
-        } @else if (pane() === 'memoria') {
-          <nav class="space-y-0.5 px-2" aria-label="Memória">
-            @for (v of [{ id: 'dele', label: 'Dele', n: memories.of(a.id).length }, { id: 'todos', label: 'De todos os agentes', n: memories.of(null).length }, { id: 'esquecidas', label: 'Esquecidas', n: memories.retiredFor(a.id).length }]; track v.id) {
-              <button type="button" (click)="memView.set($any(v.id))" [attr.aria-current]="memView() === v.id"
-                      class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13.5px] transition-colors hover:bg-raise/70" [class.bg-raise]="memView() === v.id">
-                {{ v.label }}<span class="tabular-nums text-faint">{{ v.n }}</span></button>
-            }
-          </nav>
-          <p class="mt-auto px-5 pb-4 text-[12px] leading-relaxed text-faint">Os agentes guardam sozinhos quando você conta como prefere as coisas, corrige algo ou fala de um cliente.</p>
-        } @else {
-          <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+      }
+      @case ('execucoes') {
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <ul class="mx-auto max-w-3xl space-y-2 px-6 py-6">
             @for (r of agentRuns(); track r.id) {
               <li>
-                <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="flex gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-raise/70">
-                  <span class="mt-1.5 size-1.5 shrink-0 rounded-full" [class.pulse]="isActive(r.status)"
+                <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="flex gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 transition-colors hover:border-faint">
+                  <span class="mt-1.5 size-2 shrink-0 rounded-full" [class.pulse]="isActive(r.status)"
                         [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : isActive(r.status) ? 'bg-later' : 'bg-faint'"></span>
-                  <span class="min-w-0">
-                    <span class="line-clamp-2 text-[13px]">{{ r.title }}</span>
-                    <span class="text-[11.5px] text-faint">{{ runLabel[r.status] }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}</span>
+                  <span class="min-w-0 flex-1">
+                    <span class="line-clamp-2 text-[14px]">{{ r.title }}</span>
+                    <span class="text-[12px] text-faint">{{ runLabel[r.status] }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}</span>
                   </span>
                 </a>
               </li>
             } @empty {
-              <li class="px-3 py-4 text-[13px] text-mute">{{ a.name }} ainda não executou tarefas.</li>
+              <li class="rounded-3xl border-2 border-dashed border-edge p-10 text-center text-mute">{{ a.name }} ainda não executou tarefas.</li>
             }
           </ul>
-        }
-      </aside>
-
-      @if (pane() === 'memoria') { <app-memory-panel class="min-h-0" [agent]="a" [view]="memView()" /> }
-      @else { <app-chat-view class="min-h-0" /> }
-    </div>
+        </div>
+      }
+      @case ('memoria') {
+        <div class="flex min-h-0 flex-1 flex-col">
+          <div class="mx-auto mt-5 flex w-full max-w-3xl gap-1 px-8" role="radiogroup" aria-label="Qual memória">
+            @for (v of [{ id: 'dele', label: 'Dele', n: memories.of(a.id).length }, { id: 'todos', label: 'De todos os agentes', n: memories.of(null).length }, { id: 'esquecidas', label: 'Esquecidas', n: memories.retiredFor(a.id).length }]; track v.id) {
+              <button type="button" role="radio" [attr.aria-checked]="memView() === v.id" (click)="memView.set($any(v.id))"
+                      class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px]" [class]="memView() === v.id ? 'border-frost/60 bg-frost/15 font-semibold' : 'border-edge text-mute hover:text-text'">
+                {{ v.label }}<span class="tabular-nums text-faint">{{ v.n }}</span></button>
+            }
+          </div>
+          <app-memory-panel class="min-h-0 flex-1" [agent]="a" [view]="memView()" />
+        </div>
+      }
+    }
   </section>
 } @else {
-  <div class="grid place-items-center text-mute">Carregando agentes…</div>
+  <div class="grid flex-1 place-items-center text-mute">Carregando agentes…</div>
 }
 
-<!-- fixed: fora do grid da página (senão vira uma linha a mais e rouba altura) -->
+<!-- fixed: fora do fluxo da página -->
 <app-agent-dialog class="fixed" [state]="dialog()" (closed)="closed($event)" />

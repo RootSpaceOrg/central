@@ -4,28 +4,34 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ChatView } from '../../../../shared/components/chat-view/chat-view';
 import { Agent, AgentsService, MODELS } from '../../../../shared/services/agents/agents.service';
+import { AskService } from '../../../../shared/services/ask/ask.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { ContextMenuService } from '../../../../shared/services/context-menu/context-menu.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
+import { MemoriesService } from '../../../../shared/services/memories/memories.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { RUN_STATUS_LABEL, isActive } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
+import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { AgentDialog, AgentDialogState } from '../../components/agent-dialog/agent-dialog';
 import { MemoryPanel, MemoryView } from '../../components/memory-panel/memory-panel';
-import { MemoriesService } from '../../../../shared/services/memories/memories.service';
 
-import { AskService } from '../../../../shared/services/ask/ask.service';
 type Pane = 'conversas' | 'execucoes' | 'memoria';
+/** 'all' = todos; '-' = sem projeto; senão o slug do projeto (as frentes contam como o projeto-pai) */
+type Filter = string;
 
-/** Agentes: escolhe um agente, vê as sessões dele (conversas e execuções) e conversa. */
+/**
+ * Agentes: filtro por projeto no topo, os agentes em abas, e o agente escolhido com Conversa (chat no centro e o
+ * histórico numa gaveta à direita), Execuções e Memória. A Central fica sempre à mão, em qualquer filtro.
+ */
 @Component({
   selector: 'app-agents-page',
   imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, ChatView, AgentDialog, MemoryPanel],
   templateUrl: './agents-page.html',
-  host: { class: 'grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)]' },
+  host: { class: 'flex h-full min-h-0 flex-col' },
 })
 export class AgentsPage {
   private readonly ask = inject(AskService);
@@ -34,6 +40,8 @@ export class AgentsPage {
   protected readonly projects = inject(ProjectsService);
   protected readonly runs = inject(RunsService);
   protected readonly dialogs = inject(DialogsService);
+  protected readonly memories = inject(MemoriesService);
+  private readonly settings = inject(SettingsApiService);
   private readonly menu = inject(ContextMenuService);
   private readonly router = inject(Router);
   private readonly query = toSignal(inject(ActivatedRoute).queryParamMap);
@@ -41,7 +49,8 @@ export class AgentsPage {
   protected readonly dialog = signal<AgentDialogState>(null);
   protected readonly pane = signal<Pane>('conversas');
   protected readonly memView = signal<MemoryView>('dele');
-  protected readonly memories = inject(MemoriesService);
+  protected readonly history = signal(false);
+  protected readonly filter = signal<Filter>('all');
   protected readonly runLabel = RUN_STATUS_LABEL;
   protected readonly isActive = isActive;
 
@@ -49,8 +58,37 @@ export class AgentsPage {
   protected readonly agentRuns = computed(() => this.runs.runs().filter(r => r.agentId === this.selected()?.id).slice(0, 60));
   protected readonly modelLabel = (m: string) => MODELS.find(x => x.value === m)?.label ?? m;
 
+  /** grupo de cada agente: o projeto-pai, '-' sem projeto; a Central não entra em grupo (está sempre na lista) */
+  private groupOf(a: Agent): string { return a.projectSlug ? this.projects.bySlug().get(a.projectSlug)?.parentSlug ?? a.projectSlug : '-'; }
+
+  protected readonly filters = computed(() => {
+    const others = this.agents.agents().filter(a => !a.builtin);
+    const n = new Map<string, number>();
+    for (const a of others) n.set(this.groupOf(a), (n.get(this.groupOf(a)) ?? 0) + 1);
+    const order = this.projects.living().map(p => p.slug);
+    const projects = [...n.keys()].filter(k => k !== '-').sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      .map(slug => ({ id: slug, project: this.project(slug), n: n.get(slug)! }));
+    return [{ id: 'all', project: null, n: others.length }, ...projects, ...(n.has('-') ? [{ id: '-', project: null, n: n.get('-')! }] : [])];
+  });
+
+  protected readonly visible = computed(() => {
+    const f = this.filter();
+    const list = this.agents.agents();
+    return f === 'all' ? list : list.filter(a => a.builtin || this.groupOf(a) === f);
+  });
+
+  /** agentes trabalhando agora (execução ativa ou conversa respondendo) */
+  protected readonly busy = computed(() => {
+    const s = new Set<number>();
+    for (const r of this.runs.runs()) if (r.agentId && isActive(r.status)) s.add(r.agentId);
+    for (const c of this.chat.chats()) if (this.chat.busy().has(c.id)) s.add(c.agentId);
+    return s;
+  });
+
   constructor() {
-    // ?agente=3&conversa=12 (vindo do painel, de uma execução ou do menu de projeto)
+    this.settings.get('agents:filter').then(v => { if (v) this.filter.set(v); });
+    this.settings.get('agents:history').then(v => this.history.set(v === '1'));
+    // ?agente=3&conversa=12 (vindo do painel, de uma execução ou do menu de projeto); sem nada, onde você parou
     effect(() => {
       const q = this.query();
       const agentId = Number(q?.get('agente'));
@@ -58,12 +96,11 @@ export class AgentsPage {
       const novo = q?.get('novo');
       if (!this.agents.loaded()) return;
       untracked(() => {
-        // ?novo=<projeto>: "Criar agente para o projeto" no menu de botão direito
         if (novo) this.dialog.set({ agent: null, projectSlug: novo });
         else if (q?.get('criar')) this.dialog.set({ agent: null });
         if (chatId) this.chat.select(chatId);
         else if (agentId) this.chat.selectAgent(agentId);
-        else if (!this.chat.agentId() && this.agents.central()) this.chat.selectAgent(this.agents.central()!.id);
+        else this.chat.restoreLast();
       });
     });
   }
@@ -73,15 +110,22 @@ export class AgentsPage {
     this.router.navigate([], { queryParams: { agente: a.id, conversa: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
+  /** trocar de projeto: se o agente aberto não é dele, abre o primeiro agente do projeto */
+  protected setFilter(f: Filter): void {
+    this.filter.set(f);
+    this.settings.set('agents:filter', f);
+    const cur = this.selected();
+    if (f === 'all' || (cur && (cur.builtin || this.groupOf(cur) === f))) return;
+    const first = this.visible().find(a => !a.builtin);
+    if (first) this.pick(first);
+  }
+
+  protected toggleHistory(): void { const v = !this.history(); this.history.set(v); this.settings.set('agents:history', v ? '1' : '0'); }
+
   protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
 
-  protected newRun(a: Agent): void {
-    this.dialogs.newRun({ agentId: a.id, projectSlug: a.projectSlug });
-  }
-
-  protected newRoutine(a: Agent): void {
-    this.router.navigate(['/rotinas'], { queryParams: { nova: 1, agente: a.id } });
-  }
+  protected newRun(a: Agent): void { this.dialogs.newRun({ agentId: a.id, projectSlug: a.projectSlug }); }
+  protected newRoutine(a: Agent): void { this.router.navigate(['/rotinas'], { queryParams: { nova: 1, agente: a.id } }); }
 
   protected closed(savedId: number | null): void {
     this.dialog.set(null);
