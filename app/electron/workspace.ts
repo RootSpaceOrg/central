@@ -57,10 +57,16 @@ export function writeFile(path: string, content: string): void {
 // "bash.exe" solto no PATH costuma ser o do WSL: procura o Git Bash nos lugares do instalador
 const GIT_BASH = [join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe'), join(process.env.LOCALAPPDATA ?? '', 'Programs/Git/bin/bash.exe')]
   .find(p => existsSync(p)) ?? 'bash.exe';
-const SHELLS: Record<string, [string, string[]]> = {
+const UNIX_SHELL = process.env.SHELL || '/bin/zsh';
+const SHELLS: Record<string, [string, string[]]> = process.platform === 'win32' ? {
   shell: ['powershell.exe', ['-NoLogo']],
   cmd: ['cmd.exe', []],
   bash: [GIT_BASH, ['--login', '-i']],
+} : {
+  // Mac/Linux: "shell" é o do usuário (zsh no Mac); bash continua bash; cmd não existe (cai no shell do usuário)
+  shell: [UNIX_SHELL, ['-l']],
+  cmd: [UNIX_SHELL, ['-l']],
+  bash: ['/bin/bash', ['-l']],
 };
 
 const terminals = new Map<number, pty.IPty>();
@@ -74,7 +80,10 @@ export function createTerminal(input: NewTerminalInput, promptFile: string | nul
     // a sessão interativa também enxerga e atualiza a Central (backlog, ideias, decisões)
     const mcp = mcpConfigPath();
     const extra = [mcp ? `--mcp-config '${mcp}'` : '', promptFile ? `--append-system-prompt-file '${promptFile}'` : ''].filter(Boolean).join(' ');
-    args = [...args, '-NoExit', '-Command', `claude ${extra}`.trim()];
+    // Windows: PowerShell continua aberto depois; Mac/Linux: roda o claude e, quando ele sair, fica no shell
+    args = process.platform === 'win32'
+      ? [...args, '-NoExit', '-Command', `claude ${extra}`.trim()]
+      : ['-l', '-i', '-c', `claude ${extra}; exec ${UNIX_SHELL} -l`];
   }
   const term = pty.spawn(file, args, {
     name: 'xterm-256color', cwd, cols: input.cols || 100, rows: input.rows || 30,

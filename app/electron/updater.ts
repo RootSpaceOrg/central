@@ -4,7 +4,7 @@
  * - github: releases de RootSpaceOrg/central, lidas e baixadas pelo `gh` (o repo é privado, então usa o login do gh).
  * Instala em silêncio e reabre. Também gera (e publica) uma versão nova a partir do código.
  */
-import { app } from 'electron';
+import { app, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -85,6 +85,16 @@ export async function checkUpdate(force = false): Promise<UpdateInfoDto> {
 export async function installUpdate(): Promise<void> {
   const info = await checkUpdate(true);
   if (!info.latest) throw new Error('Nenhuma versão nova encontrada.');
+  // Mac: baixa o .dmg da versão e abre (arrastar para Aplicativos, como todo app de Mac)
+  if (process.platform === 'darwin') {
+    const dir = join(app.getPath('temp'), 'central-update', info.latest);
+    mkdirSync(dir, { recursive: true });
+    const dmg = `Central-${info.latest}-${process.arch}.dmg`;
+    await execFileP('gh', ['release', 'download', `v${info.latest}`, '-R', REPO, '-p', dmg, '-D', dir, '--clobber'])
+      .catch(() => { throw new Error(`A versão ${info.latest} ainda não tem o pacote para Mac (${dmg}).`); });
+    await shell.openPath(join(dir, dmg));
+    return;
+  }
   let installer = info.installer_path;
   if (!installer) {
     const dir = join(app.getPath('temp'), 'central-update', info.latest);

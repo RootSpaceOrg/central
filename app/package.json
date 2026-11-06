@@ -1,6 +1,6 @@
 {
   "name": "central",
-  "version": "0.48.0",
+  "version": "0.49.0",
   "scripts": {
     "ng": "ng",
     "start": "npm run icons && npm run build:main && ng build && electron .",
@@ -11,6 +11,7 @@
     "build:main": "esbuild electron/main.ts electron/preload.ts electron/context/indexer.ts --bundle --platform=node --format=cjs --target=node22 --outdir=dist-electron --external:electron --external:@lydell/node-pty --external:web-tree-sitter",
     "dev": "npm run icons && npm run build:main && concurrently -k -n ui,app \"ng serve --port 4300\" \"wait-on tcp:4300 && electron . --dev\"",
     "dist": "npm run icons && npm run build:ext && npm run build:main && ng build && electron-builder --win nsis",
+    "dist:mac": "npm run icons && npm run build:ext && npm run build:main && ng build && electron-builder --mac dmg --arm64",
     "build:ext": "node scripts/build-extensions.mjs",
     "icons": "node scripts/file-icons.mjs"
   },
@@ -112,6 +113,20 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Central"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "Central-${version}-${arch}.${ext}",
+      "identity": null
     }
   }
 }

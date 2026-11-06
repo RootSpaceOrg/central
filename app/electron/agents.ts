@@ -9,6 +9,7 @@ import { moveTaskForRun, taskRepo } from './backlog';
 import { nextStage, setStage } from './board';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
+import { killTree, treeSpawn } from './proc';
 import { closeDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
 import { memoryBlock } from './memories';
@@ -151,7 +152,7 @@ export function watchTurns(emit: Emit): void {
 
 export function killRun(id: number, emit: Emit): void {
   const proc = procs.get(id);
-  if (proc?.pid) execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], () => {});
+  killTree(proc?.pid);
   const r = dto(id);
   if (['queued', 'preparing', 'running'].includes(r.status)) {
     finish(id, 'killed', 'Interrompido por você.', null, emit);
@@ -288,7 +289,7 @@ Continue exatamente de onde parou, sem refazer o que já fez: confira o estado (
   else args.push('--allowedTools', `"${[...new Set([...READ_TOOLS, ...extra])].join(',')}"`);
 
   // Prompt vai por stdin: nenhum texto do usuário passa pela linha de comando do shell.
-  const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv() });
+  const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv(), ...treeSpawn });
   procs.set(id, child);
   set(id, { status: 'running' }, emit);
   child.stdin.end(frame);
@@ -351,7 +352,7 @@ export function pauseRun(id: number, reason: string, until: string | null, emit:
   const r = dto(id);
   run(`update runs set status = 'queued', paused = ?, resume = ? where id = ?`,
     JSON.stringify({ reason, until, at: now() }), r.session_id ? reason : null, id);
-  if (kill) { const proc = procs.get(id); if (proc?.pid) execFile('taskkill', ['/pid', String(proc.pid), '/T', '/F'], () => {}); }
+  if (kill) killTree(procs.get(id)?.pid);
   procs.delete(id);
   event(id, 'system', `Pausada: ${reason}. ${until ? 'Volta sozinha quando a cota renovar.' : 'Volta sozinha quando o freio deixar.'}`, emit);
   emit.update(dto(id));
@@ -370,7 +371,7 @@ export function pauseAllOnQuit(): void {
     run('insert into run_events (run_id, at, kind, text) values (?,?,?,?)', id, now(), 'system', 'A Central fechou: pausada, volta sozinha na mesma sessão quando ela abrir.');
     const pid = procs.get(id)?.pid;
     procs.delete(id);
-    if (pid) { try { execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* já saiu */ } }
+    killTree(pid, true);
   }
 }
 

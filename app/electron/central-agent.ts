@@ -9,6 +9,7 @@ import { createInterface } from 'node:readline';
 import type { ChatDto, ChatMessageDto, ChatOptions, ChatRole } from '../src/app/shared/contract';
 import { SESSION_TOOLS, agentCwd, agentPromptFile, agentTools, centralAgent, getAgent, restrictedTools, sessionPromptFile } from './agentdefs';
 import { CHAT_MEDIA, DEV_ROOT, all, get, now, run } from './db';
+import { killTree, treeSpawn } from './proc';
 import { splitImages, userContent } from './chat-images';
 import { Grant, blockedDirs, grantsFrom, safeGrant } from './permissions';
 import { reopenDelivery } from './deliveries';
@@ -48,13 +49,13 @@ function save(chatId: number, role: ChatRole, text: string, notify: Notify): voi
 
 /** A Central vai fechar: encerra as conversas respondendo (senão o Claude seguiria sozinho, sem ninguém ouvindo). */
 export function stopAllChats(): void {
-  for (const p of procs.values()) if (p.pid) { try { execFileSync('taskkill', ['/pid', String(p.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); } catch { /* já saiu */ } }
+  for (const p of procs.values()) killTree(p.pid, true);
   procs.clear();
 }
 
 export function stopChat(chatId: number): void {
   const p = procs.get(chatId);
-  if (p?.pid) execFile('taskkill', ['/pid', String(p.pid), '/T', '/F'], () => {});
+  killTree(p?.pid);
 }
 
 /** Conversa que continua a sessão de uma execução (o agente lembra tudo o que fez nela). */
@@ -130,7 +131,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   if (mcp) args.push('--mcp-config', `"${mcp}"`);
   if (chat?.session_id) args.push('--resume', chat.session_id);
 
-  const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv() });
+  const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv(), ...treeSpawn });
   procs.set(id, child);
   inbox.set(id, { open: true, later: [] });
   child.stdin.write(userLine(msg));

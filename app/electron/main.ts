@@ -119,7 +119,7 @@ function registerIpc(): void {
   handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
   // área de transferência do sistema (funciona mesmo sem a janela em foco, ao contrário do navigator.clipboard)
   handle('app:copy', text => { clipboard.writeText(String(text)); });
-  handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion() }));
+  handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion(), data_dir: app.getPath('userData'), platform: process.platform }));
 
   handle('projects:list', () => listProjects());
   handle('projects:create', input => {

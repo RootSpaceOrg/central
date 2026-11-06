@@ -428,6 +428,9 @@ export interface CloneProgressDto {
 
 export interface AppInfoDto {
   home: string;
+  /** pasta de dados da Central (%APPDATA%\\Central no Windows, ~/Library/Application Support/Central no Mac) */
+  data_dir?: string;
+  platform?: string;
   dev_root: string;
   db_path: string;
   version: string;

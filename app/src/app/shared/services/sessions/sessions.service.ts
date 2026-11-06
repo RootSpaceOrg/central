@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { IS_WIN } from '../ipc/ipc.service';
 
 import { SessionDto, SessionKind } from '../../contract';
 import { ChatService, ChatSession } from '../chat/chat.service';
@@ -14,9 +15,15 @@ export interface ClaudeSession { id: string; cwd: string; title: string; updated
 export const SESSION_KINDS: { kind: SessionKind; label: string; hint?: string; img: string }[] = [
   { kind: 'chat', label: 'Claude', hint: 'conversa', img: 'file-icons/claude.svg' },
   { kind: 'claude', label: 'Claude Code', hint: 'terminal', img: 'file-icons/claude.svg' },
-  { kind: 'shell', label: 'PowerShell', img: 'file-icons/powershell.svg' },
-  { kind: 'cmd', label: 'CMD', img: 'file-icons/console.svg' },
-  { kind: 'bash', label: 'Git Bash', img: 'file-icons/git.svg' },
+  // Mac/Linux: o terminal do usuário (zsh no Mac) e bash; não existe CMD
+  ...(IS_WIN ? [
+    { kind: 'shell' as const, label: 'PowerShell', img: 'file-icons/powershell.svg' },
+    { kind: 'cmd' as const, label: 'CMD', img: 'file-icons/console.svg' },
+    { kind: 'bash' as const, label: 'Git Bash', img: 'file-icons/git.svg' },
+  ] : [
+    { kind: 'shell' as const, label: 'Terminal', img: 'file-icons/console.svg' },
+    { kind: 'bash' as const, label: 'Bash', img: 'file-icons/console.svg' },
+  ]),
 ];
 export const SESSION_IMG = Object.fromEntries(SESSION_KINDS.map(k => [k.kind, k.img])) as Record<SessionKind, string>;
 

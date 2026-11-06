@@ -2,7 +2,7 @@ import { Component, ElementRef, computed, effect, inject, signal, viewChild } fr
 
 import { GovLimits, Prefs } from '../../contract';
 import { DialogsService } from '../../services/dialogs/dialogs.service';
-import { errorMessage } from '../../services/ipc/ipc.service';
+import { IpcService, errorMessage } from '../../services/ipc/ipc.service';
 import { PrefsApiService } from '../../services/prefs/prefs-api.service';
 import { ProjectsService } from '../../services/projects/projects.service';
 import { UpdateService } from '../../services/update/update.service';
@@ -156,7 +156,7 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
               @case ('about') {
                 <dl class="space-y-3 text-[13.5px]">
                   <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Versão</dt><dd class="mt-0.5 font-semibold">{{ update.info()?.current }}</dd></div>
-                  <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Dados</dt><dd class="mt-0.5 font-mono text-[12.5px]">%APPDATA%\\Central</dd></div>
+                  <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Dados</dt><dd class="mt-0.5 font-mono text-[12.5px] selectable">{{ dataDir() }}</dd></div>
                   <div class="rounded-2xl border border-edge px-4 py-3"><dt class="text-mute">Projetos</dt><dd class="mt-0.5 font-mono text-[12.5px]">{{ projects.devRoot() }}</dd></div>
                 </dl>
                 <button type="button" class="btn mt-4" (click)="dialogs.settings.set(false); dialogs.update.set(true)"><app-icon name="download" [size]="15" />Ver atualizações</button>
@@ -199,9 +199,12 @@ export class SettingsDialog {
   protected readonly fontMin = FONT_MIN;
   protected readonly fontMax = FONT_MAX;
   protected readonly prefs = signal<Prefs | null>(null);
+  /** pasta de dados (muda conforme o sistema) */
+  protected readonly dataDir = signal('');
   protected readonly error = signal<string | null>(null);
 
   constructor() {
+    inject(IpcService).invoke('app:info').then(i => this.dataDir.set(i.data_dir ?? ''));
     effect(() => {
       const open = this.dialogs.settings();
       const el = this.dlg()?.nativeElement;

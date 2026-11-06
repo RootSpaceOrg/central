@@ -1,4 +1,5 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { IS_WIN } from '../../services/ipc/ipc.service';
 
 import { AgentsService } from '../../services/agents/agents.service';
 import { ContextMenuService } from '../../services/context-menu/context-menu.service';
@@ -9,7 +10,9 @@ import { Select, SelectOption } from '../../ui/select';
 import { AgentSelect } from '../pickers/agent-select';
 import { ProjectSelect } from '../pickers/project-select';
 
-const SHELLS: { id: QuickCommand['shell']; label: string }[] = [{ id: 'shell', label: 'PowerShell' }, { id: 'bash', label: 'Git Bash' }, { id: 'cmd', label: 'CMD' }];
+const SHELLS: { id: QuickCommand['shell']; label: string }[] = IS_WIN
+  ? [{ id: 'shell', label: 'PowerShell' }, { id: 'bash', label: 'Git Bash' }, { id: 'cmd', label: 'CMD' }]
+  : [{ id: 'shell', label: 'Terminal' }, { id: 'bash', label: 'Bash' }];
 const blank = (): QuickCommand => ({ id: '', label: '', action: 'terminal', command: '', enter: true, project: null, shell: 'shell', agentId: null });
 
 /**
