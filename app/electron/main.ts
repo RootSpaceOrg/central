@@ -35,7 +35,7 @@ import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, u
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
-import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
+import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
 import { createProject, deleteProject, listProjects, listRepos, recent, reorderProjects, syncProjects, updateProject } from './projects';
 import {
   cloneRepo, createTerminal, githubRepos, killAllTerminals, killTerminal, listDir, readFile, resizeTerminal, writeFile, writeTerminal,
@@ -103,6 +103,7 @@ const factProject = (id: number) => get<{ p: string }>('select project_slug p fr
 const navigate = (route: string) => send('app:navigate', route);
 // testes (--capture) não mostram notificação na tela de quem está usando o PC
 const toast = (title: string, body: string, route: string | null) => { if (!CAPTURE) notify(title, body, route, () => win, navigate); };
+onRoutineFail((title, body) => toast(title, body, '/execucoes'));
 /** avisa uma vez quando cada execução termina */
 const notified = new Set<number>();
 const emitRun = {

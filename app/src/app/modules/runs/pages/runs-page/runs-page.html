@@ -56,7 +56,7 @@
             <span class="line-clamp-2 leading-snug">{{ r.title }}</span>
             <span class="mt-1 flex items-center gap-1.5 text-[12.5px] text-mute">
               @if (!agentFilter() && agent(r.agentId); as a) { <app-project-avatar [project]="a" [size]="14" /> }
-              <span class="truncate" [class.text-later]="r.waiting">{{ r.waiting ? 'Esperando você' : r.paused ? 'Pausada' : statusLabel[r.status] }}, {{ r.scope === 'project' ? 'projeto inteiro' : r.scope === 'workspace' ? 'pasta do agente' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}</span>
+              <span class="truncate" [class.text-later]="r.waiting">{{ r.waiting ? 'Esperando você' : r.paused ? 'Pausada' : statusLabel[r.status] }}, {{ r.scope === 'command' ? 'comando' : r.scope === 'project' ? 'projeto inteiro' : r.scope === 'workspace' ? 'pasta do agente' : r.repoName }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}</span>
             </span>
           </span>
         </button>

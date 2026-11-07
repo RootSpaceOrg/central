@@ -69,6 +69,16 @@ const SHELLS: Record<string, [string, string[]]> = process.platform === 'win32' 
   bash: ['/bin/bash', ['-l']],
 };
 
+/** programa e argumentos para rodar um comando de uma vez (rotina de comando), sem terminal interativo */
+export function commandShell(kind: string, command: string): [string, string[]] {
+  if (process.platform === 'win32') {
+    if (kind === 'cmd') return ['cmd.exe', ['/d', '/s', '/c', command]];
+    if (kind === 'bash') return [GIT_BASH, ['-lc', command]];
+    return ['powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command]];
+  }
+  return kind === 'bash' ? ['/bin/bash', ['-lc', command]] : [UNIX_SHELL, ['-lc', command]];
+}
+
 const terminals = new Map<number, pty.IPty>();
 let nextTerminal = 1;
 

@@ -394,15 +394,19 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
 
   // ---------- rotinas ----------
   tool('list_routines', 'Rotinas (agentes com agenda): o que fazem, quando rodam, último resultado.', {}, () => listRoutines());
-  tool('create_routine', 'Cria rotina (execução com agenda). schedule_kind daily: dias (0=domingo) e time HH:MM; interval: a cada interval_hours. agent_id faz a rotina rodar com o papel de um agente. Sem repo_path atua no projeto inteiro (edits = só lê e alimenta backlog, ideias e decisões).', {
+  tool('create_routine', 'Cria rotina (execução com agenda). schedule_kind daily: dias (0=domingo) e time HH:MM; interval: a cada interval_minutes (5 a 1440) ou interval_hours. kind command: o prompt é um comando de terminal (script, health check, backup) que roda na pasta do projeto sem Claude e sem gastar cota; on_fail_agent chama um agente se falhar. agent_id faz a rotina rodar com o papel de um agente. Sem repo_path atua no projeto inteiro (edits = só lê e alimenta backlog, ideias e decisões).', {
     name: z.string(), project_slug: z.string().optional(), agent_id: z.number().int().optional(), prompt: z.string(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(),
     schedule_kind: z.enum(['daily', 'interval']).optional(), days: z.array(z.number().int().min(0).max(6)).optional(), time: z.string().optional(),
     interval_hours: z.number().int().min(1).optional(), max_session: z.number().int().min(10).max(100).optional(), enabled: z.boolean().optional(),
+    kind: z.enum(['agent', 'command']).optional().describe('command = o prompt é um comando de terminal, roda sem Claude e sem cota'), shell: z.enum(['', 'shell', 'cmd', 'bash']).optional().describe('terminal do comando: shell = PowerShell no Windows / zsh no Mac'),
+    on_fail_agent: z.number().int().nullable().optional().describe('agente que investiga se o comando falhar'), interval_minutes: z.number().int().min(5).max(1440).nullable().optional().describe('intervalo em minutos (tem prioridade sobre interval_hours)'),
   }, a => createRoutine({ ...a, project_slug: a.project_slug ?? null, agent_id: a.agent_id ?? null, repo_path: a.repo_path ?? null, permission: a.permission ?? 'edits', size: a.size ?? 'small', schedule_kind: a.schedule_kind ?? 'daily', days: a.days ?? [1, 2, 3, 4, 5], time: a.time ?? '08:00', interval_hours: a.interval_hours ?? 24 }), h.routines);
   tool('update_routine', 'Edita, liga ou desliga (enabled) uma rotina.', {
     id: z.number().int(), name: z.string().optional(), agent_id: z.number().int().nullable().optional(), prompt: z.string().optional(), repo_path: z.string().optional(), permission: permission.optional(), size: size.optional(),
     schedule_kind: z.enum(['daily', 'interval']).optional(), days: z.array(z.number().int().min(0).max(6)).optional(), time: z.string().optional(),
     interval_hours: z.number().int().min(1).optional(), max_session: z.number().int().min(10).max(100).optional(), enabled: z.boolean().optional(),
+    kind: z.enum(['agent', 'command']).optional().describe('command = o prompt é um comando de terminal, roda sem Claude e sem cota'), shell: z.enum(['', 'shell', 'cmd', 'bash']).optional().describe('terminal do comando: shell = PowerShell no Windows / zsh no Mac'),
+    on_fail_agent: z.number().int().nullable().optional().describe('agente que investiga se o comando falhar'), interval_minutes: z.number().int().min(5).max(1440).nullable().optional().describe('intervalo em minutos (tem prioridade sobre interval_hours)'),
   }, ({ id, ...patch }) => updateRoutine(id, patch), h.routines);
   tool('delete_routine', 'Exclui uma rotina. Só use se o Gustavo pediu.', { id: z.number().int() }, ({ id }) => deleteRoutine(id), h.routines);
   tool('run_routine_now', 'Roda uma rotina agora, fora da agenda.', { id: z.number().int() }, ({ id }) => fireRoutine(id, h.emit, true), h.routines);

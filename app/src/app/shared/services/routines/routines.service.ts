@@ -8,6 +8,12 @@ export interface Routine {
   id: number;
   name: string;
   agentId: number | null;
+  /** agent = um agente faz; command = roda um comando no terminal, sem Claude */
+  kind: 'agent' | 'command';
+  shell: string;
+  onFailAgent: number | null;
+  /** intervalo em minutos (tem prioridade sobre intervalHours) */
+  intervalMinutes: number | null;
   projectSlug: string | null;
   repoPath: string | null;
   prompt: string;
@@ -30,7 +36,7 @@ export interface Routine {
 export type RoutineDraft = Omit<Routine, 'id' | 'nextRunAt' | 'lastRunAt' | 'lastSkipped' | 'lastStatus' | 'lastRunId' | 'runCount'>;
 
 const toModel = (d: RoutineDto): Routine => ({
-  id: d.id, name: d.name, agentId: d.agent_id, projectSlug: d.project_slug, repoPath: d.repo_path, prompt: d.prompt, permission: d.permission,
+  id: d.id, name: d.name, agentId: d.agent_id, kind: d.kind ?? 'agent', shell: d.shell ?? '', onFailAgent: d.on_fail_agent ?? null, intervalMinutes: d.interval_minutes ?? null, projectSlug: d.project_slug, repoPath: d.repo_path, prompt: d.prompt, permission: d.permission,
   size: d.size, scheduleKind: d.schedule_kind, days: d.days, time: d.time, intervalHours: d.interval_hours, maxSession: d.max_session,
   enabled: d.enabled, nextRunAt: new Date(d.next_run_at), lastRunAt: d.last_run_at ? new Date(d.last_run_at) : null,
   lastSkipped: d.last_skipped, lastStatus: d.last_status, lastRunId: d.last_run_id, runCount: d.run_count,
@@ -39,13 +45,14 @@ const toModel = (d: RoutineDto): Routine => ({
 const toInput = (r: RoutineDraft): NewRoutineInput => ({
   name: r.name, agent_id: r.agentId, project_slug: r.projectSlug, repo_path: r.repoPath, prompt: r.prompt, permission: r.permission, size: r.size,
   schedule_kind: r.scheduleKind, days: r.days, time: r.time, interval_hours: r.intervalHours, max_session: r.maxSession, enabled: r.enabled,
+  kind: r.kind, shell: r.shell, on_fail_agent: r.onFailAgent, interval_minutes: r.intervalMinutes,
 });
 
 const DAY = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
 /** "Dias úteis às 08:00", "Todo dia às 02:00", "seg e qui às 09:30", "A cada 6 h" */
-export function describeSchedule(r: Pick<Routine, 'scheduleKind' | 'days' | 'time' | 'intervalHours'>): string {
-  if (r.scheduleKind === 'interval') return `A cada ${r.intervalHours} h`;
+export function describeSchedule(r: Pick<Routine, 'scheduleKind' | 'days' | 'time' | 'intervalHours'> & { intervalMinutes?: number | null }): string {
+  if (r.scheduleKind === 'interval') return r.intervalMinutes ? `A cada ${r.intervalMinutes} min` : `A cada ${r.intervalHours} h`;
   const d = [...r.days].sort();
   const when = d.length === 7 || !d.length ? 'Todo dia' : d.join() === '1,2,3,4,5' ? 'Dias úteis' : d.join() === '0,6' ? 'Fins de semana'
     : d.map(x => DAY[x]).join(', ').replace(/, ([^,]+)$/, ' e $1');

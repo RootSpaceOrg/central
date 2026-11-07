@@ -10,6 +10,7 @@ import { nextStage, setStage } from './board';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { Grant, blockedDirs, grantsFrom, safeGrant } from './permissions';
+import { commandShell } from './workspace';
 import { killTree, treeSpawn } from './proc';
 import { closeDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
@@ -155,9 +156,51 @@ export function killRun(id: number, emit: Emit): void {
   const proc = procs.get(id);
   killTree(proc?.pid);
   const r = dto(id);
+  // comando: só marca (não tem tarefa, PR nem nota de entrega)
+  if (r.scope === 'command') { if (r.status === 'running') { procs.delete(id); set(id, { status: 'killed', result: 'Interrompido por você.', finished_at: now() }, emit); emit.changed(); } return; }
   if (['queued', 'preparing', 'running'].includes(r.status)) {
     finish(id, 'killed', 'Interrompido por você.', null, emit);
   }
+}
+
+/**
+ * Rotina de comando: roda um script no terminal (PowerShell, cmd, bash, zsh) na pasta do projeto, sem Claude e sem
+ * gastar cota. Vira uma execução como as outras (saída ao vivo, Interromper, resultado). Falhou: avisa e, se tiver,
+ * chama um agente para investigar.
+ */
+export function startCommandRun(i: { project_slug: string | null; cwd: string; command: string; shell: string; routine_id: number | null; name: string; timeoutMin?: number },
+  emit: Emit, onFail?: (output: string, code: number | null) => void): RunDto {
+  const { lastInsertRowid } = run(`insert into runs (project_slug, agent_id, routine_id, scope, repo_path, prompt, permission, budget_usd, status, started_at)
+    values (?, null, ?, 'command', ?, ?, 'edits', 0, 'running', ?)`, i.project_slug, i.routine_id, i.cwd, i.command, now());
+  const id = Number(lastInsertRowid);
+  const [file, args] = commandShell(i.shell, i.command);
+  event(id, 'system', `Rodando no ${i.shell || 'terminal padrão'}, em ${i.cwd}`, emit);
+  let child: ReturnType<typeof spawn>;
+  try { child = spawn(file, args, { cwd: i.cwd, windowsHide: true, env: childEnv(), ...treeSpawn }); }
+  catch (e) { set(id, { status: 'failed', result: (e as Error).message, finished_at: now() }, emit); return dto(id); }
+  procs.set(id, child);
+  emit.update(dto(id));
+  let tail = '', pending = '';
+  const flush = () => { if (pending.trim()) event(id, 'tool', pending.replace(/\s+$/, ''), emit); pending = ''; };
+  const flusher = setInterval(flush, 1000);
+  const take = (d: Buffer) => { const s = d.toString(); pending += s; tail = (tail + s).slice(-6000); if (pending.length > 4000) flush(); };
+  child.stdout?.on('data', take);
+  child.stderr?.on('data', take);
+  // tempo máximo: não fica pendurado para sempre
+  const limit = setTimeout(() => { event(id, 'error', `Passou de ${i.timeoutMin ?? 15} min: interrompido.`, emit); killTree(child.pid); }, (i.timeoutMin ?? 15) * 60_000);
+  const done = (code: number | null, err?: Error) => {
+    clearInterval(flusher); clearTimeout(limit); flush();
+    procs.delete(id);
+    if (dto(id).status !== 'running') return; // interrompido por você
+    const ok = code === 0 && !err;
+    const out = tail.trim();
+    set(id, { status: ok ? 'succeeded' : 'failed', result: `${ok ? 'Terminou bem' : `Falhou${err ? `: ${err.message}` : ` (código ${code})`}`}${out ? `\n\n${out.slice(-3000)}` : ''}`, finished_at: now() }, emit);
+    emit.changed();
+    if (!ok) onFail?.(out, code);
+  };
+  child.on('error', e => done(null, e));
+  child.on('close', code => done(code));
+  return dto(id);
 }
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -242,7 +285,7 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
  * Pausadas ficam na fila (seguram a tarefa) até o freio retomar.
  */
 export function pump(emit: Emit): void {
-  const active = get<{ n: number }>(`select count(*) n from runs where status in ('preparing','running')`)!.n;
+  const active = get<{ n: number }>(`select count(*) n from runs where status in ('preparing','running') and scope <> 'command'`)!.n;
   const queued = all<{ id: number; priority: number; created_at: string; paused: string | null }>(
     `select id, priority, created_at, paused from runs where status = 'queued'`);
   const next = pickNext(queued, active, MAX_PARALLEL, readUsage(usageNow()), Date.now());

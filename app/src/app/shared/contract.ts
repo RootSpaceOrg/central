@@ -12,7 +12,8 @@ export type Verdict = 'approve' | 'defer' | 'reject';
 export type RunStatus = 'queued' | 'preparing' | 'running' | 'succeeded' | 'failed' | 'killed';
 export type RunPermission = 'edits' | 'full';
 /** repo: worktree isolada que termina em PR; project: pasta do projeto inteira; workspace: pasta própria de um agente sem projeto */
-export type RunScope = 'repo' | 'project' | 'workspace';
+/** command = rotina de comando (terminal, sem Claude) */
+export type RunScope = 'repo' | 'project' | 'workspace' | 'command';
 export type RunEventKind = 'system' | 'text' | 'tool' | 'result' | 'error';
 
 export interface ProjectDto {
@@ -457,6 +458,10 @@ export interface RoutineDto {
   id: number;
   name: string;
   agent_id: number | null;
+  kind: 'agent' | 'command';
+  shell: string;
+  on_fail_agent: number | null;
+  interval_minutes: number | null;
   project_slug: string | null;
   /** null = projeto inteiro (organizar/analisar); com repo = trabalha em worktree e termina em PR */
   repo_path: string | null;
@@ -494,6 +499,14 @@ export interface NewRoutineInput {
   interval_hours: number;
   max_session?: number;
   enabled?: boolean;
+  /** agent = um agente (Claude) faz; command = roda o texto como comando no terminal, sem Claude */
+  kind?: 'agent' | 'command';
+  /** terminal do comando: '' ou 'shell' (PowerShell / zsh), 'cmd', 'bash' */
+  shell?: string;
+  /** agente que investiga quando o comando falha (null = só avisa) */
+  on_fail_agent?: number | null;
+  /** intervalo em minutos (5 a 1440); null = usa interval_hours */
+  interval_minutes?: number | null;
 }
 
 export type RoutinePatch = Partial<NewRoutineInput>;
