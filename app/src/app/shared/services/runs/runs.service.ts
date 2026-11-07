@@ -109,6 +109,14 @@ export class RunsService {
     try { await this.api.continue(id, note); } catch (e) { throw new Error(errorMessage(e)); }
   }
 
+  /** descarta o "esperando você": a tarefa volta para a fila, e a próxima execução usa a configuração atual do agente */
+  async dismissWaiting(id: number): Promise<void> {
+    try {
+      await this.api.dismissWaiting(id);
+      this.runs.update(list => list.map(r => (r.id === id ? { ...r, waiting: null } : r)));
+    } catch (e) { throw new Error(errorMessage(e)); }
+  }
+
   /** libera para o agente o que a execução pediu e continua de onde parou */
   async grant(id: number): Promise<void> {
     try { await this.api.grant(id); } catch (e) { throw new Error(errorMessage(e)); }

@@ -170,6 +170,18 @@ started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
 ok(started.find(x => x.task_id === 9)?.agent_id === 8, 'próxima etapa: o agente dela pega');
 
+// "esperando você" só trava enquanto for a última execução do cartão nesta coluna
+db.exec("update runs set status = 'succeeded' where task_id = 9");
+db.exec(`insert into runs (task_id, board_id, stage, status, waiting) values (9, ${solto.id}, 'roteiro', 'succeeded', '{"reason":"sem acesso"}')`);
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
+ok(!started.some(x => x.task_id === 9), 'esperando você na coluna atual: a etapa espera');
+bd.setStage(9, solto.id, 'pesquisa');
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
+ok(started.some(x => x.task_id === 9), 'mudou de coluna: o aviso antigo não trava mais');
+db.exec("update runs set status = 'succeeded' where task_id = 9");
+
 // remover uma coluna com tarefa: ela vai para a primeira; apagar o quadro não apaga a tarefa
 bd.saveColumns(solto.id, [{ key: 'ideias', label: 'Ideias' }, { key: 'publicado', label: 'Publicado', kind: 'done' }]);
 ok(bd.stagesOf().find(x => x.task_id === 10 && x.board_id === solto.id).stage === 'ideias', 'coluna removida: tarefa vai para a primeira');

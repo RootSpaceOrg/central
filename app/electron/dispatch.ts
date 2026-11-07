@@ -135,7 +135,11 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
     const tasks = all<{ id: number; title: string; body: string | null; repo_path: string | null; project_slug: string | null }>(
       `select t.id, t.title, t.body, t.repo_path, t.project_slug from task_boards x join tasks t on t.id = x.task_id
        where x.board_id = ? and x.stage = ? and t."column" <> 'done'
-         and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.board_id = ? and r.stage = ? and r.status = 'failed' and r.finished_at > ?) or r.waiting is not null))
+         and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.board_id = ? and r.stage = ? and r.status = 'failed' and r.finished_at > ?)))
+         -- "esperando você" só segura enquanto for a última execução do cartão neste quadro e nesta coluna (mudou de coluna
+         -- ou rodou de novo: o aviso antigo não trava mais)
+         and not exists (select 1 from runs r where r.task_id = t.id and r.board_id = x.board_id and r.stage = x.stage and r.waiting is not null
+           and r.id = (select max(r2.id) from runs r2 where r2.task_id = t.id and r2.board_id = x.board_id))
          and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
          and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
        order by t.priority, x.position, t.id limit ?`, s.board, s.key, s.board, s.key, since, slots);

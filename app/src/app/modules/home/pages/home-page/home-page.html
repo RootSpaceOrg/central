@@ -29,6 +29,7 @@
             @if (r.waiting!.command) {
               <button type="button" class="btn btn-sm btn-ghost" (click)="runFix(r.waiting!.command!, r.projectSlug)" title="Abre um terminal no projeto e roda o comando"><app-icon name="play" [size]="14" />Rodar no terminal</button>
             }
+            <button type="button" class="btn btn-sm btn-ghost" (click)="runs.dismissWaiting(r.id)" title="Tira o aviso sem retomar: a tarefa volta para a fila, com a configuração atual do agente">Descartar</button>
             <button type="button" class="btn btn-sm btn-primary" (click)="resume(r.id)" title="Retoma o agente de onde parou">Já resolvi, continuar</button>
           </div>
         }

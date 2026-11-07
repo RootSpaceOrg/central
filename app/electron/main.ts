@@ -280,6 +280,8 @@ function registerIpc(): void {
   handle('facts:import', slug => { const n = importClaudeMemory(slug); contextChanged(slug); return n; });
   handle('claude:import', (id, slug) => importClaudeSession(id, slug));
   handle('chat:fromRun', runId => chatFromRun(runId));
+  // descarta o "esperando você" sem retomar: a tarefa volta para a fila e a próxima execução usa a configuração atual do agente
+  handle('runs:dismissWaiting', runId => { run('update runs set waiting = null where id = ?', runId); emitRun.update(runDto(runId)); backlogChanged(); });
   handle('runs:resume', (runId, note) => {
     const w = get<{ waiting: string | null; agent_id: number | null }>('select waiting, agent_id from runs where id = ?', runId);
     if (!w?.waiting) throw new Error('Essa execução não está esperando.');
