@@ -5,7 +5,7 @@ import {
   Ellipsis, ExternalLink, File, Flag, Folder, FolderOpen, GitBranch, GitMerge, House, Inbox, KanbanSquare, Lightbulb,
   ListTree, MessageSquare, Moon, Pencil, Play, Plus, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
   BatteryLow, Zap, X, LayoutGrid, Maximize2, Minimize2, Columns2, Rows2, GripVertical, Waypoints, Building2, Coffee, Milestone, ArrowRight, RotateCw, RotateCcw, Crosshair, Rocket, Workflow, Puzzle, Copy,
-  Mic, MessageCircle, ArrowLeft, Search, Users, ImagePlus,
+  Mic, MessageCircle, ArrowLeft, Search, Users, ImagePlus, Compass,
 } from 'lucide-static';
 
 /** Nome usado no app → SVG do Lucide (strings estáticas do pacote, sem rede). */
@@ -48,6 +48,7 @@ const SVGS = {
   timer: Clock,
   more: Ellipsis,
   flag: Flag,
+  compass: Compass,
   send: Send,
   settings: Settings,
   grid: LayoutGrid,

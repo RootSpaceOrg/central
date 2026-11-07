@@ -1,5 +1,6 @@
 import { Component, ElementRef, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 
+import { Agent, AgentsService } from '../../services/agents/agents.service';
 import { ChatService, ChatSession } from '../../services/chat/chat.service';
 import { ChatPrefsService } from '../../services/chat-prefs/chat-prefs.service';
 import { CHAT_MODELS, EFFORTS } from '../../services/agents/agents.service';
@@ -54,6 +55,12 @@ const drafts = new WeakMap<ChatSession, Map<string, string>>();
 })
 export class ChatView implements OnDestroy {
   private readonly service = inject(ChatService);
+  private readonly agentsService = inject(AgentsService);
+  /** mensagem 'peer': {agent_id, text} */
+  protected peerOf(raw: string): { agent: Agent | null; text: string } {
+    try { const v = JSON.parse(raw) as { agent_id: number; text: string }; return { agent: this.agentsService.byId().get(v.agent_id) ?? null, text: v.text }; }
+    catch { return { agent: null, text: raw }; }
+  }
   private readonly projects = inject(ProjectsService);
   /** conversa de uma aba de sessão; sem ela, usa a conversa compartilhada (painel e tela Agentes) */
   readonly session = input<ChatSession | null>(null);

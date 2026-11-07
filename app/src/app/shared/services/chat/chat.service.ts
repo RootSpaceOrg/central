@@ -201,7 +201,7 @@ export class ChatService extends ChatSession {
   }
 
   /** Conversa independente (aba de sessão do projeto). Chame release() quando a aba fechar. */
-  spawn(projectSlug: string): ChatSession {
+  spawn(projectSlug: string | null): ChatSession {
     const s = new ChatSession(this.api, this.agents, this.busy, this.streams, this.cache, projectSlug);
     s.reload = () => this.loadChats();
     this.wire(s);

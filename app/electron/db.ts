@@ -224,6 +224,27 @@ db.exec(`
   create index if not exists directions_by_project on directions(project_slug, id);
 
   -- roadmap do projeto: marcos em Agora / Próximo / Depois (sem data obrigatória; alvo opcional, ex.: "dez", "Q1")
+  -- Guiar projeto: uma sessão aberta por projeto/escopo; etapas 1 retrato, 2 decisões, 3 plano, 4 em andamento
+  create table if not exists guides (
+    id              integer primary key autoincrement,
+    project_slug    text not null references projects on delete cascade,
+    direct          integer not null default 0,
+    status          text not null default 'open',
+    step            integer not null default 1,
+    phase           text not null default 'idle',
+    snapshot        text not null,
+    reading         text,
+    cards           text,
+    plan            text,
+    central_chat    integer,
+    strategist_chat integer,
+    minutes         text,
+    created_at      text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at      text,
+    approved_at     text,
+    finished_at     text
+  );
+
   create table if not exists milestones (
     id           integer primary key autoincrement,
     project_slug text not null references projects on delete cascade,

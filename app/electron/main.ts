@@ -34,6 +34,7 @@ import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reor
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
+import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGuides, requestPlan, setPlanItem, setStep, startGuide } from './guides';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -262,7 +263,21 @@ function registerIpc(): void {
   handle('routines:delete', id => { deleteRoutine(id); routinesChanged(); });
   handle('routines:fire', async id => { const r = await fireRoutine(id, emitRun, true); routinesChanged(); return r; });
 
-  const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean) => send('chat:event', { chat_id, message, busy });
+  const chatNotify = (chat_id: number, message: Events['chat:event']['message'], busy: boolean): void => {
+    send('chat:event', { chat_id, message, busy });
+    // guiar projeto: quando um dos dois termina de falar, o outro recebe a vez
+    if (!message && !busy) try { guideIdle(chat_id, guideDeps); } catch (e) { console.error('guia', e); }
+  };
+  const guideDeps = { notify: chatNotify, changed: () => { send('guides:changed', null); changed(); } };
+  handle('guides:list', () => listGuides());
+  handle('guides:start', (slug, direct) => startGuide(slug, direct, guideDeps));
+  handle('guides:step', (id, step) => { setStep(id, step); send('guides:changed', null); });
+  handle('guides:answer', (id, cardId, answer) => { answerCard(id, cardId, answer); send('guides:changed', null); });
+  handle('guides:plan', id => requestPlan(id, guideDeps));
+  handle('guides:item', (id, itemId, patch) => { setPlanItem(id, itemId, patch); send('guides:changed', null); });
+  handle('guides:approve', id => { approvePlan(id, guideDeps); backlogChanged(); });
+  handle('guides:ask', (id, q) => askStrategist(id, q, guideDeps));
+  handle('guides:abandon', id => { abandonGuide(id); send('guides:changed', null); });
   // WhatsApp (extensão): os donos conversam com a Central por lá; a resposta aparece aqui também
   initWhatsApp({ notify: chatNotify, changed: () => { changed(); backlogChanged(); }, onStatus: () => send('ext:changed', null), centralId: () => get<{ id: number }>('select id from agents where builtin = 1')!.id,
     startListen: input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.small, proposal_id: null }, emitRun).id });

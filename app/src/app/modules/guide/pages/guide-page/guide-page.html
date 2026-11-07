@@ -1,0 +1,262 @@
+<div class="flex h-full min-h-0 flex-col">
+  <!-- topo -->
+  <header class="flex flex-wrap items-center gap-3 border-b border-edge bg-panel px-6 py-4">
+    <app-icon name="compass" [size]="22" class="text-frost" />
+    <div class="min-w-0 flex-1">
+      <h1 class="font-display text-[20px] font-bold tracking-tight">Guiar{{ project() ? ' · ' + project()!.name + (scope.direct() ? ' (sem frente)' : '') : '' }}</h1>
+      <p class="text-[13px] text-mute">Retrato do projeto, debate entre o estrategista e a Central, suas decisões e o plano que os agentes executam.</p>
+    </div>
+    @if (guide(); as g) {
+      <button type="button" class="btn btn-sm btn-ghost hover:!text-no" (click)="abandon(g)"><app-icon name="delete" [size]="14" />Descartar sessão</button>
+    }
+  </header>
+  @if (guides.error()) { <p role="alert" class="border-b border-no/30 bg-no/10 px-6 py-2 text-[13px] text-no">{{ guides.error() }}</p> }
+
+  @if (!slug()) {
+    <!-- sem projeto escolhido: escolha um -->
+    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <p class="text-mute">Escolha um projeto na lista ao lado (ou aqui) para guiar.</p>
+      <div class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
+        @for (c of choices(); track c.p.slug) {
+          <button type="button" (click)="scope.set(c.p.slug)" class="flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 text-left transition hover:border-faint">
+            <app-project-avatar [project]="c.p" [size]="28" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate font-semibold">{{ c.p.name }}</span>
+              <span class="block text-[12px]" [class]="c.open ? 'text-later' : 'text-faint'">{{ c.open ? 'sessão aberta, etapa ' + c.open.step : 'guiar' }}</span>
+            </span>
+            <app-icon name="chevron" [size]="14" class="text-faint" />
+          </button>
+        }
+      </div>
+      <ng-container *ngTemplateOutlet="minutes" />
+    </div>
+  } @else if (!guide()) {
+    <!-- projeto escolhido, sem sessão aberta -->
+    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+      <div class="mx-auto max-w-2xl rounded-3xl border border-edge bg-panel px-8 py-8 text-center">
+        @if (project(); as p) { <app-project-avatar [project]="p" [size]="44" class="mx-auto" /> }
+        <h2 class="mt-3 font-display text-2xl font-bold">Para onde vamos agora?</h2>
+        <p class="mx-auto mt-2 max-w-lg text-mute">O estrategista lê o projeto inteiro (rumo, roadmap, backlog, ideias, decisões, o que andou e o que espera
+          produção) e abre o debate. A Central responde e monta as decisões para você. Usa Opus nos dois.</p>
+        <button type="button" class="btn btn-primary mt-5" (click)="start()" [disabled]="starting()">
+          <app-icon name="compass" [size]="18" />{{ starting() ? 'Montando o retrato…' : 'Guiar este projeto' }}</button>
+      </div>
+      <div class="mx-auto max-w-2xl"><ng-container *ngTemplateOutlet="minutes" /></div>
+    </div>
+  } @else {
+    @let g = guide()!;
+    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto @3xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] @3xl:overflow-hidden">
+      <!-- etapas -->
+      <section class="min-w-0 @3xl:overflow-y-auto" aria-label="Etapas">
+        <nav class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-edge bg-night/95 px-6 pt-3 backdrop-blur [scrollbar-width:none]" aria-label="Etapas da sessão">
+          @for (s of steps; track s.n) {
+            @let reach = s.n <= maxStep(g);
+            <button type="button" (click)="go(g, s.n)" [disabled]="!reach" [attr.aria-current]="g.step === s.n ? 'step' : null"
+                    class="-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 pb-2.5 pt-1 text-[13.5px] font-semibold transition-colors disabled:opacity-40"
+                    [class]="g.step === s.n ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+              <span class="grid size-5 place-items-center rounded-full text-[11px]" [class]="s.n < maxStep(g) || (s.n === 4 && g.approvedAt) ? 'bg-yes/20 text-yes' : g.step === s.n ? 'bg-frost text-night' : 'bg-edge text-mute'">{{ s.n }}</span>
+              {{ s.label }}
+            </button>
+          }
+        </nav>
+
+        <div class="px-6 py-5">
+          @switch (g.step) {
+            <!-- 1. retrato -->
+            @case (1) {
+              @if (g.reading) {
+                <div class="rounded-2xl border border-frost/30 bg-frost/5 px-5 py-4">
+                  <p class="text-[12px] font-semibold uppercase tracking-wide text-frost">Leitura do momento</p>
+                  <div class="md mt-1.5" [innerHTML]="g.reading | markdown"></div>
+                </div>
+              } @else {
+                <div class="flex items-center gap-2 rounded-2xl border border-edge px-5 py-4 text-mute">
+                  <span class="pulse size-2 rounded-full bg-frost"></span>
+                  {{ g.phase === 'analysis' ? 'O estrategista está lendo o projeto e vai abrir o debate na conversa ao lado…' : 'A Central está respondendo e montando as decisões…' }}
+                </div>
+              }
+              <div class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(170px,1fr))]">
+                @for (t of tiles(g); track t.label) {
+                  <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
+                    <p class="text-[12px] text-mute">{{ t.label }}</p>
+                    <p class="font-display text-2xl font-bold tabular-nums">{{ t.value }}</p>
+                    <p class="text-[11.5px] text-faint">{{ t.hint }}</p>
+                  </div>
+                }
+              </div>
+              <div class="mt-4 grid gap-3 @3xl:grid-cols-2">
+                <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
+                  <p class="text-[12px] font-semibold text-mute">Rumo {{ g.snapshot.direction ? '· atualizado ' : '' }}{{ g.snapshot.direction ? (date(g.snapshot.direction.updated_at) | ago) : '' }}</p>
+                  @if (g.snapshot.direction; as d) { <div class="md mt-1 line-clamp-[10] text-[13px]" [innerHTML]="d.text | markdown"></div> }
+                  @else { <p class="mt-1 text-[13px] text-later">Sem rumo escrito.</p> }
+                </div>
+                <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
+                  <p class="text-[12px] font-semibold text-mute">Roadmap</p>
+                  <p class="mt-1 text-[12px] font-semibold text-frost">Agora</p>
+                  @for (m of g.snapshot.roadmap?.now ?? []; track $index) { <p class="text-[13px]">· {{ m }}</p> } @empty { <p class="text-[13px] text-later">nada em Agora</p> }
+                  @if (g.snapshot.roadmap?.next?.length) {
+                    <p class="mt-2 text-[12px] font-semibold text-mute">Próximo</p>
+                    @for (m of g.snapshot.roadmap.next; track $index) { <p class="text-[13px] text-mute">· {{ m }}</p> }
+                  }
+                  <p class="mt-2 text-[12px] text-faint">{{ g.snapshot.roadmap?.later ?? 0 }} em Depois · {{ g.snapshot.roadmap?.done_30d ?? 0 }} concluídos em 30 dias</p>
+                </div>
+                @if (g.snapshot.stuck_doing?.length) {
+                  <div class="rounded-2xl border border-later/30 bg-later/5 px-4 py-3">
+                    <p class="text-[12px] font-semibold text-later">Paradas em Fazendo há mais de 7 dias</p>
+                    @for (t of g.snapshot.stuck_doing; track $index) { <p class="truncate text-[13px]">{{ t }}</p> }
+                  </div>
+                }
+                @if (g.snapshot.waiting_production?.length) {
+                  <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
+                    <p class="text-[12px] font-semibold text-mute">Esperando produção (develop à frente da main)</p>
+                    @for (r of g.snapshot.waiting_production; track r.repo) {
+                      <p class="text-[13px]">{{ r.repo }}: <b>{{ r.commits }}</b> commits{{ r.since ? ', desde ' : '' }}{{ r.since ? (date(r.since) | ago) : '' }}</p>
+                    }
+                  </div>
+                }
+              </div>
+              @if (g.cards.length) {
+                <button type="button" class="btn btn-primary mt-5" (click)="go(g, 2)">Ir para as decisões <app-icon name="chevron" [size]="14" /></button>
+              }
+            }
+
+            <!-- 2. decisões -->
+            @case (2) {
+              <p class="text-[13px] text-mute">{{ answered(g) }} de {{ g.cards.length }} respondidas. Escolha uma opção ou escreva a sua; o que ficar sem resposta não entra no plano.</p>
+              <div class="mt-3 space-y-3">
+                @for (c of g.cards; track c.id) {
+                  <article class="rounded-2xl border bg-panel px-5 py-4" [class]="c.answer && (c.answer.choice != null || c.answer.note.trim()) ? 'border-yes/40' : 'border-edge'">
+                    <p class="text-[11.5px] font-semibold uppercase tracking-wide text-frost">{{ kindLabel[c.kind] ?? c.kind }}</p>
+                    <h3 class="mt-0.5 font-display text-[17px] font-semibold leading-snug">{{ c.question }}</h3>
+                    @if (c.context) { <p class="mt-1 text-[13px] text-mute">{{ c.context }}</p> }
+                    <div class="mt-3 grid gap-2" role="radiogroup" [attr.aria-label]="c.question">
+                      @for (o of c.options; track $index; let i = $index) {
+                        @let on = c.answer?.choice === i;
+                        <button type="button" role="radio" [attr.aria-checked]="on" (click)="pick(g, c, i)"
+                                class="rounded-xl border px-4 py-2.5 text-left transition-colors" [class]="on ? 'border-frost bg-frost/10' : 'border-edge hover:border-faint'">
+                          <span class="flex items-center gap-2 font-semibold">
+                            <span class="grid size-4 shrink-0 place-items-center rounded-full border" [class]="on ? 'border-frost bg-frost' : 'border-faint'"></span>
+                            {{ o.label }}
+                            @if (c.recommended === i) { <span class="rounded-full bg-yes/15 px-2 text-[11px] font-semibold text-yes">recomendado</span> }
+                          </span>
+                          @if (o.detail) { <span class="mt-0.5 block pl-6 text-[13px] text-mute">{{ o.detail }}</span> }
+                        </button>
+                      }
+                    </div>
+                    @if (c.strategist || c.central) {
+                      <div class="mt-3 grid gap-2 text-[12.5px] @3xl:grid-cols-2">
+                        @if (c.strategist) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-[#C8A2FF]">Estrategista:</b> {{ c.strategist }}</p> }
+                        @if (c.central) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-frost">Central:</b> {{ c.central }}</p> }
+                      </div>
+                    }
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                      <input class="field !py-1.5 min-w-0 flex-1 text-[13px]" placeholder="Outra resposta ou observação (opcional)" [attr.aria-label]="'Observação: ' + c.question"
+                             [value]="c.answer?.note ?? ''" (change)="note(g, c, $any($event.target).value)">
+                      <button type="button" class="btn btn-sm btn-ghost" (click)="ask(g, c)" [disabled]="working()">Perguntar ao estrategista</button>
+                    </div>
+                  </article>
+                }
+              </div>
+              <div class="sticky bottom-0 mt-4 flex items-center gap-3 border-t border-edge bg-night/95 py-3 backdrop-blur">
+                <span class="flex-1 text-[13px] text-mute">{{ g.plan.length ? 'Já tem um plano: montar de novo refaz com as respostas atuais.' : 'Com as respostas, a Central monta o plano.' }}</span>
+                @if (g.plan.length) { <button type="button" class="btn btn-sm" (click)="go(g, 3)">Ver plano</button> }
+                <button type="button" class="btn btn-primary" (click)="guides.requestPlan(g.id)" [disabled]="!answered(g) || working()">
+                  {{ working() && g.phase === 'reply' ? 'A Central está montando…' : 'Montar o plano' }}</button>
+              </div>
+            }
+
+            <!-- 3. plano -->
+            @case (3) {
+              <p class="text-[13px] text-mute">Escolha o que entra e quando. <b>Agora</b>: um agente começa já. <b>Backlog</b>: tarefa em A fazer com o agente. <b>Depois</b>: vira marco ou ideia.</p>
+              <ul class="mt-3 space-y-2">
+                @for (i of g.plan; track i.id) {
+                  <li class="@container flex flex-wrap items-start gap-3 rounded-2xl border bg-panel px-4 py-3" [class]="i.include ? 'border-edge' : 'border-edge opacity-50'">
+                    <input type="checkbox" class="mt-1 size-4 accent-frost" [checked]="i.include" (change)="guides.item(g.id, i.id, { include: $any($event.target).checked })" [attr.aria-label]="'Incluir ' + i.title">
+                    <div class="min-w-0 flex-1 basis-64">
+                      <p class="flex flex-wrap items-center gap-2">
+                        <span class="rounded bg-raise px-1.5 text-[11px] font-semibold text-frost">{{ itemKind[i.kind] ?? i.kind }}</span>
+                        <span class="font-semibold">{{ i.title }}</span>
+                        @if (i.agent) { <span class="text-[12.5px] text-mute">· {{ i.agent }}</span> }
+                      </p>
+                      @if (i.detail) { <p class="mt-0.5 text-[13px] text-mute">{{ i.detail }}</p> }
+                    </div>
+                    <div class="flex shrink-0 gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" [attr.aria-label]="'Quando: ' + i.title">
+                      @for (w of whens; track w.id) {
+                        <button type="button" role="radio" [attr.aria-checked]="i.when === w.id" (click)="guides.item(g.id, i.id, { when: w.id })" [disabled]="!i.include"
+                                class="rounded-full px-3 py-1 text-[12.5px] font-semibold" [class]="i.when === w.id ? 'bg-raise text-text' : 'text-mute hover:text-text'">{{ w.label }}</button>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+              <div class="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 border-t border-edge bg-night/95 py-3 backdrop-blur">
+                <span class="flex-1 text-[13px] text-mute">{{ included(g) }} de {{ g.plan.length }} itens. Aprovar registra suas escolhas como decisões e a Central executa.</span>
+                <button type="button" class="btn btn-sm" (click)="go(g, 2)">Voltar às decisões</button>
+                <button type="button" class="btn btn-primary" (click)="guides.approve(g.id)" [disabled]="!included(g) || working()"><app-icon name="check" [size]="16" />Aprovar o plano</button>
+              </div>
+            }
+
+            <!-- 4. em andamento -->
+            @case (4) {
+              <div class="flex items-center gap-2 rounded-2xl border border-edge px-5 py-4" [class.text-mute]="working()">
+                @if (working()) { <span class="pulse size-2 rounded-full bg-yes"></span> A Central está executando o plano (acompanhe na conversa). }
+                @else { <app-icon name="check" [size]="16" class="text-yes" /> A Central terminou a parte dela. A sessão fecha quando ela escrever a ata. }
+              </div>
+              <h3 class="mt-5 font-semibold">Plano aprovado</h3>
+              <ul class="mt-2 space-y-1 text-[13.5px]">
+                @for (i of g.plan; track i.id) {
+                  @if (i.include) { <li><span class="rounded bg-raise px-1.5 text-[11px] font-semibold text-frost">{{ i.when }}</span> {{ i.title }}</li> }
+                }
+              </ul>
+              <h3 class="mt-5 font-semibold">Execuções desde a aprovação</h3>
+              <ul class="mt-2 space-y-1 text-[13.5px]">
+                @for (r of since(); track r.id) {
+                  <li><a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="hover:underline">#{{ r.id }} {{ r.prompt.split('\n')[0] }}</a> <span class="text-faint">· {{ r.status }}</span></li>
+                } @empty { <li class="text-faint">Nenhuma ainda.</li> }
+              </ul>
+            }
+          }
+        </div>
+      </section>
+
+      <!-- conversa: o debate -->
+      <aside class="flex min-h-[520px] min-w-0 flex-col border-t border-edge bg-panel @3xl:min-h-0 @3xl:border-t-0 @3xl:border-l" aria-label="Debate">
+        <div class="border-b border-edge px-4 py-3">
+          <p class="flex items-center gap-2 text-[13px] font-semibold">
+            Debate
+            @if (strategistBusy()) { <span class="flex items-center gap-1.5 font-normal text-[#C8A2FF]"><span class="pulse size-1.5 rounded-full bg-[#C8A2FF]"></span>estrategista pensando</span> }
+            @else if (centralBusy()) { <span class="flex items-center gap-1.5 font-normal text-frost"><span class="pulse size-1.5 rounded-full bg-frost"></span>Central respondendo</span> }
+          </p>
+          <form class="mt-2 flex gap-2" (submit)="$event.preventDefault(); ask(g)">
+            <input class="field !py-1.5 min-w-0 flex-1 text-[13px]" placeholder="Perguntar ao estrategista…" aria-label="Pergunta ao estrategista"
+                   [value]="question()" (input)="question.set($any($event.target).value)">
+            <button type="submit" class="btn btn-sm" [disabled]="asking() || strategistBusy()">Perguntar</button>
+          </form>
+        </div>
+        @if (g.centralChat) {
+          <app-chat-view class="min-h-0 flex-1" [session]="session" [compact]="true" />
+        } @else {
+          <div class="grid flex-1 place-items-center px-6 text-center text-[13px] text-mute">
+            <p><span class="pulse mr-1.5 inline-block size-2 rounded-full bg-[#C8A2FF]"></span>O estrategista está lendo o projeto. A fala dele abre o debate aqui, e a Central responde.</p>
+          </div>
+        }
+      </aside>
+    </div>
+  }
+</div>
+
+<!-- atas das sessões anteriores -->
+<ng-template #minutes>
+  @if (history().length) {
+    <h2 class="mt-8 font-display text-lg font-semibold">Sessões anteriores</h2>
+    <div class="mt-3 space-y-2">
+      @for (h of history(); track h.id) {
+        <details class="rounded-2xl border border-edge bg-panel px-4 py-3">
+          <summary class="cursor-pointer font-semibold">{{ nameOf(h) }} <span class="font-normal text-mute">· {{ h.finishedAt ? (h.finishedAt | ago) : '' }}</span></summary>
+          <div class="md mt-2 text-[13.5px]" [innerHTML]="(h.minutes ?? 'Sem ata.') | markdown"></div>
+          @if (h.centralChat) { <a routerLink="/agentes" [queryParams]="{ conversa: h.centralChat }" class="mt-2 inline-block text-[13px] text-frost hover:underline">Ver a conversa da sessão</a> }
+        </details>
+      }
+    </div>
+  }
+</ng-template>

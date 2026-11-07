@@ -34,6 +34,7 @@ import { createProject, deleteProject, listProjects, listRepos, recent, syncProj
 import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, updateRoutine } from './routines';
 import { getUsage } from './usage';
 import { getDirection, planBacklog, setDirection } from './direction';
+import { finishGuide, updateGuide } from './guides';
 import { createMilestone, listMilestones, updateMilestone } from './roadmap';
 import { codeImpact, codeMap, codeNeighbors, codeSymbol, searchCode } from './context/context';
 import { createFact, recallFacts, supersedeFact } from './context/memory';
@@ -252,6 +253,23 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     const d = digest(a.since);
     return { ...d, deliveries: d.deliveries.map(x => ({ project: x.project_slug, agent: x.agent_name, title: x.title, status: x.status, failed: x.outcome === 'failed' })) };
   });
+  // ---------- guiar projeto ----------
+  tool('guide_update', 'Sessão de "Guiar projeto": entrega a leitura do momento (reading), os cards de decisão (cards) ou o plano (plan) para a tela do Gustavo. Use o guide_id que veio na instrução.', {
+    guide_id: z.number().int(), reading: z.string().optional(),
+    cards: z.array(z.object({
+      id: z.string(), kind: z.enum(['rumo', 'direcao', 'prioridade']), question: z.string(), context: z.string().optional(),
+      options: z.array(z.object({ label: z.string(), detail: z.string().optional() })).min(1).max(5),
+      recommended: z.number().int().optional(), strategist: z.string().optional(), central: z.string().optional(),
+    })).optional(),
+    plan: z.array(z.object({
+      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente']), title: z.string(), detail: z.string().optional(),
+      agent: z.string().optional(), when: z.enum(['agora', 'backlog', 'depois']),
+    })).optional(),
+  }, a => updateGuide(a.guide_id, { reading: a.reading, cards: a.cards as never, plan: a.plan as never }), h.projects);
+  tool('guide_finish', 'Fecha a sessão de "Guiar projeto" com a ata (markdown curto: o que foi decidido, o plano e o porquê), depois de executar o plano aprovado.', {
+    guide_id: z.number().int(), minutes: z.string(),
+  }, a => finishGuide(a.guide_id, a.minutes), h.projects);
+
   tool('production_status', 'O que está em develop e ainda não está em main (esperando produção), por repositório do projeto, com PRs e há quanto tempo.', {
     project_slug: z.string(), refresh: z.boolean().optional().describe('buscar o remoto agora (git fetch)'),
   }, async a => (await releaseStatus(a.project_slug, !!a.refresh)).filter(r => r.items.length || r.error)

@@ -61,6 +61,17 @@
               </div>
             </div>
           }
+          @case ('peer') {
+            <!-- fala de outro agente (ex.: o estrategista no Guiar): só para ler -->
+            @let pe = peerOf(m.text);
+            <div class="flex gap-3">
+              @if (pe.agent; as pa) { <app-project-avatar [project]="pa" [size]="28" class="mt-0.5" /> }
+              <div class="min-w-0 flex-1 rounded-2xl border border-edge bg-raise/40 px-4 py-3">
+                <p class="mb-1 text-[0.85em] font-semibold" [style.color]="pe.agent?.color">{{ pe.agent?.name ?? 'Outro agente' }}</p>
+                <div class="md selectable" [innerHTML]="pe.text | markdown"></div>
+              </div>
+            </div>
+          }
           @case ('permission') {
             @let grants = grantsOf(m.text);
             <div class="ml-10 rounded-2xl border border-later/40 bg-later/10 px-4 py-3">

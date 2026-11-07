@@ -41,6 +41,8 @@ export function renameChat(chatId: number, title: string): void {
   run('update chats set title = ? where id = ?', title.trim().slice(0, 120), chatId);
 }
 
+/** grava uma mensagem na conversa (e avisa a tela); 'peer' = fala de outro agente, só para mostrar */
+export { save as saveMessage };
 function save(chatId: number, role: ChatRole, text: string, notify: Notify): void {
   const { lastInsertRowid } = run('insert into chat_messages (chat_id, role, text, at) values (?,?,?,?)', chatId, role, text, now());
   run('update chats set updated_at = ? where id = ?', now(), chatId);

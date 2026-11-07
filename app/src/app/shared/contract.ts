@@ -247,6 +247,54 @@ export interface IdeaDto {
 }
 
 /** Rumo do projeto: versão atual (e quem mexeu por último). */
+/** Guiar projeto: um card de decisão (etapa 2) */
+export interface GuideCard {
+  id: string;
+  kind: 'rumo' | 'direcao' | 'prioridade';
+  question: string;
+  context?: string;
+  options: { label: string; detail?: string }[];
+  recommended?: number;
+  /** posição do estrategista e da Central em 1 linha */
+  strategist?: string;
+  central?: string;
+  answer?: { choice: number | null; note: string } | null;
+}
+
+/** Guiar projeto: um item do plano (etapa 3); when = o que o Gustavo escolheu */
+export interface GuidePlanItem {
+  id: string;
+  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente';
+  title: string;
+  detail?: string;
+  agent?: string;
+  when: 'agora' | 'backlog' | 'depois';
+  include: boolean;
+}
+
+export interface GuideDto {
+  id: number;
+  project_slug: string;
+  direct: number;
+  status: 'open' | 'done' | 'abandoned';
+  step: number;
+  /** analysis = estrategista lendo; reply = Central respondendo; consult = estrategista consultado; idle */
+  phase: string;
+  /** JSON com o retrato em números */
+  snapshot: string;
+  reading: string | null;
+  /** JSON GuideCard[] */
+  cards: string | null;
+  /** JSON GuidePlanItem[] */
+  plan: string | null;
+  central_chat: number | null;
+  strategist_chat: number | null;
+  minutes: string | null;
+  created_at: string;
+  approved_at: string | null;
+  finished_at: string | null;
+}
+
 export interface DirectionDto {
   id: number;
   project_slug: string;
@@ -822,7 +870,7 @@ export interface ChatDto {
 export interface ChatOptions { model: string; effort: string }
 
 /** permission: o Claude pediu algo que ninguém pôde aprovar; texto = JSON { grants: [{ kind, value, label }] } */
-export type ChatRole = 'user' | 'assistant' | 'tool' | 'error' | 'permission';
+export type ChatRole = 'user' | 'assistant' | 'tool' | 'error' | 'permission' | 'peer';
 
 export interface ChatMessageDto {
   id: number;
@@ -1063,6 +1111,15 @@ export interface Api {
   'ideas:create': (input: NewIdeaInput) => IdeaDto;
   'ideas:update': (id: number, patch: IdeaPatch) => void;
   'direction:get': (projectSlug: string) => DirectionDto | null;
+  'guides:list': () => GuideDto[];
+  'guides:start': (projectSlug: string, direct: boolean) => GuideDto;
+  'guides:step': (id: number, step: number) => void;
+  'guides:answer': (id: number, cardId: string, answer: GuideCard['answer']) => void;
+  'guides:plan': (id: number) => void;
+  'guides:item': (id: number, itemId: string, patch: Partial<Pick<GuidePlanItem, 'when' | 'include'>>) => void;
+  'guides:approve': (id: number) => void;
+  'guides:ask': (id: number, question: string) => void;
+  'guides:abandon': (id: number) => void;
   'direction:history': (projectSlug: string) => DirectionDto[];
   'direction:set': (projectSlug: string, text: string, note: string | null) => DirectionDto;
   /** gestor do projeto: lê rumo, ideias aprovadas, backlog e código e organiza o backlog (execução de agente) */
@@ -1166,6 +1223,8 @@ export interface Events {
   'gov:changed': null;
   /** extensão instalada, ligada ou com status novo (WhatsApp conectou, código de pareamento) */
   'ext:changed': null;
+  /** sessão de Guiar projeto mudou (cards, plano, etapa, vez no debate) */
+  'guides:changed': null;
   /** tocar o som de notificação escolhido (a tela toca) */
   'notify:sound': string;
   'pty:data': { id: number; data: string };

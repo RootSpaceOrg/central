@@ -1,0 +1,88 @@
+import { Injectable, computed, inject, signal } from '@angular/core';
+
+import { GuideCard, GuideDto, GuidePlanItem } from '../../../../shared/contract';
+import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
+
+export type { GuideCard, GuidePlanItem };
+
+/** retrato em números (montado no processo principal) */
+export interface GuideSnapshot {
+  project: string;
+  scope: string;
+  description: string | null;
+  direction: { text: string; updated_at: string } | null;
+  roadmap: { now: string[]; next: string[]; later: number; done_30d: number };
+  tasks: Record<'backlog' | 'todo' | 'doing' | 'review' | 'dev' | 'done', number>;
+  stuck_doing: string[];
+  ideas: { new: number; approved_waiting: number };
+  decisions_open: number;
+  runs_7d: { succeeded: number; failed: number; active: number };
+  review_waiting: number;
+  waiting_production: { repo: string; commits: number; since: string | null }[];
+}
+
+export interface Guide {
+  id: number;
+  projectSlug: string;
+  direct: boolean;
+  status: GuideDto['status'];
+  step: number;
+  phase: string;
+  snapshot: GuideSnapshot;
+  reading: string | null;
+  cards: GuideCard[];
+  plan: GuidePlanItem[];
+  centralChat: number | null;
+  strategistChat: number | null;
+  minutes: string | null;
+  createdAt: Date;
+  approvedAt: Date | null;
+  finishedAt: Date | null;
+}
+
+const json = <T>(v: string | null, d: T): T => { try { return v ? JSON.parse(v) : d; } catch { return d; } };
+const toGuide = (d: GuideDto): Guide => ({
+  id: d.id, projectSlug: d.project_slug, direct: !!d.direct, status: d.status, step: d.step, phase: d.phase,
+  snapshot: json(d.snapshot, {} as GuideSnapshot), reading: d.reading, cards: json(d.cards, []), plan: json(d.plan, []),
+  centralChat: d.central_chat, strategistChat: d.strategist_chat, minutes: d.minutes, createdAt: new Date(d.created_at),
+  approvedAt: d.approved_at ? new Date(d.approved_at) : null, finishedAt: d.finished_at ? new Date(d.finished_at) : null,
+});
+
+/** Guiar projeto: sessões (abertas e atas), e as ações de cada etapa. */
+@Injectable({ providedIn: 'root' })
+export class GuidesService {
+  private readonly ipc = inject(IpcService);
+  readonly guides = signal<Guide[]>([]);
+  readonly error = signal<string | null>(null);
+  readonly open = computed(() => this.guides().filter(g => g.status === 'open'));
+
+  constructor() {
+    this.load();
+    this.ipc.on('guides:changed', () => this.load());
+  }
+
+  load(): void { this.ipc.invoke('guides:list').then(l => this.guides.set(l.map(toGuide))); }
+
+  /** sessão aberta deste escopo (projeto inteiro ou só o projeto direto) */
+  openFor(slug: string, direct: boolean): Guide | null { return this.open().find(g => g.projectSlug === slug && g.direct === direct) ?? null; }
+
+  private async act<T>(p: Promise<T>): Promise<T | null> {
+    this.error.set(null);
+    try { const r = await p; this.load(); return r; } catch (e) { this.error.set(errorMessage(e)); return null; }
+  }
+
+  start(slug: string, direct: boolean) { return this.act(this.ipc.invoke('guides:start', slug, direct)); }
+  step(id: number, step: number) { this.guides.update(l => l.map(g => (g.id === id ? { ...g, step } : g))); return this.act(this.ipc.invoke('guides:step', id, step)); }
+  answer(id: number, cardId: string, answer: GuideCard['answer']) {
+    this.guides.update(l => l.map(g => (g.id === id ? { ...g, cards: g.cards.map(c => (c.id === cardId ? { ...c, answer } : c)) } : g)));
+    return this.act(this.ipc.invoke('guides:answer', id, cardId, answer));
+  }
+  requestPlan(id: number) { return this.act(this.ipc.invoke('guides:plan', id)); }
+  item(id: number, itemId: string, patch: Partial<Pick<GuidePlanItem, 'when' | 'include'>>) {
+    this.guides.update(l => l.map(g => (g.id === id ? { ...g, plan: g.plan.map(p => (p.id === itemId ? { ...p, ...patch } : p)) } : g)));
+    return this.act(this.ipc.invoke('guides:item', id, itemId, patch));
+  }
+  approve(id: number) { return this.act(this.ipc.invoke('guides:approve', id)); }
+  ask(id: number, question: string) { return this.act(this.ipc.invoke('guides:ask', id, question)); }
+  abandon(id: number) { return this.act(this.ipc.invoke('guides:abandon', id)); }
+}
