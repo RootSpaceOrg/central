@@ -27,6 +27,11 @@ const cases = [
    + '<tr><td>Central</td><td class="ar"><code>a|b</code></td></tr></tbody></table></div><p>fim</p>'],
   ['| a | b |\n|---|---|\n| só um |', '<div class="md-table"><table><thead><tr><th>a</th><th>b</th></tr></thead><tbody><tr><td>só um</td><td></td></tr></tbody></table></div>'],
   ['a | b sem separador', '<p>a | b sem separador</p>'],
+  // referências: tarefa e execução viram link; PR, ideia, código e links ficam como estão
+  ['resolver #67 e a execução #34', '<p>resolver <a href="#tarefa-67" class="ref-link" title="Abrir a tarefa #67">#67</a> e a execução <a href="#execucao-34" class="ref-link" title="Abrir a execução #34">#34</a></p>'],
+  ['PR #14, ideia #49 e `#12`', '<p>PR #14, ideia #49 e <code>#12</code></p>'],
+  ['Release #22 em prod', '<p>Release #22 em prod</p>'],
+  ['[ver](https://x.com/a#12) e (#76)', '<p><a href="https://x.com/a#12" target="_blank" rel="noopener">ver</a> e (<a href="#tarefa-76" class="ref-link" title="Abrir a tarefa #76">#76</a>)</p>'],
 ];
 for (const [src, want] of cases) {
   const got = md(src);

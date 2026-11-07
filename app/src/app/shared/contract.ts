@@ -1172,6 +1172,9 @@ export interface Api {
   'notif:get': () => NotifPrefsDto;
   'notif:set': (patch: Partial<NotifPrefsDto>) => NotifPrefsDto;
   'notif:test': () => void;
+  /** Ctrl+F: busca nativa na tela (next = continuar a busca atual) */
+  'find:go': (text: string, forward: boolean, next: boolean) => void;
+  'find:stop': () => void;
   /** exportar todos os dados num arquivo (devolve o caminho; null = cancelou) */
   'data:export': () => string | null;
   /** escolher um arquivo exportado: devolve quantos projetos, tarefas… ele tem (null = cancelou) */
@@ -1225,6 +1228,8 @@ export interface Events {
   'ext:changed': null;
   /** sessão de Guiar projeto mudou (cards, plano, etapa, vez no debate) */
   'guides:changed': null;
+  /** resultado do Ctrl+F */
+  'find:result': { active: number; matches: number };
   /** tocar o som de notificação escolhido (a tela toca) */
   'notify:sound': string;
   'pty:data': { id: number; data: string };

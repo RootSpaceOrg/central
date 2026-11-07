@@ -99,6 +99,9 @@
 .md li + li { margin-top: .25em; } .md li::marker { color: var(--color-faint); }
 .md strong { font-weight: 600; color: var(--color-text); }
 .md a { color: var(--color-frost); text-decoration: underline; text-underline-offset: 2px; }
+/* referências #67 (tarefa/execução) em qualquer texto */
+a.ref-link { color: var(--color-frost); font-weight: 600; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+a.ref-link:hover { text-decoration-style: solid; }
 .md code { font-family: var(--font-mono); font-size: .86em; background: var(--color-night); border: 1px solid var(--color-edge); border-radius: 6px; padding: .08em .35em; color: var(--color-frost); }
 .md pre { background: var(--color-night); border: 1px solid var(--color-edge); border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
 .md pre code { background: none; border: 0; padding: 0; color: var(--color-text); font-size: .9em; line-height: 1.55; }

@@ -19,6 +19,7 @@ import { UsageMeter } from './shared/components/usage-meter/usage-meter';
 import { UpdateService } from './shared/services/update/update.service';
 import { IdeasService } from './shared/services/ideas/ideas.service';
 import { TasksService } from './shared/services/tasks/tasks.service';
+import { FindBar } from './shared/components/find-bar/find-bar';
 import { DeliveriesService } from './shared/services/deliveries/deliveries.service';
 import { TriageFocusService } from './shared/services/triage-focus/triage-focus.service';
 import { DialogsService } from './shared/services/dialogs/dialogs.service';
@@ -54,7 +55,7 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 @Component({
   selector: 'app-root',
   host: { '(document:keydown.f11)': 'toggleFocus($event)' },
-  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog, QuickBar, AskDialog],
+  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, Icon, AgoPipe, ProjectDialog, RunDialog, TaskDialog, TurnDialog, UsageMeter, UpdateDialog, ProjectEditDialog, CentralChat, ProjectAvatar, ContextMenu, SettingsDialog, CommandPalette, ImportSessionDialog, QuickBar, AskDialog, FindBar],
   templateUrl: './app.html',
 })
 export class App {
@@ -153,6 +154,18 @@ export class App {
   protected readonly tick = signal(0);
 
   constructor() {
+    // "#67" nos textos (markdown e cards): abre a tarefa (ou a execução). Na captura, para não marcar a opção em volta
+    document.addEventListener('click', e => {
+      const a = (e.target as HTMLElement | null)?.closest?.('a.ref-link') as HTMLAnchorElement | null;
+      if (!a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const [, kind, n] = a.getAttribute('href')!.match(/^#(tarefa|execucao)-(\d+)$/) ?? [];
+      const id = Number(n);
+      if (!id) return;
+      if (kind === 'tarefa' && this.tasks.tasks().some(t => t.id === id)) this.dialogs.editTask(id);
+      else if (this.runs.runs().some(r => r.id === id)) this.router.navigate(['/execucoes'], { queryParams: { run: id } });
+    }, true);
     // Mac: Cmd+J, Cmd+K e Cmd+Enter fazem o que Ctrl faz no Windows (os atalhos escutam Ctrl); Cmd+C/V/X/A/Z seguem nativos
     if (!IS_WIN) document.addEventListener('keydown', e => {
       if (!e.metaKey || e.ctrlKey || !['j', 'k', 'enter'].includes(e.key.toLowerCase())) return;

@@ -104,10 +104,38 @@ export function markdown(src: string): string {
     while (i < lines.length && lines[i].trim() && !/^\s*(```|#{1,4}\s|[-*•]\s|\d+[.)]\s|>)/.test(lines[i]) && !isTableStart(lines, i)) para.push(lines[i++]);
     html.push(`<p>${para.map(inline).join('<br>')}</p>`);
   }
-  return html.join('');
+  return linkRefs(html.join(''));
 }
 
 @Pipe({ name: 'markdown' })
 export class MarkdownPipe implements PipeTransform {
   transform(text: string): string { return markdown(text ?? ''); }
+}
+
+/**
+ * "#67" vira link (o App abre a tarefa; "execução #34" abre a execução). PR, issue, ideia e decisão ficam como texto.
+ * Só no texto: nada dentro de tags, links e código.
+ */
+export function linkRefs(html: string): string {
+  let skip = 0;
+  return html.split(/(<[^>]+>)/).map(part => {
+    if (part.startsWith('<')) {
+      if (/^<(a|code|pre)\b/i.test(part)) skip++;
+      else if (/^<\/(a|code|pre)>/i.test(part)) skip = Math.max(0, skip - 1);
+      return part;
+    }
+    if (skip) return part;
+    return part.replace(/(^|[^&\w/])#(\d{1,6})\b/g, (m, pre: string, n: string, at: number, all: string) => {
+      const before = all.slice(Math.max(0, at - 24), at + pre.length).toLowerCase();
+      if (/(pr|pull request|issue|ideia|decis[aã]o|guia|release|vers[aã]o|issue)\s*$/.test(before)) return m;
+      const kind = /(execu[cç][aã]o|execu[cç][oõ]es|run)\s*$/.test(before) ? 'execucao' : 'tarefa';
+      return `${pre}<a href="#${kind}-${n}" class="ref-link" title="Abrir ${kind === 'tarefa' ? 'a tarefa' : 'a execução'} #${n}">#${n}</a>`;
+    });
+  }).join('');
+}
+
+/** texto puro com as referências (#67) clicáveis: use com [innerHTML] */
+@Pipe({ name: 'refs' })
+export class RefsPipe implements PipeTransform {
+  transform(text: string | null | undefined): string { return linkRefs(esc(text ?? '')); }
 }

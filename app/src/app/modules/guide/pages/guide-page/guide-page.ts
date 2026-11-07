@@ -10,7 +10,7 @@ import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
-import { MarkdownPipe } from '../../../../shared/ui/markdown';
+import { MarkdownPipe, RefsPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { Guide, GuideCard, GuidePlanItem, GuidesService } from '../../services/guides/guides.service';
 
@@ -30,7 +30,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string }[] = [{ id: 'agora', lab
  */
 @Component({
   selector: 'app-guide-page',
-  imports: [NgTemplateOutlet, RouterLink, Icon, ChatView, MarkdownPipe, AgoPipe, ProjectAvatar],
+  imports: [NgTemplateOutlet, RouterLink, Icon, ChatView, MarkdownPipe, RefsPipe, AgoPipe, ProjectAvatar],
   templateUrl: './guide-page.html',
   host: { class: '@container block h-full' },
 })

@@ -402,6 +402,8 @@ function registerIpc(): void {
   // notificações: o que avisa, som, não perturbe
   handle('notif:get', () => getNotif());
   handle('notif:set', patch => setNotif(patch));
+  handle('find:go', (text, forward, next) => { if (text) win?.webContents.findInPage(text, { forward, findNext: !next }); });
+  handle('find:stop', () => { win?.webContents.stopFindInPage('clearSelection'); });
   handle('notif:test', () => {
     const p = getNotif();
     if (Notification.isSupported()) new Notification({ title: 'Central', body: 'Assim chegam os avisos.', silent: p.sound !== 'system' }).show();
@@ -460,6 +462,7 @@ function createWindow(): void {
   // aberto pelo Windows ao iniciar (--hidden): fica só na bandeja
   win.once('ready-to-show', () => (CAPTURE ? win!.showInactive() : process.argv.includes('--hidden') && getPrefs().tray ? null : win!.show()));
   keepAliveOnClose(win);
+  win.webContents.on('found-in-page', (_e, r) => send('find:result', { active: r.activeMatchOrdinal, matches: r.matches }));
   // Links externos abrem no navegador, nunca dentro do app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);
