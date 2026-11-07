@@ -19,6 +19,10 @@ export interface GuideDeps { notify: Notify; changed: () => void }
 const MODEL = { model: process.env.CENTRAL_GUIDE_MODEL || 'opus', effort: '' };
 const STRATEGIST = 'Estrategista';
 
+/** avisa a tela que uma sessão mudou (o main liga; as ferramentas do agente também passam por aqui) */
+let guidesChanged = () => {};
+export function onGuidesChanged(fn: () => void): void { guidesChanged = fn; }
+
 export const getGuide = (id: number) => get<GuideDto>('select * from guides where id = ?', id) ?? null;
 export const listGuides = () => all<GuideDto>(`select * from guides where status != 'abandoned' order by id desc limit 200`);
 
@@ -247,6 +251,7 @@ export function updateGuide(id: number, patch: { reading?: string; cards?: Guide
     run('update guides set plan = ?, step = max(step, 3) where id = ?', JSON.stringify(items), id);
   }
   run('update guides set updated_at = ? where id = ?', now(), id);
+  guidesChanged();
   return 'Pronto: o Gustavo já vê isso na tela.';
 }
 
@@ -297,6 +302,7 @@ export function finishGuide(id: number, minutes: string): string {
   const g = getGuide(id);
   if (!g) throw new Error('Sessão não encontrada.');
   run(`update guides set status = 'done', minutes = ?, finished_at = ? where id = ?`, minutes.trim(), now(), id);
+  guidesChanged();
   return 'Sessão fechada com a ata.';
 }
 
