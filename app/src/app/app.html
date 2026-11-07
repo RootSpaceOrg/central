@@ -175,11 +175,6 @@
      [class.opacity-60]="p.status === 'dead'">
     <app-project-avatar [project]="p" [size]="20" class="transition-transform duration-150 group-hover:scale-110" />
     <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
-    @if (scope.scopable()) {
-      <button type="button" (click)="openProject($event, p.slug)" [attr.aria-label]="'Abrir a página de ' + p.name" title="Abrir a página do projeto"
-              class="hidden size-5 place-items-center rounded text-faint hover:bg-edge hover:text-text group-hover:grid group-focus-within:grid">
-        <app-icon name="external" [size]="12" /></button>
-    }
     @if (kids) {
       <button type="button" (click)="toggleGroup($event, p.slug)" [attr.aria-expanded]="!collapsed().has(p.slug)"
               [attr.aria-label]="(collapsed().has(p.slug) ? 'Mostrar' : 'Esconder') + ' subprojetos de ' + p.name"
