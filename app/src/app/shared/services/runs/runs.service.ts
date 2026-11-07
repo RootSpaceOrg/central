@@ -33,6 +33,7 @@ const toRun = (d: RunDto): Run => ({
   startedAt: d.started_at ? new Date(d.started_at) : null,
   finishedAt: d.finished_at ? new Date(d.finished_at) : null,
   waiting: parseWaiting(d.waiting),
+  grants: (() => { try { return d.grants ? JSON.parse(d.grants) : []; } catch { return []; } })(),
   paused: parsePaused(d.paused),
   priority: d.priority ?? 1,
   parentRunId: d.parent_run_id ?? null,
@@ -106,6 +107,11 @@ export class RunsService {
   /** continua uma execução que falhou ou foi interrompida, na mesma sessão do Claude, de onde parou */
   async continue(id: number, note: string | null = null): Promise<void> {
     try { await this.api.continue(id, note); } catch (e) { throw new Error(errorMessage(e)); }
+  }
+
+  /** libera para o agente o que a execução pediu e continua de onde parou */
+  async grant(id: number): Promise<void> {
+    try { await this.api.grant(id); } catch (e) { throw new Error(errorMessage(e)); }
   }
 
   /** tira a pausa do freio (volta assim que a cota e as vagas deixarem) */

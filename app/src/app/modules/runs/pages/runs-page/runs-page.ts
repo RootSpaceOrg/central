@@ -152,6 +152,10 @@ export class RunsPage {
     this.chatError.set(null);
     try { await this.runs.continue(r.id); } catch (e) { this.chatError.set((e as Error).message); }
   }
+  protected async grant(r: Run): Promise<void> {
+    this.chatError.set(null);
+    try { await this.runs.grant(r.id); } catch (e) { this.chatError.set((e as Error).message); }
+  }
   protected async unpause(r: Run): Promise<void> {
     this.chatError.set(null);
     try { await this.runs.unpause(r.id); } catch (e) { this.chatError.set((e as Error).message); }

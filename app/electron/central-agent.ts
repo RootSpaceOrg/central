@@ -123,7 +123,7 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
   else if (slug || fromRun) args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SESSION_TOOLS, ...agentTools(agent), ...extraTools])].join(',')}"`);
   else if (agent.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
   else args.push('--allowedTools', `"${[...agentTools(agent), ...extraTools].join(',')}"`);
-  if (!agent.restricted) for (const d of parseList(chat?.add_dirs)) args.push('--add-dir', `"${d}"`);
+  if (!agent.restricted) for (const d of new Set([...parseList(chat?.add_dirs), ...parseList(agent.add_dirs)])) args.push('--add-dir', `"${d}"`);
   const model = chosen.model || agent.model;
   if (model) args.push('--model', model);
   if (chosen.effort) args.push('--effort', chosen.effort);

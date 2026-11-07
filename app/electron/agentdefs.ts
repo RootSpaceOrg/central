@@ -137,6 +137,7 @@ export function updateAgent(id: number, patch: AgentPatch): void {
   const fields: [string, string | null][] = cols.filter(k => k in patch).map(k => [k, ((patch[k] as string | null | undefined) ?? null)]);
   if (cur.builtin) for (const k of ['name', 'project_slug']) { const i = fields.findIndex(f => f[0] === k); if (i >= 0) fields.splice(i, 1); }
   if ('tools' in patch) fields.push(['tools', (patch.tools ?? []).join(',')]);
+  if ('add_dirs' in patch) fields.push(['add_dirs', JSON.stringify((patch.add_dirs ?? []).filter(d => typeof d === 'string' && d.trim()))]);
   if (!fields.length) return;
   run(`update agents set ${fields.map(([k]) => `${k} = ?`).join(', ')} where id = ?`, ...fields.map(([, v]) => (typeof v === 'string' ? v.trim() : v)), id);
 }

@@ -12,6 +12,7 @@ export class RunsApiService {
   kill(id: number) { return this.ipc.invoke('runs:kill', id); }
   unpause(id: number) { return this.ipc.invoke('runs:unpause', id); }
   continue(id: number, note: string | null) { return this.ipc.invoke('runs:continue', id, note); }
+  grant(id: number) { return this.ipc.invoke('runs:grant', id); }
   handoff(id: number, agentId: number | null, note: string | null) { return this.ipc.invoke('runs:handoff', id, agentId, note); }
   resume(id: number, note: string | null) { return this.ipc.invoke('runs:resume', id, note); }
   events(id: number) { return this.ipc.invoke('runs:events', id); }

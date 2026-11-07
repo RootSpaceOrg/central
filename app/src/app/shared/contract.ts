@@ -130,6 +130,8 @@ export interface NewProposalInput {
 
 export interface RunDto {
   id: number;
+  /** JSON: o que foi barrado nesta execução e dá para liberar ([{ kind, value, label }]) */
+  grants?: string | null;
   /** null quando é de um agente sem projeto */
   project_slug: string | null;
   agent_id: number | null;
@@ -830,6 +832,8 @@ export interface AgentDto {
   /** papel e jeito de trabalhar (vira instrução de sistema) */
   instructions: string;
   /** ferramentas extras liberadas, separadas por vírgula (ex.: mcp__sentry) */
+  /** JSON: pastas fora do projeto que você liberou para ele */
+  add_dirs?: string | null;
   tools: string;
   permission: RunPermission;
   /** '' = padrão do Claude Code; ou sonnet, opus, haiku */
@@ -856,6 +860,8 @@ export interface NewAgentInput {
   icon_value?: string | null;
   project_slug?: string | null;
   instructions?: string;
+  /** pastas fora do projeto liberadas para ele (--add-dir) */
+  add_dirs?: string[];
   tools?: string[];
   permission?: RunPermission;
   model?: string;
@@ -955,6 +961,8 @@ export interface Api {
   'runs:unpause': (id: number) => void;
   /** continua uma execução que falhou ou foi interrompida, na mesma sessão do Claude */
   'runs:continue': (id: number, note: string | null) => RunDto;
+  /** libera para o agente o que a execução pediu e continua de onde parou */
+  'runs:grant': (id: number) => RunDto;
   /** outro agente (ou o mesmo, do zero) assume o trabalho parado, na mesma branch */
   'runs:handoff': (id: number, agentId: number | null, note: string | null) => RunDto;
   /** o Gustavo resolveu o que o agente esperava: retoma a sessão da execução de onde parou (devolve a conversa) */

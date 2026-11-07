@@ -9,6 +9,7 @@ import { moveTaskForRun, taskRepo } from './backlog';
 import { nextStage, setStage } from './board';
 import { INTERNAL, describe } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
+import { Grant, blockedDirs, grantsFrom, safeGrant } from './permissions';
 import { killTree, treeSpawn } from './proc';
 import { closeDelivery } from './deliveries';
 import { mcpConfigPath } from './mcp-config';
@@ -159,6 +160,36 @@ export function killRun(id: number, emit: Emit): void {
   }
 }
 
+const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+const parseJson = (v: string | null | undefined): string[] => { try { return v ? JSON.parse(v) : []; } catch { return []; } };
+
+/**
+ * Libera para o agente o que a execução pediu (pasta → --add-dir; comando/ferramenta → ferramentas extras dele) e
+ * continua a mesma sessão. Vale para as próximas execuções e conversas desse agente.
+ */
+export function grantRun(id: number, emit: Emit): RunDto {
+  const r = dto(id);
+  const grants: Grant[] = (() => { try { return r.grants ? JSON.parse(r.grants) : []; } catch { return []; } })();
+  if (!grants.length) throw new Error('Nada para liberar nesta execução.');
+  if (!r.agent_id) throw new Error('Execução sem agente: dá para continuar com liberdade total pelo botão Continuar.');
+  const agent = get<{ tools: string; add_dirs: string | null }>('select tools, add_dirs from agents where id = ?', r.agent_id);
+  if (!agent) throw new Error('Agente não encontrado.');
+  const tools = agent.tools.split(',').map(t => t.trim()).filter(Boolean);
+  const dirs = parseJson(agent.add_dirs);
+  for (const g of grants) {
+    if (!safeGrant(g)) continue;
+    if (g.kind === 'dir') { mkdirSync(g.value, { recursive: true }); if (!dirs.includes(g.value)) dirs.push(g.value); }
+    else if (!tools.includes(g.value)) tools.push(g.value);
+  }
+  run('update agents set tools = ?, add_dirs = ? where id = ?', tools.join(','), JSON.stringify(dirs), r.agent_id);
+  run('update runs set grants = null where id = ?', id);
+  const note = `Liberei o acesso que faltou (${grants.map(g => g.value).join(', ')}). Continue de onde parou.`;
+  if (['failed', 'killed'].includes(r.status)) return continueRun(id, note, emit);
+  // terminou "com sucesso" mas parou no meio por causa do bloqueio: retoma a mesma sessão como continuação
+  run(`update runs set status = 'failed' where id = ?`, id);
+  return continueRun(id, note, emit);
+}
+
 export const dto = (id: number): RunDto => {
   const r = get<RunDto>('select * from runs where id = ?', id)!;
   return { ...r, repo_name: basename(r.repo_path) };
@@ -284,9 +315,13 @@ Continue exatamente de onde parou, sem refazer o que já fez: confira o estado (
   const extra = agent ? agentTools(agent) : [];
   if (agent) args.push('--append-system-prompt-file', `"${agentPromptFile(agent)}"`);
   if (agent?.model) args.push('--model', agent.model);
+  const allowed = r.permission === 'full' ? null : [...new Set([...(r.scope === 'repo' ? SAFE_TOOLS : READ_TOOLS), ...extra])];
   if (r.permission === 'full') args.push('--permission-mode', 'bypassPermissions');
-  else if (r.scope === 'repo') args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${[...new Set([...SAFE_TOOLS, ...extra])].join(',')}"`);
-  else args.push('--allowedTools', `"${[...new Set([...READ_TOOLS, ...extra])].join(',')}"`);
+  else if (r.scope === 'repo') args.push('--permission-mode', 'acceptEdits', '--allowedTools', `"${allowed!.join(',')}"`);
+  else args.push('--allowedTools', `"${allowed!.join(',')}"`);
+  // pastas que você liberou para este agente (quando uma execução dele foi barrada)
+  if (agent && r.permission !== 'full') for (const d of parseJson(agent.add_dirs)) args.push('--add-dir', `"${d}"`);
+  let blocked: Grant[] = [];
 
   // Prompt vai por stdin: nenhum texto do usuário passa pela linha de comando do shell.
   const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv(), ...treeSpawn });
@@ -319,7 +354,20 @@ Continue exatamente de onde parou, sem refazer o que já fez: confira o estado (
           if (central) setTimeout(() => emit.changed(), 1500);
         }
       }
-    } else if (msg.type === 'result') {
+    } else if (msg.type === 'user') {
+      for (const b of msg.message?.content ?? []) if (b.type === 'tool_result') blocked.push(...blockedDirs(typeof b.content === 'string' ? b.content : JSON.stringify(b.content ?? '')));
+    }
+    if (msg.type === 'result') {
+      // o que foi barrado (ninguém aprova numa execução): vira "Liberar e continuar" na tela da execução
+      if (allowed && (msg.permission_denials?.length || blocked.length)) {
+        const denials = msg.permission_denials ?? [];
+        // escrever com a ferramenta fora da lista (modo seguro no projeto): libera a ferramenta também
+        const tools = denials.map((d: any) => String(d.tool_name)).filter((t: string) => WRITE_TOOLS.has(t) && !allowed.includes(t)).map((t: string) => ({ kind: 'tool' as const, value: t, label: `Escrever arquivos (${t})` }));
+        const all = [...tools, ...blocked, ...grantsFrom(denials)];
+        const grants = all.filter((g, i) => all.findIndex(x => x.kind === g.kind && x.value === g.value) === i);
+        if (grants.length) run('update runs set grants = ? where id = ?', JSON.stringify(grants), id);
+        blocked = [];
+      }
       result = msg.result ?? null;
       cost = typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : null;
       isError = !!msg.is_error;

@@ -16,6 +16,8 @@ export interface Agent {
   projectSlug: string | null;
   instructions: string;
   tools: string[];
+  /** pastas fora do projeto liberadas para ele */
+  addDirs: string[];
   permission: RunPermission;
   /** fila e freio da cota */
   priority: AgentPriority;
@@ -32,7 +34,7 @@ export interface Agent {
   runs: number;
 }
 
-export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKind' | 'iconValue' | 'projectSlug' | 'instructions' | 'tools' | 'permission' | 'model' | 'room' | 'look' | 'priority' | 'restricted'>;
+export type AgentDraft = Pick<Agent, 'name' | 'description' | 'color' | 'iconKind' | 'iconValue' | 'projectSlug' | 'instructions' | 'tools' | 'addDirs' | 'permission' | 'model' | 'room' | 'look' | 'priority' | 'restricted'>;
 
 /** Ferramentas extras conhecidas, para sugerir no editor (o MCP precisa estar configurado no Claude Code). */
 export const TOOL_SUGGESTIONS: { value: string; label: string }[] = [
@@ -71,7 +73,7 @@ export const EFFORTS = [
 
 const toModel = (d: AgentDto): Agent => ({
   id: d.id, slug: d.slug, name: d.name, description: d.description, color: d.color, iconKind: d.icon_kind, iconValue: d.icon_value,
-  projectSlug: d.project_slug, instructions: d.instructions, tools: d.tools ? d.tools.split(',').filter(Boolean) : [],
+  projectSlug: d.project_slug, instructions: d.instructions, tools: d.tools ? d.tools.split(',').filter(Boolean) : [], addDirs: (() => { try { return d.add_dirs ? JSON.parse(d.add_dirs) : []; } catch { return []; } })(),
   permission: d.permission, priority: d.priority ?? 'normal', restricted: !!d.restricted, model: d.model, room: d.room ?? '', look: parseLook(d.look), builtin: d.builtin, chats: d.chats, routines: d.routines, runs: d.runs,
 });
 
@@ -97,7 +99,7 @@ export class AgentsService {
   async save(id: number | null, d: AgentDraft): Promise<Agent> {
     const input = {
       name: d.name, description: d.description || null, color: d.color, icon_kind: d.iconKind, icon_value: d.iconValue,
-      project_slug: d.projectSlug, instructions: d.instructions, tools: d.tools, permission: d.permission, priority: d.priority, restricted: d.restricted, model: d.model, room: d.room, look: JSON.stringify(d.look),
+      project_slug: d.projectSlug, instructions: d.instructions, tools: d.tools, add_dirs: d.addDirs, permission: d.permission, priority: d.priority, restricted: d.restricted, model: d.model, room: d.room, look: JSON.stringify(d.look),
     };
     try {
       if (id) { await this.api.update(id, input); this.load(); return { ...this.byId().get(id)!, ...d }; }

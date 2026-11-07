@@ -115,6 +115,18 @@
               }
               <span class="mt-1.5 block text-[12.5px] text-mute">Servidores MCP (Sentry, Supabase…) precisam estar configurados e autorizados no seu Claude Code.</span>
             </div>
+            @if (addDirs().length) {
+              <div>
+                <span class="mb-1.5 block font-semibold">Pastas liberadas</span>
+                <div class="flex flex-wrap gap-1.5">
+                  @for (d of addDirs(); track d) {
+                    <span class="flex items-center gap-1.5 rounded-full bg-raise px-3 py-1 font-mono text-[12px]">{{ d }}
+                      <button type="button" (click)="addDirs.set(addDirs().filter(x => x !== d))" [attr.aria-label]="'Tirar ' + d" class="text-faint hover:text-no"><app-icon name="close" [size]="12" /></button></span>
+                  }
+                </div>
+                <span class="mt-1.5 block text-[12.5px] text-mute">Fora do projeto, mas liberadas para ele (vieram de "Liberar e continuar" numa execução barrada).</span>
+              </div>
+            }
 
             <div>
               <span class="mb-1.5 block font-semibold">Sala no Escritório</span>

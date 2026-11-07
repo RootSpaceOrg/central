@@ -46,6 +46,8 @@ export class AgentDialog {
   protected readonly projectSlug = signal('');
   protected readonly instructions = signal('');
   protected readonly tools = signal<string[]>([]);
+  /** pastas liberadas quando uma execução dele foi barrada */
+  protected readonly addDirs = signal<string[]>([]);
   protected readonly toolInput = signal('');
   protected readonly permission = signal<RunPermission>('edits');
   protected readonly priority = signal<'high' | 'normal' | 'low'>('normal');
@@ -109,7 +111,7 @@ export class AgentDialog {
     try {
       const saved = await this.agents.save(this.agent()?.id ?? null, {
         name: this.name().trim(), description: this.description().trim() || null, color: this.color(), iconKind: this.iconKind(),
-        iconValue: this.iconValue(), projectSlug: this.projectSlug() || null, instructions: this.instructions(), tools: this.tools(),
+        iconValue: this.iconValue(), projectSlug: this.projectSlug() || null, instructions: this.instructions(), tools: this.tools(), addDirs: this.addDirs(),
         permission: this.permission(), priority: this.priority(), restricted: this.restricted(), model: this.model(), room: this.room(), look: this.look(),
       });
       this.closed.emit(saved.id);
@@ -136,7 +138,7 @@ export class AgentDialog {
   private fill(a: Agent | null): void {
     this.name.set(a?.name ?? ''); this.description.set(a?.description ?? ''); this.color.set(a?.color ?? '#7FA2FF');
     this.iconKind.set(a?.iconKind ?? 'emoji'); this.iconValue.set(a ? a.iconValue : '🤖'); this.projectSlug.set(a?.projectSlug ?? '');
-    this.instructions.set(a?.instructions ?? ''); this.tools.set(a?.tools ?? []); this.permission.set(a?.permission ?? 'edits'); this.priority.set(a?.priority ?? 'normal'); this.restricted.set(a?.restricted ?? false);
+    this.instructions.set(a?.instructions ?? ''); this.tools.set(a?.tools ?? []); this.addDirs.set(a?.addDirs ?? []); this.permission.set(a?.permission ?? 'edits'); this.priority.set(a?.priority ?? 'normal'); this.restricted.set(a?.restricted ?? false);
     this.model.set(a?.model ?? ''); this.room.set(a?.room ?? ''); this.look.set(a?.look ?? LOOK_DEFAULT); this.tab.set('papel'); this.toolInput.set(''); this.confirmDelete.set(false); this.error.set(null); this.busy.set(false);
   }
 }

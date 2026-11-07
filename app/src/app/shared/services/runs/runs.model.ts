@@ -35,6 +35,8 @@ export interface Run {
   finishedAt: Date | null;
   /** o agente parou esperando você (sessão AWS, login…): o que falta, o que fazer e o comando */
   waiting: RunWaiting | null;
+  /** o que foi barrado e dá para liberar (pasta ou ferramenta) */
+  grants: { kind: 'dir' | 'tool'; value: string; label: string }[];
   /** pausada pelo freio da cota: volta sozinha (until = quando a cota renova; null = quando o freio deixar) */
   paused: { reason: string; until: Date | null } | null;
   /** 0 alta, 1 normal, 2 baixa */

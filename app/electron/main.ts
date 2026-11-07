@@ -8,7 +8,7 @@ import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
 import { imageDataUrl, saveImage } from './chat-images';
 import { addMcpServer, listMcpServers, removeMcpServer } from './mcp-servers';
 import { adaptImport, discoverProjects, exportData, inspectImport, swapDatabase } from './data-transfer';
-import { continueRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
+import { continueRun, grantRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
@@ -168,6 +168,7 @@ function registerIpc(): void {
   handle('runs:kill', id => killRun(id, emitRun));
   handle('runs:unpause', id => unpauseRun(id, emitRun));
   handle('runs:continue', (id, note) => continueRun(id, note, emitRun));
+  handle('runs:grant', id => grantRun(id, emitRun));
   handle('runs:handoff', (id, agentId, note) => handoffRun(id, agentId, note, emitRun));
   handle('runs:events', id => listEvents(id));
 
