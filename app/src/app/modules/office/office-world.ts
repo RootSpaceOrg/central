@@ -9,7 +9,7 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 
 import { Avatar, BODY, avatar, boxGeo, clearAvatarCaches, mat } from '../../shared/ui/avatar3d';
 import type { AvatarLook } from '../../shared/ui/avatar-look';
-import { CORRIDOR_Y, ELEVATOR, MAP_H, MAP_W, Placement, ROOM, ROOMS, RoomId, route, skinOf } from './office-map';
+import { BOARD_SPOT, CORRIDOR_Y, ELEVATOR, MAP_H, MAP_W, Placement, ROOM, ROOMS, RoomId, TASK_BOARD, route, skinOf } from './office-map';
 
 /** Uma pessoa no andar: quem trabalha senta numa mesa da sala; quem está parado fica na copa. */
 export interface Person {
@@ -30,6 +30,8 @@ export interface Person {
   subs: number;
   /** fora do filtro: some na hora (sem andar até o elevador) */
   hidden?: boolean;
+  /** acabou uma tarefa há pouco: continua na mesa (não vai para a copa e volta) */
+  between?: boolean;
   /** aparência escolhida no editor do agente (sem = boneco padrão) */
   look?: AvatarLook;
 }
@@ -142,6 +144,9 @@ interface Actor {
   next: Placement | null;
   /** o que fala no balão durante a conversa */
   saying: string | null;
+  /** parada no quadro de tarefas (chegou nesse ponto: espera até waitUntil) */
+  pauseAt: Vector2 | null;
+  waitUntil: number;
   /** indo conversar: com quem, e o que cada um diz ao chegar */
   visit: { with: string; text: string; reply: string } | null;
 }
@@ -271,6 +276,15 @@ export class OfficeWorld {
     box(west, 0.04, 1.9, 1.4, '#7c8494', 0.02, 0, CORRIDOR_Y);
     box(west, 0.05, 1.9, 0.03, '#2b303a', 0.03, 0, CORRIDOR_Y);
     box(west, 0.05, 0.12, 0.3, '#E8C46A', 0.03, 2.0, CORRIDOR_Y);
+    // corredor: quadro de tarefas (colunas com post-its), onde quem começa uma tarefa passa
+    box(f, 2.4, 1.25, 0.06, '#eceae2', TASK_BOARD[0], 0.85, TASK_BOARD[1]);
+    box(f, 2.5, 0.06, 0.1, '#5b6475', TASK_BOARD[0], 2.1, TASK_BOARD[1]);
+    for (let c = 0; c < 3; c++) {
+      box(f, 0.03, 1.1, 0.07, '#c9c4b8', TASK_BOARD[0] - 0.4 + c * 0.8, 0.92, TASK_BOARD[1] + 0.01, false);
+      for (let r = 0; r < 3 - c % 2; r++) box(f, 0.28, 0.22, 0.03, ['#E8C46A', '#7FA2FF', '#7ED69A'][c], TASK_BOARD[0] - 0.8 + c * 0.8, 1.6 - r * 0.32, TASK_BOARD[1] + 0.05, false);
+    }
+    box(f, 0.08, 0.85, 0.08, '#5b6475', TASK_BOARD[0] - 1.1, 0, TASK_BOARD[1]);
+    box(f, 0.08, 0.85, 0.08, '#5b6475', TASK_BOARD[0] + 1.1, 0, TASK_BOARD[1]);
     // gestão: quadro branco com um post-it por marco em Agora
     box(north, 4.2, 1.1, 0.04, '#eceae2', 3.4, 0.95, 0.02);
     this.stickies.position.set(0, 0, 0.05);
@@ -358,14 +372,17 @@ export class OfficeWorld {
       if (!to) continue;
       seen.add(p.key);
       let a = this.actors.get(p.key);
+      // começou uma tarefa vindo de fora da sala (copa, elevador): passa no quadro de tarefas antes de sentar
+      const starting = p.working && to.seated && (!a || !a.working);
       if (!a) {
         a = this.spawn(p);
         if (this.first) a.pos.set(to.x, to.y);
-        else { a.pos.set(ELEVATOR[0], ELEVATOR[1]); a.path = route(null, to).slice(1).map(([x, y]) => new Vector2(x, y)); }
+        else { a.pos.set(ELEVATOR[0], ELEVATOR[1]); a.path = this.viaBoard(a, route(null, to).slice(1).map(([x, y]) => new Vector2(x, y)), starting); }
       } else if (a.hold) {
         a.next = to; // conversando: vai depois
       } else if (a.leaving || !a.at || a.at.seat !== to.seat) {
-        a.path = route(a.leaving ? null : a.at, to).slice(1).map(([x, y]) => new Vector2(x, y));
+        const from = a.leaving ? null : a.at;
+        a.path = this.viaBoard(a, route(from, to).slice(1).map(([x, y]) => new Vector2(x, y)), starting && (!from || from.room !== to.room));
         a.leaving = false;
       }
       if (JSON.stringify(p.look ?? null) !== a.lookKey) this.restyle(a, p);
@@ -398,6 +415,16 @@ export class OfficeWorld {
     this.first = false;
   }
 
+  /** desvia o caminho pelo quadro de tarefas do corredor (no trecho de corredor) e marca a parada lá */
+  private viaBoard(a: Actor, path: Vector2[], go: boolean): Vector2[] {
+    if (!go) return path;
+    const i = path.findIndex(v => Math.abs(v.y - CORRIDOR_Y) < 0.01);
+    if (i < 0) return path;
+    const stop = new Vector2(BOARD_SPOT[0], BOARD_SPOT[1]);
+    a.pauseAt = stop;
+    return [...path.slice(0, i + 1), new Vector2(BOARD_SPOT[0], CORRIDOR_Y), stop, new Vector2(BOARD_SPOT[0], CORRIDOR_Y), ...path.slice(i + 1)];
+  }
+
   private spawn(p: Person): Actor {
     const av = avatar(p.hair, p.shirt, skinOf(p.key), p.look);
     av.root.userData['key'] = p.key;
@@ -422,7 +449,7 @@ export class OfficeWorld {
     const a: Actor = {
       key: p.key, av, label, el: { root, say, nick }, ring, pos: new Vector2(), path: [], at: null, working: p.working,
       facing: Math.random() * Math.PI * 2, lookKey: JSON.stringify(p.look ?? null), turnAt: 0, phase: Math.random() * 10, leaving: false, hidden: false, subs: [],
-      hold: 0, next: null, saying: null, visit: null, name: p.name,
+      hold: 0, next: null, saying: null, visit: null, name: p.name, pauseAt: null, waitUntil: 0,
     };
     this.actors.set(p.key, a);
     return a;
@@ -447,7 +474,7 @@ export class OfficeWorld {
     a.el.root.style.setProperty('--c', p.hair);
     a.el.root.classList.toggle('sel', p.key === this.selected);
     a.el.root.classList.toggle('idle', !p.working);
-    const nick = `${p.name}${p.working ? '' : ' · zz'}`;
+    const nick = `${p.name}${p.working ? '' : p.between ? ' · entre tarefas' : ' · zz'}`;
     if (a.el.nick.textContent !== nick) a.el.nick.textContent = nick;
     if (a.saying) return;
     a.el.say.hidden = !p.working;
@@ -619,13 +646,20 @@ export class OfficeWorld {
   private animate(a: Actor, dt: number, s: number): void {
     const { av } = a;
     let walking = false;
-    if (a.path.length) {
+    if (a.waitUntil) {
+      // no quadro de tarefas: olhando para ele, até a hora de seguir
+      a.facing = Math.PI;
+      if (s >= a.waitUntil) { a.waitUntil = 0; if (!a.visit) this.say(a, null); }
+    } else if (a.path.length) {
       walking = true;
       const target = a.path[0];
       const d = target.clone().sub(a.pos);
       const len = d.length();
       const step = SPEED * dt;
-      if (len <= step) { a.pos.copy(target); a.path.shift(); }
+      if (len <= step) {
+        a.pos.copy(target); a.path.shift();
+        if (target === a.pauseAt) { a.pauseAt = null; a.waitUntil = s + 2.4; if (!a.saying) this.say(a, 'pegando a próxima tarefa'); }
+      }
       else a.pos.add(d.multiplyScalar(step / len));
       if (len > 0.01) a.facing = Math.atan2(target.x - a.pos.x, target.y - a.pos.y);
       if (!a.path.length && a.leaving) { this.remove(a); return; }

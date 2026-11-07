@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
 import { Agent, AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -13,7 +13,11 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { AvatarSource, ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { Icon } from '../../../../shared/ui/icon';
 import { ROOM, RoomId, inferRoom } from '../../office-map';
+
 import { OfficeScene, Person, Talk } from './components/office-scene/office-scene';
+
+/** quanto tempo quem terminou uma tarefa espera na mesa pela próxima antes de ir para a copa */
+const LINGER_MS = 3 * 60_000;
 
 /** Alguém trabalhando agora: uma mesa no escritório. */
 interface Worker {
@@ -128,6 +132,13 @@ export class OfficePage {
     });
   });
 
+  /** entre tarefas: quem trabalhou há pouco continua na sala dele (até LINGER) em vez de ir para a copa e voltar */
+  private readonly lastWork = new Map<number, { room: RoomId; at: number }>();
+  private readonly tick = signal(Date.now());
+  private readonly ticker = setInterval(() => this.tick.set(Date.now()), 20_000);
+  private readonly stopTicker = inject(DestroyRef).onDestroy(() => clearInterval(this.ticker));
+  private readonly remember = effect(() => { for (const w of this.workers()) if (w.agentId) this.lastWork.set(w.agentId, { room: w.room, at: Date.now() }); });
+
   /** agentes parados (copa) */
   protected readonly idle = computed(() => {
     const working = new Set(this.workers().map(w => w.agentId));
@@ -185,9 +196,12 @@ export class OfficePage {
         hidden: !this.shown(w.slug),
       };
     });
+    const now = this.tick();
     for (const a of this.idle()) {
       const p = projectOf(a.projectSlug);
-      out.push({ key: `a${a.id}`, room: 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', look: a.look, working: false, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
+      const last = this.lastWork.get(a.id);
+      const between = !!last && now - last.at < LINGER_MS;
+      out.push({ key: `a${a.id}`, room: between ? last!.room : 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', look: a.look, working: false, between, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
     }
     return out;
   });

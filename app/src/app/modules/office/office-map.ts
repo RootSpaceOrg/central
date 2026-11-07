@@ -49,6 +49,9 @@ export const ROOMS: RoomDef[] = [
 export const ROOM = new Map(ROOMS.map(r => [r.id, r]));
 export const CORRIDOR_Y = 7;
 export const ELEVATOR: [number, number] = [0.6, CORRIDOR_Y];
+/** quadro de tarefas no corredor (encostado na divisória da Engenharia): quem começa uma tarefa passa nele */
+export const TASK_BOARD: [number, number] = [12, 6.15];
+export const BOARD_SPOT: [number, number] = [12, 6.85];
 
 /** Sala de um agente pelo papel, quando ele não escolheu uma. */
 export function inferRoom(text: string): RoomId {
