@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 
@@ -76,6 +76,20 @@ export class RoutinesPage {
   protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
   protected agent(id: number | null) { return id ? this.agentsService.byId().get(id) ?? null : null; }
   protected repoName(path: string | null) { return path?.split(/[\\/]/).pop() ?? null; }
+
+  /** relógio da tela: a contagem "roda em X min" anda sozinha */
+  private readonly now = signal(Date.now());
+  private readonly clock = (() => { const t = setInterval(() => this.now.set(Date.now()), 30_000); inject(DestroyRef).onDestroy(() => clearInterval(t)); })();
+
+  /** próxima execução: em até 24 h como contagem ("roda em 12 min", "roda em 1h30"); depois, o dia e a hora */
+  protected next(d: Date): string {
+    const min = Math.round((d.getTime() - this.now()) / 60_000);
+    if (min > 24 * 60) return `próxima ${this.when(d)}`;
+    if (min <= 0) return 'roda em instantes';
+    if (min < 60) return `roda em ${min} min`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return `roda em ${h}h${m ? String(m).padStart(2, '0') : ''}`;
+  }
 
   protected when(d: Date): string {
     const today = new Date();

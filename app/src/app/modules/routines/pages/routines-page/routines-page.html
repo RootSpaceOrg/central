@@ -45,7 +45,7 @@
               <p class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-faint">
                 <span class="flex items-center gap-1 whitespace-nowrap"><app-icon name="timer" [size]="13" />{{ describe(r) }}</span>
                 <span class="whitespace-nowrap">{{ r.repoPath ? 'Repositório ' + repoName(r.repoPath) : r.projectSlug ? 'Projeto inteiro' : r.kind === 'command' ? 'Pasta de usuário' : 'Pasta do agente' }}{{ r.kind === 'command' ? ', sem cota' : ', ' + (r.permission === 'edits' ? 'segura' : 'total') }}</span>
-                @if (r.enabled) { <span class="whitespace-nowrap text-text/70">próxima {{ when(r.nextRunAt) }}</span> }
+                @if (r.enabled) { <span class="whitespace-nowrap text-text/70" [title]="'Próxima: ' + when(r.nextRunAt)">{{ next(r.nextRunAt) }}</span> }
                 @if (r.lastSkipped) { <span class="text-later">pulou: {{ r.lastSkipped }}</span> }
                 @else if (r.lastRunId) {
                   <a routerLink="/execucoes" [queryParams]="{ run: r.lastRunId }" class="whitespace-nowrap hover:underline"
