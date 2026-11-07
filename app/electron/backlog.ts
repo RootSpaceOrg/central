@@ -33,7 +33,7 @@ export function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
     order by coalesce(tier, 9), created_at desc`, ...statuses);
 }
 
-export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string; task_id?: number | null; summary?: string | null; options?: string[] | null; agent_id?: number | null }): ProposalDto {
+export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string; task_id?: number | null; summary?: string | null; options?: string[] | null; agent_id?: number | null; origin?: { kind: 'chat' | 'run'; id: number } | null }): ProposalDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Escreva o que precisa acontecer.');
   const tier = input.tier === 0 || input.tier === 1 || input.tier === 2 ? input.tier : null;
@@ -43,6 +43,7 @@ export function createProposal(input: NewProposalInput & { next_action?: string 
   const options = (input.options ?? []).map(o => o.trim()).filter(Boolean).slice(0, 4);
   run('update proposals set summary = ?, options = ? where id = ?', input.summary?.trim().split('\n')[0] || null, options.length ? JSON.stringify(options) : null, Number(lastInsertRowid));
   if (input.agent_id) run('update proposals set agent_id = ? where id = ?', input.agent_id, Number(lastInsertRowid));
+  if (input.origin) run(`update proposals set ${input.origin.kind === 'chat' ? 'origin_chat' : 'origin_run'} = ? where id = ?`, input.origin.id, Number(lastInsertRowid));
   if (input.task_id && get('select 1 from tasks where id = ?', input.task_id)) run('update proposals set task_id = ? where id = ?', input.task_id, Number(lastInsertRowid));
   return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
 }

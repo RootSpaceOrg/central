@@ -972,6 +972,8 @@ export interface Api {
   'proposals:create': (input: NewProposalInput) => ProposalDto;
   'proposals:decide': (id: number, verdict: Verdict, reason: string | null) => void;
   'proposals:delete': (id: number) => void;
+  /** direcionar para quem pediu, na mesma sessão; null = sem sessão de origem (abrir conversa nova) */
+  'proposals:steer': (id: number, agentId: number, text: string) => number | null;
   'runs:list': (slug: string | null) => RunDto[];
   'runs:start': (input: NewRunInput) => RunDto;
   'runs:kill': (id: number) => void;

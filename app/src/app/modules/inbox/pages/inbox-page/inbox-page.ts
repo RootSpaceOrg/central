@@ -9,7 +9,7 @@ import { AskService } from '../../../../shared/services/ask/ask.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { LiveService } from '../../../../shared/services/live/live.service';
 import { IDEA_SOURCE_LABEL, Idea, IdeasService } from '../../../../shared/services/ideas/ideas.service';
-import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
+import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
@@ -306,6 +306,7 @@ export class InboxPage {
   /** quem recebe o direcionamento ('' = a Central): o agente que pediu a decisão (ou o último que trabalhou na tarefa dela) */
   protected readonly steerTo = signal('');
   private readonly runsService = inject(RunsService);
+  private readonly ipc = inject(IpcService);
   private askedBy(p: Proposal): number | null {
     if (p.agentId && this.agents.byId().has(p.agentId)) return p.agentId;
     if (!p.taskId) return null;
@@ -339,7 +340,10 @@ export class InboxPage {
     this.sending.set(true);
     this.error.set(null);
     try {
-      await this.chat.startBackground(target.id, item.kind === 'idea' ? ideaPrompt(item.i, this.project(item.i.projectSlug)?.name ?? null, text)
+      // decisão de volta para quem pediu: na mesma sessão dela, quando existe; senão, conversa nova com o contexto todo
+      const same = item.kind === 'decision' ? await this.ipc.invoke('proposals:steer', item.p.id, target.id, sessionPrompt(item.p, text)) : null;
+      if (same) this.chat.loadChats();
+      else await this.chat.startBackground(target.id, item.kind === 'idea' ? ideaPrompt(item.i, this.project(item.i.projectSlug)?.name ?? null, text)
         : decisionPrompt(item.p, this.project(item.p.projectSlug)?.name ?? null, text));
       // sai da fila desta visita; volta com o que a Central mudar (ou some, se ela aprovou/descartou)
       if (item.kind === 'idea') this.skipped.update(s => new Set([...s, item.i.id]));
@@ -369,6 +373,12 @@ Direcionamento dele:
 "${guidance}"
 
 Você pode: reescrever, dividir ou juntar ideias (update_idea, create_idea), mudar o projeto, aprovar (update_idea status approved) ou descartar (archived) se foi isso que ele disse, criar tarefas ligadas à ideia (create_task com idea_id) se ele pediu execução, consultar o rumo, o backlog e o código antes de decidir. Se algo ficar ambíguo, não adivinhe: pergunte aqui. Termine dizendo em 2 ou 3 linhas o que fez.`;
+
+const sessionPrompt = (p: Proposal, guidance: string) => `O Gustavo respondeu na Triagem à decisão #${p.id} que você pediu ("${p.title}"): em vez de aprovar ou recusar, deu um direcionamento.
+
+"${guidance}"
+
+Siga o que ele pediu. Se for para decidir, registre com decide na #${p.id} (com o motivo); se mudar o plano, ajuste e continue. Se algo ficar ambíguo, pergunte aqui. Termine dizendo em 2 ou 3 linhas o que fez.`;
 
 const decisionPrompt = (p: Proposal, project: string | null, guidance: string) => `${PREFIX}${p.title}
 

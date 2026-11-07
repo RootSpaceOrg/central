@@ -188,6 +188,20 @@ function registerIpc(): void {
   handle('proposals:create', input => { const p = createProposal(input); changed(); return p; });
   handle('proposals:decide', (id, verdict, reason) => { decide(id, verdict, reason); backlogChanged(); changed(); });
   handle('proposals:delete', id => { deleteProposal(id); backlogChanged(); changed(); });
+  // Direcionar para quem pediu: na mesma sessão que criou a decisão. null = não dá (a tela abre uma conversa nova)
+  handle('proposals:steer', (id, agentId, text) => {
+    const p = get<{ agent_id: number | null; origin_chat: number | null; origin_run: number | null }>('select agent_id, origin_chat, origin_run from proposals where id = ?', id);
+    if (!p || !p.agent_id || p.agent_id !== agentId) return null;
+    let chatId: number | null = null;
+    if (p.origin_chat && get('select 1 from chats where id = ?', p.origin_chat)) chatId = p.origin_chat;
+    else if (p.origin_run && !get(`select 1 from runs where id = ? and status in ('queued','preparing','running')`, p.origin_run)) {
+      try { chatId = chatFromRun(p.origin_run); } catch { chatId = null; }
+    }
+    if (!chatId) return null;
+    sendChat(chatId, agentId, text, chatNotify, () => { changed(); backlogChanged(); }, null, null);
+    changed();
+    return chatId;
+  });
 
   handle('runs:list', slug => listRuns(slug));
   handle('runs:start', input => startRun(input, emitRun));
