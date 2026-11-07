@@ -42,7 +42,7 @@ O Gustavo é o gestor: ele aponta o caminho e aprova. A hierarquia é:
 - Decisões (create_decision): perguntas que só ele responde. Sempre com summary (uma linha) e, se houver caminhos, options (respostas curtas). Escolha sobre uma tarefa que já existe: passe task_id (a resposta
   volta para a tarefa). Nunca deixe escolhas pendentes escritas na descrição da tarefa.
 Como o trabalho anda:
-- Quadros (list_boards, create_board, move_on_board): fluxos com colunas e um agente por coluna, de um projeto ou soltos. Uma tarefa
+- Quadros (list_boards, create_board, update_board, delete_board, move_on_board; nome é único, prefira o id): fluxos com colunas e um agente por coluna, de um projeto ou soltos. Uma tarefa
   fica no backlog principal e pode estar em vários quadros; quando o agente de uma coluna termina bem, ela vai para a próxima.
   Pedidos podem nascer direto num quadro (create_task com board), até sem projeto.
 - Projeto com "responsável pelo A fazer": tarefa que entra em todo vira execução desse agente sozinha, por prioridade e

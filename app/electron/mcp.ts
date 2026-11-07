@@ -23,7 +23,7 @@ import {
   getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
-import { createBoard, listBoards, resolveBoard, resolveStage, setStage, stagesOf } from './board';
+import { createBoard, deleteBoard, listBoards, updateBoard, resolveBoard, resolveStage, setStage, stagesOf } from './board';
 import { digest, listDeliveries, reportDelivery } from './deliveries';
 import { releaseStatus } from './release';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
@@ -160,6 +160,22 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     columns: z.array(z.object({ label: z.string(), description: z.string().optional(), agent_id: z.number().int().optional(), instruction: z.string().optional(),
       kind: z.enum(['backlog', 'todo', 'doing', 'review', 'dev', 'done']).optional().describe('reflete no backlog principal') })).min(1),
   }, a => createBoard({ name: a.name, description: a.description ?? null, project_slug: a.project_slug ?? null, columns: a.columns }), h.backlog);
+  tool('update_board', 'Edita um quadro: nome (único), descrição, projeto (project_slug; null = solto) ou cor. Para mexer nas colunas, use a tela.', {
+    board: z.union([z.number().int(), z.string()]).describe('id ou nome do quadro'), name: z.string().optional(), description: z.string().nullable().optional(),
+    project_slug: z.string().nullable().optional(), color: z.string().optional(),
+  }, ({ board, ...patch }) => {
+    const b = resolveBoard(board);
+    if (!b) throw new Error('Quadro não encontrado.');
+    updateBoard(b, patch);
+    return `Quadro #${b} atualizado.`;
+  }, h.backlog);
+  tool('delete_board', 'Apaga um quadro (as tarefas continuam no backlog; só saem do quadro). Só quando o Gustavo pedir explicitamente.', {
+    board: z.number().int().describe('id do quadro (veja list_boards)'), confirm: z.literal(true).describe('precisa ser true'),
+  }, a => {
+    if (!get('select 1 from boards where id = ?', a.board)) throw new Error('Quadro não encontrado.');
+    deleteBoard(a.board);
+    return `Quadro #${a.board} apagado. As tarefas continuam no backlog.`;
+  }, h.backlog);
   tool('move_on_board', 'Põe ou move uma tarefa numa coluna de um quadro (a tarefa pode estar em vários quadros).', {
     task_id: z.number().int(), board: z.union([z.number().int(), z.string()]).describe('id ou nome do quadro'), stage: z.string().describe('coluna (nome ou key)'),
   }, a => {

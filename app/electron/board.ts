@@ -30,7 +30,21 @@ const board = (id: number) => listBoards().find(b => b.id === id) ?? null;
 /** Acha o quadro pelo id ou pelo nome (agentes falam "Conteúdo"). */
 export function resolveBoard(idOrName: number | string): number | null {
   if (typeof idOrName === 'number' || /^\d+$/.test(String(idOrName))) return get<{ id: number }>('select id from boards where id = ?', Number(idOrName))?.id ?? null;
-  return get<{ id: number }>('select id from boards where lower(name) = lower(?)', String(idOrName).trim())?.id ?? null;
+  // nome repetido: não adivinha (pegar o primeiro mandou tarefas para o quadro antigo); pede o id
+  const same = byName(String(idOrName));
+  if (same.length > 1) throw new Error(`Há ${same.length} quadros chamados "${String(idOrName).trim()}" (${same.map(b => `#${b.id}${b.project_slug ? ` em ${b.project_slug}` : ''}`).join(', ')}): use o id.`);
+  return same[0]?.id ?? null;
+}
+
+/** quadros com esse nome, sem diferenciar maiúscula (o lower() do SQLite não entende acento: "CONTEÚDO" ≠ "conteúdo") */
+const norm = (n: string) => n.trim().toLocaleLowerCase('pt-BR');
+const byName = (name: string) => all<{ id: number; name: string; project_slug: string | null }>('select id, name, project_slug from boards order by id')
+  .filter(b => norm(b.name) === norm(name));
+
+/** nome de quadro é único (agentes acham o quadro pelo nome) */
+function checkName(name: string, except: number | null = null): void {
+  const other = byName(name).find(b => b.id !== except);
+  if (other) throw new Error(`Já existe um quadro "${name.trim()}" (#${other.id}). Use esse, ou dê outro nome.`);
 }
 
 /** Acha a coluna pelo key ou pelo nome. */
@@ -43,6 +57,7 @@ export function resolveStage(boardId: number, keyOrLabel: string): string | null
 export function createBoard(i: { name: string; description?: string | null; project_slug?: string | null; color?: string; columns?: BoardColumnInput[] }): BoardDto {
   const name = i.name?.trim();
   if (!name) throw new Error('Dê um nome ao quadro.');
+  checkName(name);
   if (i.project_slug && !get('select 1 from projects where slug = ?', i.project_slug)) throw new Error('Projeto não encontrado.');
   const pos = (get<{ p: number | null }>('select max(position) p from boards')?.p ?? -1) + 1;
   const id = Number(run('insert into boards (name, description, project_slug, color, position) values (?,?,?,?,?)',
@@ -54,6 +69,7 @@ export function createBoard(i: { name: string; description?: string | null; proj
 export function updateBoard(id: number, patch: { name?: string; description?: string | null; project_slug?: string | null; color?: string }): void {
   if (!get('select 1 from boards where id = ?', id)) throw new Error('Quadro não encontrado.');
   if (patch.name !== undefined && !patch.name.trim()) throw new Error('Dê um nome ao quadro.');
+  if (patch.name !== undefined) checkName(patch.name, id);
   if (patch.project_slug && !get('select 1 from projects where slug = ?', patch.project_slug)) throw new Error('Projeto não encontrado.');
   const f = (['name', 'description', 'project_slug', 'color'] as const).filter(k => patch[k] !== undefined);
   if (f.length) run(`update boards set ${f.map(k => `${k} = ?`).join(', ')} where id = ?`, ...f.map(k => (typeof patch[k] === 'string' ? (patch[k] as string).trim() || null : patch[k] ?? null)), id);

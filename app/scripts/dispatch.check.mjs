@@ -120,6 +120,11 @@ const cols = bd.saveColumns(solto.id, [
 ]);
 ok(cols.map(c => c.key).join() === 'ideias,pesquisa,roteiro,revisao,publicado', 'colunas salvas na ordem');
 ok(bd.resolveBoard('pipeline de conteúdo') === solto.id && bd.resolveStage(solto.id, 'Roteiro') === 'roteiro', 'acha quadro e coluna pelo nome');
+const throws = fn => { try { fn(); return false; } catch { return true; } };
+ok(throws(() => bd.createBoard({ name: 'PIPELINE DE CONTEÚDO' })), 'nome de quadro repetido é recusado');
+db.exec("insert into boards (name, position) values ('Duplicado', 90), ('Duplicado', 91)");
+ok(throws(() => bd.resolveBoard('duplicado')), 'nome ambíguo (dados antigos): pede o id em vez de pegar o primeiro');
+db.exec("delete from boards where name = 'Duplicado'");
 ok(bd.nextStage(solto.id, 'pesquisa') === 'roteiro' && bd.nextStage(solto.id, 'publicado') === null, 'depois = a próxima coluna (a última não tem)');
 
 // a tarefa do projeto entra no quadro: a coluna com "kind" reflete no backlog principal
