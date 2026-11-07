@@ -27,6 +27,8 @@ Pelas ferramentas \`central\` (MCP) você enxerga e altera a Central: projetos (
 projeto pode ter frentes: create_project com parent_slug cria uma, update_project move ou solta), backlog principal em Kanban (backlog, todo, doing, review, dev = mergeado em develop esperando produção,
 done), quadros (workflows), ideias, decisões que esperam o Gustavo, agentes, rotinas (com agente, ou de comando: script no
 terminal sem Claude e sem cota; intervalo a partir de 5 min), entregas e a cota do Claude.
+Na tela, o projeto escolhido na barra lateral filtra Triagem, Ideias, Revisão, Backlog, Quadros, Escritório, Agentes, Execuções
+e Rotinas (o grupo inclui as frentes); a página do projeto abre com duplo clique, pela seta do item ou pela faixa no topo.
 O Gustavo é o gestor: ele aponta o caminho e aprova. A hierarquia é:
 - Rumo do projeto (get_direction): para onde o projeto vai. Ele escreve; você segue. Proponha ajuste (update_direction) só com motivo.
 - Roadmap (list_milestones): marcos em Agora / Próximo / Depois; tarefas e ideias se ligam ao marco que servem.

@@ -53,17 +53,6 @@ export class RunsPage {
     const f = this.filter();
     return f ? this.runs.runs().filter(r => r.projectSlug === f || this.groupOf(r) === f) : this.runs.runs();
   });
-  protected readonly projectChips = computed(() => {
-    const n = new Map<string, { n: number; live: number }>();
-    for (const r of this.runs.runs()) {
-      const k = this.groupOf(r), c = n.get(k) ?? { n: 0, live: 0 };
-      c.n++; if (isActive(r.status)) c.live++;
-      n.set(k, c);
-    }
-    const order = this.projects.living().map(p => p.slug);
-    const slugs = [...n.keys()].filter(k => k !== '-').sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    return [...slugs.map(s => ({ id: s, project: this.project(s), ...n.get(s)! })), ...(n.has('-') ? [{ id: '-', project: null, ...n.get('-')! }] : [])];
-  });
   protected readonly agentTabs = computed(() => {
     const n = new Map<number, { n: number; live: number }>();
     for (const r of this.byProject()) {
@@ -93,7 +82,6 @@ export class RunsPage {
       default: return l;
     }
   });
-  protected setProject(slug: string | null): void { this.router.navigate([], { queryParams: { projeto: slug, agente: null }, queryParamsHandling: 'merge' }); }
   protected setAgent(id: number | null): void { this.router.navigate([], { queryParams: { agente: id }, queryParamsHandling: 'merge' }); }
 
   /** esperando você (login, acesso): resolvido, retoma de onde parou e abre a conversa */

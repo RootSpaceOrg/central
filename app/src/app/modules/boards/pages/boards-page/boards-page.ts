@@ -6,6 +6,7 @@ import { ProjectSelect } from '../../../../shared/components/pickers/project-sel
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { BOARD_TEMPLATES, BoardService } from '../../../../shared/services/board/board.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 
@@ -55,7 +56,7 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
       }
 
       <div class="mt-7 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        @for (b of boards.boards(); track b.id) {
+        @for (b of shownBoards(); track b.id) {
           <a [routerLink]="['/quadros', b.id]" class="block rounded-2xl border border-edge bg-panel p-5 transition hover:border-faint" [style.box-shadow]="'inset 3px 0 0 ' + b.color">
             <div class="flex items-center gap-3">
               <p class="min-w-0 flex-1 truncate font-display text-[17px] font-semibold">{{ b.name }}</p>
@@ -92,6 +93,8 @@ export class BoardsPage {
   private readonly router = inject(Router);
   private readonly query = toSignal(inject(ActivatedRoute).queryParamMap);
 
+  private readonly scope = inject(ScopeService);
+  protected readonly shownBoards = computed(() => this.boards.boards().filter(b => this.scope.matches(b.projectSlug)));
   protected readonly templates = BOARD_TEMPLATES;
   protected readonly creating = signal(false);
   protected readonly name = signal('');

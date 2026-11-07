@@ -59,6 +59,7 @@
 
   <!-- filtros: projetos (toggles) e só o que trava -->
   <div class="mt-4 flex flex-wrap items-center gap-1.5 text-[13px]" aria-label="Filtros">
+    @if (!scope.slug()) {
     <button type="button" (click)="focus.set({ projects: [], blocking: focus.focus().blocking })" [attr.aria-pressed]="!focus.focus().projects.length"
             class="rounded-full border px-3 py-1" [class]="!focus.focus().projects.length ? 'border-frost/60 bg-frost/15 font-semibold text-text' : 'border-edge text-mute hover:text-text'">Todos</button>
     @for (c of chips(); track c.id) {
@@ -67,6 +68,7 @@
         @if (c.project; as pr) { <app-project-avatar [project]="pr" [size]="16" />{{ pr.name }} } @else { Sem projeto }
         <span class="tabular-nums text-faint">{{ c.count }}</span>
       </button>
+    }
     }
     @if (focus.tab() === 'decision') {
       <span class="mx-1 h-5 w-px bg-edge" aria-hidden="true"></span>

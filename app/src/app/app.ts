@@ -24,6 +24,7 @@ import { TriageFocusService } from './shared/services/triage-focus/triage-focus.
 import { DialogsService } from './shared/services/dialogs/dialogs.service';
 import { Project, ProjectStatus } from './shared/services/projects/projects.model';
 import { ProjectsService } from './shared/services/projects/projects.service';
+import { ScopeService } from './shared/services/scope/scope.service';
 import { ProposalsService } from './shared/services/proposals/proposals.service';
 import { RunsService } from './shared/services/runs/runs.service';
 import { AgoPipe } from './shared/ui/ago.pipe';
@@ -60,6 +61,7 @@ export class App {
   /** toca o som escolhido quando chega um aviso (mesmo com as Preferências fechadas) */
   private readonly notifSound = inject(NotifSoundService);
   protected readonly projects = inject(ProjectsService);
+  protected readonly scope = inject(ScopeService);
   protected readonly proposals = inject(ProposalsService);
   protected readonly runs = inject(RunsService);
   protected readonly dialogs = inject(DialogsService);
@@ -188,6 +190,17 @@ export class App {
   }
 
   /** Botão direito num projeto da lista. */
+  /** clique no projeto: nas telas com escopo filtra a tela (de novo no mesmo = todos); nas outras abre a página dele */
+  protected pickProject(e: MouseEvent, p: Project): void {
+    if (!this.scope.scopable()) return;
+    e.preventDefault();
+    this.scope.set(this.scope.slug() === p.slug ? null : p.slug);
+  }
+  protected openProject(e: Event, slug: string): void {
+    e.preventDefault(); e.stopPropagation();
+    this.router.navigate(['/projetos', slug]);
+  }
+
   protected projectMenu(e: MouseEvent, p: Project): void {
     const go = (aba?: string) => this.router.navigate(['/projetos', p.slug], { queryParams: aba ? { aba } : {} });
     const agent = this.agents.agents().find(a => a.projectSlug === p.slug);

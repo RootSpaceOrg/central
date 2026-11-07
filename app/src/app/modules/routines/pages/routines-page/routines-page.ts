@@ -1,8 +1,9 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
@@ -56,6 +57,9 @@ export class RoutinesPage {
   private readonly agentsService = inject(AgentsService);
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
 
+  private readonly scope = inject(ScopeService);
+  /** do projeto da barra lateral: a rotina dele ou do agente dele */
+  protected readonly shown = computed(() => this.routines.routines().filter(r => this.scope.matches(r.projectSlug ?? this.agent(r.agentId)?.projectSlug)));
   protected readonly templates = TEMPLATES;
   protected readonly dialog = signal<RoutineDialogState>(null);
   protected readonly describe = describeSchedule;

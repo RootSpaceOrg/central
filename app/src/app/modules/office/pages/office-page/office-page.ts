@@ -6,6 +6,7 @@ import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { AgentStatus, LiveActivity, LiveService, PHASES, Phase, PlanItem, Subagent, doing, elapsed } from '../../../../shared/services/live/live.service';
 import { TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { RoadmapService } from '../../../../shared/services/roadmap/roadmap.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { SessionsService } from '../../../../shared/services/sessions/sessions.service';
@@ -46,7 +47,6 @@ interface Worker {
 }
 
 const GESTOR = '[gestor:planejar]';
-const FILTER_KEY = 'central.office.filter';
 const MAP_KEY = 'central.office.map';
 const CLAUDE = '#D97757';
 
@@ -145,7 +145,6 @@ export class OfficePage {
     return this.agents.agents().filter(a => !working.has(a.id));
   });
 
-  // ---------- filtro por projeto (frente conta como o projeto-pai; '' = sem projeto) ----------
   /** mapa 3D ligado (desligar libera espaço e não carrega o three.js; o quadro e as mesas continuam) */
   protected readonly map3d = signal(localStorage.getItem(MAP_KEY) !== 'off');
 
@@ -154,26 +153,9 @@ export class OfficePage {
     localStorage.setItem(MAP_KEY, this.map3d() ? 'on' : 'off');
   }
 
-  protected readonly filter = signal<ReadonlySet<string>>(new Set(JSON.parse(localStorage.getItem(FILTER_KEY) ?? '[]') as string[]));
-  private readonly topOf = (slug: string | null) => (slug ? this.projects.bySlug().get(slug)?.parentSlug ?? slug : '');
-  private readonly shown = (slug: string | null) => !this.filter().size || this.filter().has(this.topOf(slug));
+  private readonly scope = inject(ScopeService);
+  private readonly shown = (slug: string | null) => this.scope.matches(slug);
   protected readonly visible = computed(() => this.workers().filter(w => this.shown(w.slug)));
-  /** chips: projetos de cima + "sem projeto", com quantos trabalhando */
-  protected readonly chips = computed(() => {
-    const count = new Map<string, number>();
-    for (const w of this.workers()) count.set(this.topOf(w.slug), (count.get(this.topOf(w.slug)) ?? 0) + 1);
-    return [
-      ...this.projects.living().filter(p => !p.parentSlug).map(p => ({ id: p.slug, label: p.name, project: p, n: count.get(p.slug) ?? 0 })),
-      { id: '', label: 'Sem projeto', project: null, n: count.get('') ?? 0 },
-    ];
-  });
-
-  protected toggle(id: string | null): void {
-    const next = new Set(id === null ? [] : this.filter());
-    if (id !== null) { if (next.has(id)) next.delete(id); else next.add(id); }
-    this.filter.set(next);
-    localStorage.setItem(FILTER_KEY, JSON.stringify([...next]));
-  }
 
   /** quem senta em cada sala (legenda do 3D) */
   protected readonly members = computed(() => {

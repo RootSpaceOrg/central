@@ -12,7 +12,7 @@
 
   @if (routines.routines().length) {
     <ul class="mt-8 space-y-3">
-      @for (r of routines.routines(); track r.id) {
+      @for (r of shown(); track r.id) {
         <li class="group flex items-center gap-5 rounded-2xl border border-edge bg-panel px-5 py-4 transition hover:border-faint" [class.opacity-60]="!r.enabled">
           <button type="button" role="switch" [attr.aria-checked]="r.enabled" (click)="routines.toggle(r)" [attr.aria-label]="(r.enabled ? 'Desligar ' : 'Ligar ') + r.name"
                   class="relative h-6 w-11 shrink-0 rounded-full transition-colors" [class]="r.enabled ? 'bg-yes' : 'bg-edge'">

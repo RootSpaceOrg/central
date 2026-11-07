@@ -5,6 +5,7 @@ import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { Delivery, DeliveriesService } from '../../../../shared/services/deliveries/deliveries.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
@@ -30,15 +31,6 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
       <div class="px-5 pt-6 pb-3">
         <h1 id="rv-title" class="flex items-center gap-2.5 font-display text-2xl font-bold tracking-tight"><app-icon name="pr" [size]="22" class="text-frost" />Revisão</h1>
         <p class="mt-1 text-[13px] text-mute">{{ items().length ? items().length + (items().length === 1 ? ' entrega espera' : ' entregas esperam') + ' o seu olhar.' : 'Nada esperando revisão.' }}</p>
-        @if (projectsInList().length > 1) {
-          <div class="mt-3 flex flex-wrap gap-1.5">
-            <button type="button" class="rounded-full border px-2.5 py-0.5 text-[12px]" [class]="!filter() ? 'border-frost/60 bg-frost/10 text-frost' : 'border-edge text-mute hover:text-text'" (click)="filter.set(null)">Todos</button>
-            @for (p of projectsInList(); track p.slug) {
-              <button type="button" class="rounded-full border px-2.5 py-0.5 text-[12px]" [class]="filter() === p.slug ? 'border-frost/60 bg-frost/10 text-frost' : 'border-edge text-mute hover:text-text'"
-                      (click)="filter.set(filter() === p.slug ? null : p.slug)">{{ p.name }} <span class="tabular-nums opacity-70">{{ p.n }}</span></button>
-            }
-          </div>
-        }
       </div>
       <ul class="min-h-0 flex-1 overflow-y-auto px-2 pb-4" role="listbox" aria-label="O que espera revisão">
         @for (it of visible(); track it.key) {
@@ -165,7 +157,7 @@ export class ReviewPage {
   private readonly chat = inject(ChatService);
   private readonly router = inject(Router);
 
-  protected readonly filter = signal<string | null>(null);
+  private readonly scope = inject(ScopeService);
   private readonly selected = signal<string | null>(null);
   protected readonly adjusting = signal(false);
   protected readonly note = signal('');
@@ -180,13 +172,8 @@ export class ReviewPage {
     for (const t of this.tasks.tasks()) if (t.column === 'review' && !covered.has(t.id)) list.push({ key: `t${t.id}`, kind: 'task', task: t });
     return list;
   });
-  protected readonly visible = computed(() => this.items().filter(it => !this.filter() || this.slugOf(it) === this.filter()));
+  protected readonly visible = computed(() => this.items().filter(it => this.scope.matches(this.slugOf(it))));
   protected readonly current = computed(() => this.visible().find(it => it.key === this.selected()) ?? this.visible()[0] ?? null);
-  protected readonly projectsInList = computed(() => {
-    const n = new Map<string, number>();
-    for (const it of this.items()) { const s = this.slugOf(it); if (s) n.set(s, (n.get(s) ?? 0) + 1); }
-    return [...n].map(([slug, c]) => ({ slug, name: this.projects.bySlug().get(slug)?.name ?? slug, n: c }));
-  });
 
   constructor() {
     // trocou de item: fecha o ajuste aberto

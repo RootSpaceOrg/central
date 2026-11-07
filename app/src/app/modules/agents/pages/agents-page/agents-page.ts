@@ -10,6 +10,7 @@ import { ContextMenuService } from '../../../../shared/services/context-menu/con
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { MemoriesService } from '../../../../shared/services/memories/memories.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { RUN_STATUS_LABEL, isActive } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
@@ -50,7 +51,8 @@ export class AgentsPage {
   protected readonly pane = signal<Pane>('conversas');
   protected readonly memView = signal<MemoryView>('dele');
   protected readonly history = signal(false);
-  protected readonly filter = signal<Filter>('all');
+  private readonly scope = inject(ScopeService);
+  protected readonly filter = computed<Filter>(() => this.scope.slug() ?? 'all');
   protected readonly runLabel = RUN_STATUS_LABEL;
   protected readonly isActive = isActive;
 
@@ -58,23 +60,11 @@ export class AgentsPage {
   protected readonly agentRuns = computed(() => this.runs.runs().filter(r => r.agentId === this.selected()?.id).slice(0, 60));
   protected readonly modelLabel = (m: string) => MODELS.find(x => x.value === m)?.label ?? m;
 
-  /** grupo de cada agente: o projeto-pai, '-' sem projeto; a Central não entra em grupo (está sempre na lista) */
-  private groupOf(a: Agent): string { return a.projectSlug ? this.projects.bySlug().get(a.projectSlug)?.parentSlug ?? a.projectSlug : '-'; }
-
-  protected readonly filters = computed(() => {
-    const others = this.agents.agents().filter(a => !a.builtin);
-    const n = new Map<string, number>();
-    for (const a of others) n.set(this.groupOf(a), (n.get(this.groupOf(a)) ?? 0) + 1);
-    const order = this.projects.living().map(p => p.slug);
-    const projects = [...n.keys()].filter(k => k !== '-').sort((a, b) => order.indexOf(a) - order.indexOf(b))
-      .map(slug => ({ id: slug, project: this.project(slug), n: n.get(slug)! }));
-    return [{ id: 'all', project: null, n: others.length }, ...projects, ...(n.has('-') ? [{ id: '-', project: null, n: n.get('-')! }] : [])];
-  });
 
   protected readonly visible = computed(() => {
     const f = this.filter();
     const list = this.agents.agents();
-    return f === 'all' ? list : list.filter(a => a.builtin || this.groupOf(a) === f);
+    return f === 'all' ? list : list.filter(a => a.builtin || this.scope.matches(a.projectSlug));
   });
 
   /** agentes trabalhando agora (execução ativa ou conversa respondendo) */
@@ -86,7 +76,6 @@ export class AgentsPage {
   });
 
   constructor() {
-    this.settings.get('agents:filter').then(v => { if (v) this.filter.set(v); });
     this.settings.get('agents:history').then(v => this.history.set(v === '1'));
     // ?agente=3&conversa=12 (vindo do painel, de uma execução ou do menu de projeto); sem nada, onde você parou
     effect(() => {
@@ -103,6 +92,13 @@ export class AgentsPage {
         else this.chat.restoreLast();
       });
     });
+    // trocou o projeto na barra lateral: se o agente aberto não é dele, abre o primeiro agente do projeto
+    effect(() => {
+      const f = this.filter(), cur = this.selected();
+      if (f === 'all' || !this.agents.loaded() || (cur && (cur.builtin || this.scope.matches(cur.projectSlug)))) return;
+      const first = untracked(() => this.visible().find(a => !a.builtin) ?? this.visible().find(a => a.builtin));
+      if (first) untracked(() => this.pick(first));
+    });
   }
 
   protected pick(a: Agent): void {
@@ -110,15 +106,6 @@ export class AgentsPage {
     this.router.navigate([], { queryParams: { agente: a.id, conversa: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
-  /** trocar de projeto: se o agente aberto não é dele, abre o primeiro agente do projeto */
-  protected setFilter(f: Filter): void {
-    this.filter.set(f);
-    this.settings.set('agents:filter', f);
-    const cur = this.selected();
-    if (f === 'all' || (cur && (cur.builtin || this.groupOf(cur) === f))) return;
-    const first = this.visible().find(a => !a.builtin);
-    if (first) this.pick(first);
-  }
 
   protected toggleHistory(): void { const v = !this.history(); this.history.set(v); this.settings.set('agents:history', v ? '1' : '0'); }
 

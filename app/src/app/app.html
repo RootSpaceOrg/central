@@ -26,7 +26,7 @@
       </button>
 
       @for (n of nav; track n.path) {
-        <a [routerLink]="n.path" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ exact: !!n.exact }"
+        <a [routerLink]="n.path" [queryParams]="scope.queryFor(n.path)" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ paths: n.exact ? 'exact' : 'subset', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
            class="nav-item group" [class.nav-active]="rla.isActive" [attr.aria-label]="n.label">
           <span class="nav-bar" aria-hidden="true"></span>
           <app-icon [name]="n.icon" [size]="21" [fill]="rla.isActive" class="transition-transform duration-150 group-hover:scale-110" />
@@ -103,8 +103,21 @@
       </div>
     </aside>
 
-    <main class="min-h-0 min-w-0 overflow-hidden bg-night">
-      <router-outlet />
+    <main class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-night">
+      <!-- escopo: o projeto escolhido na barra lateral filtra esta tela -->
+      @if (scope.project(); as sp) {
+        <div class="flex shrink-0 items-center gap-2 border-b border-frost/25 bg-frost/8 px-5 py-1.5 text-[13px]" role="status">
+          <app-icon name="flag" [size]="14" class="text-frost" />
+          <span class="text-mute">Só</span>
+          <app-project-avatar [project]="sp" [size]="18" />
+          <b class="font-semibold">{{ sp.name }}</b>
+          @if (projects.children(sp.slug).length) { <span class="text-faint">e frentes</span> }
+          <span class="flex-1"></span>
+          <a [routerLink]="['/projetos', sp.slug]" class="btn btn-sm btn-ghost"><app-icon name="folder" [size]="13" />Página do projeto</a>
+          <button type="button" class="btn btn-sm btn-ghost" (click)="scope.set(null)"><app-icon name="close" [size]="13" />Ver todos</button>
+        </div>
+      }
+      <div class="min-h-0 flex-1 overflow-hidden"><router-outlet /></div>
     </main>
   </div>
 
@@ -138,11 +151,19 @@
 </div>
 
 <ng-template #item let-p let-kids="kids">
-  <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text" (contextmenu)="projectMenu($event, p)"
-     class="group relative flex items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
+  <a [routerLink]="scope.scopable() ? null : ['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text" (click)="pickProject($event, p)" (dblclick)="openProject($event, p.slug)" (contextmenu)="projectMenu($event, p)"
+     class="group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
+     [class.!bg-frost/15]="scope.slug() === p.slug" [class.!text-text]="scope.slug() === p.slug"
+     [attr.aria-current]="scope.slug() === p.slug ? 'true' : null"
+     [title]="scope.scopable() ? 'Filtrar esta tela por ' + p.name + ' (duplo clique abre a página do projeto)' : 'Abrir ' + p.name"
      [class.opacity-60]="p.status === 'dead'">
     <app-project-avatar [project]="p" [size]="20" class="transition-transform duration-150 group-hover:scale-110" />
     <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+    @if (scope.scopable()) {
+      <button type="button" (click)="openProject($event, p.slug)" [attr.aria-label]="'Abrir a página de ' + p.name" title="Abrir a página do projeto"
+              class="hidden size-5 place-items-center rounded text-faint hover:bg-edge hover:text-text group-hover:grid group-focus-within:grid">
+        <app-icon name="external" [size]="12" /></button>
+    }
     @if (kids) {
       <button type="button" (click)="toggleGroup($event, p.slug)" [attr.aria-expanded]="!collapsed().has(p.slug)"
               [attr.aria-label]="(collapsed().has(p.slug) ? 'Mostrar' : 'Esconder') + ' subprojetos de ' + p.name"

@@ -11,6 +11,7 @@ import { LiveService } from '../../../../shared/services/live/live.service';
 import { IDEA_SOURCE_LABEL, Idea, IdeasService } from '../../../../shared/services/ideas/ideas.service';
 import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
@@ -93,14 +94,15 @@ export class InboxPage {
   private readonly skipped = signal<ReadonlySet<number>>(new Set());
 
   // ---------- abas, filtros e grade ----------
-  protected readonly decisionCount = computed(() => this.proposals.inbox().filter(p => this.focus.decision(p)).length);
-  protected readonly ideaCount = computed(() => this.ideas.fresh().filter(i => this.focus.idea(i)).length);
+  protected readonly scope = inject(ScopeService);
+  protected readonly decisionCount = computed(() => this.proposals.inbox().filter(p => this.focus.decision(p) && this.scope.matches(p.projectSlug)).length);
+  protected readonly ideaCount = computed(() => this.ideas.fresh().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).length);
   protected readonly stuckCount = computed(() => this.proposals.inbox().filter(p => blocking(p) && this.focus.decision(p, { ...this.focus.focus(), blocking: false })).length);
   protected readonly total = computed(() => this.decisionCount() + this.ideaCount());
 
   protected readonly items = computed<Item[]>(() => this.focus.tab() === 'decision'
-    ? this.proposals.inbox().filter(p => this.focus.decision(p)).map(p => ({ kind: 'decision' as const, p }))
-    : this.ideas.fresh().filter(i => this.focus.idea(i)).map(i => ({ kind: 'idea' as const, i })));
+    ? this.proposals.inbox().filter(p => this.focus.decision(p) && this.scope.matches(p.projectSlug)).map(p => ({ kind: 'decision' as const, p }))
+    : this.ideas.fresh().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).map(i => ({ kind: 'idea' as const, i })));
 
   /** por projeto; dentro de cada um, o que trava primeiro (o mais antigo antes), depois o mais novo */
   protected readonly groups = computed(() => {

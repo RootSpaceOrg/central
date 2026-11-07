@@ -7,6 +7,7 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { IDEA_SOURCE_LABEL, IDEA_STATUS, Idea, IdeaStatus, IdeasService } from '../../../../shared/services/ideas/ideas.service';
 import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { ScopeService } from '../../../../shared/services/scope/scope.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe } from '../../../../shared/ui/markdown';
@@ -36,7 +37,7 @@ export class IdeasPage {
   protected readonly status = signal<IdeaStatus>('approved');
   protected readonly hint = computed(() => IDEA_STATUS.find(f => f.id === this.status())!.hint);
   protected readonly error = signal<string | null>(null);
-  protected readonly projectFilter = signal('');
+  private readonly scope = inject(ScopeService);
   protected readonly query = signal('');
   /** caixa de anotar */
   protected readonly draft = signal('');
@@ -55,7 +56,7 @@ export class IdeasPage {
     const q = this.query().trim().toLowerCase();
     return this.ideas.ideas().filter(i =>
       i.status === this.status()
-      && (!this.projectFilter() || (this.projectFilter() === '-' ? !i.projectSlug : i.projectSlug === this.projectFilter()))
+      && this.scope.matches(i.projectSlug)
       && (!q || i.title.toLowerCase().includes(q) || i.body?.toLowerCase().includes(q)));
   });
 

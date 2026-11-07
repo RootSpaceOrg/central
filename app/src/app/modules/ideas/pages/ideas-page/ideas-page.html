@@ -51,7 +51,6 @@
           {{ f.label }} <span class="text-faint">{{ counts()[f.id] }}</span></button>
       }
     </div>
-    <app-project-select class="w-64" [compact]="true" [value]="projectFilter()" (valueChange)="projectFilter.set($event)" noneLabel="Todos os projetos" />
     <input class="field !w-64 !py-2" placeholder="Buscar" aria-label="Buscar ideias" [value]="query()" (input)="query.set($any($event.target).value)">
   </div>
 

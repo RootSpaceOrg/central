@@ -35,6 +35,8 @@ export class KanbanBoard {
   protected readonly boards = inject(BoardService);
 
   readonly projectSlug = input<string | null>(null);
+  /** o projeto inclui as frentes dele (tela Backlog com o projeto da barra lateral) */
+  readonly frentes = input(false);
 
   /** colunas fixas do backlog principal ("Em dev" só onde pronto é produção) */
   protected readonly columns = computed<ViewColumn[]>(() => {
@@ -62,7 +64,8 @@ export class KanbanBoard {
   protected readonly byColumn = computed(() => {
     const slug = this.projectSlug();
     const living = new Set(this.projects.living().map(p => p.slug));
-    const visible = this.tasks.tasks().filter(t => (slug ? t.projectSlug === slug : !!t.projectSlug && living.has(t.projectSlug)));
+    const bySlug = this.projects.bySlug();
+    const visible = this.tasks.tasks().filter(t => (slug ? t.projectSlug === slug || (this.frentes() && !!t.projectSlug && bySlug.get(t.projectSlug)?.parentSlug === slug) : !!t.projectSlug && living.has(t.projectSlug)));
     const sorted = [...visible].sort((a, b) => a.position - b.position || a.priority - b.priority);
     return Object.fromEntries(COLUMNS.map(c => [c.id, sorted.filter(t => t.column === c.id)])) as Record<string, Task[]>;
   });
