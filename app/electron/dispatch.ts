@@ -140,7 +140,7 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
          and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
        order by t.priority, x.position, t.id limit ?`, s.board, s.key, s.board, s.key, since, slots);
     for (const t of tasks) {
-      const head = `Etapa "${s.label}" do quadro ${s.bname}.${s.instruction ? `\n${s.instruction}` : ''}\nAo terminar bem, a Central leva a tarefa para ${s.next ? `"${s.next}"` : 'o fim do quadro'}; não mova você mesmo.`;
+      const head = `Etapa "${s.label}" do quadro ${s.bname}.${s.instruction ? `\n${s.instruction}` : ''}\nAo terminar bem, a Central leva a tarefa para ${s.next ? `"${s.next}"` : 'o fim do quadro'}. Se a etapa não terminou (esperando algo, devolvendo para trás, ou para ficar nesta coluna), mova você o cartão com move_on_board (pode ser para esta mesma coluna): aí a Central não avança.`;
       try {
         deps.start({ project_slug: t.project_slug, agent_id: s.agent, repo_path: t.repo_path, prompt: `${head}\n\n${t.title}${t.body ? `\n\n${t.body}` : ''}`, permission: s.permission, task_id: t.id, stage: s.key, board_id: s.board });
         started++;

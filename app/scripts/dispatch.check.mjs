@@ -16,7 +16,7 @@ db.exec(\`
   insert into agents (id, permission, name) values (6, 'full', 'Tech'), (7, 'edits', 'Pesquisador'), (8, 'edits', 'Roteirista');
   create table projects (slug text primary key, status text, todo_agent_id integer, todo_parallel integer, todo_hours text);
   insert into projects values ('kultivai', 'active', 6, 2, '08-22'), ('outro', 'active', null, 1, ''), ('conteudo', 'active', null, 1, '');
-  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text, board_id integer, prompt text);
+  create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text, board_id integer, prompt text, board_moved integer default 0);
   create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, repo_path text, priority integer, position integer, stage text, pr_url text, updated_at text);
   insert into tasks values (1, 'kultivai', 'todo', 'Exportar PDF', 'detalhe', 'C:/r/front', 2, 0, null, null, null),
     (2, 'kultivai', 'todo', 'Corrigir login', null, null, 0, 1, null, null, null), (3, 'kultivai', 'todo', 'Terceira', null, null, 2, 2, null, null, null),
@@ -125,6 +125,18 @@ ok(throws(() => bd.createBoard({ name: 'PIPELINE DE CONTEÚDO' })), 'nome de qua
 db.exec("insert into boards (name, position) values ('Duplicado', 90), ('Duplicado', 91)");
 ok(throws(() => bd.resolveBoard('duplicado')), 'nome ambíguo (dados antigos): pede o id em vez de pegar o primeiro');
 db.exec("delete from boards where name = 'Duplicado'");
+// coluna nova sem agente (espera) no meio, e editar uma coluna sem perder as tarefas
+const withWait = bd.addColumn(solto.id, { label: 'Aguardando imagens' }, 'Roteiro');
+ok(withWait.map(c => c.key).join() === 'ideias,pesquisa,roteiro,aguardando-imagens,revisao,publicado' && withWait[3].agent_id === null, 'coluna nova entra depois da escolhida, sem agente');
+const patched = bd.patchColumn(solto.id, 'Aguardando imagens', { description: 'esperando as fotos' });
+ok(patched.find(c => c.key === 'aguardando-imagens').description === 'esperando as fotos' && patched.find(c => c.key === 'pesquisa').agent_id === 7 && patched.find(c => c.key === 'roteiro').agent_id === 8, 'edita só a coluna pedida');
+// cartão movido durante a execução da etapa: a execução fica marcada para não avançar por cima
+db.exec("insert into tasks (id, project_slug, \"column\", title, priority, position) values (30, 'kultivai', 'doing', 'Peça', 1, 9)");
+db.exec("insert into runs (id, task_id, board_id, stage, status) values (900, 30, " + solto.id + ", 'roteiro', 'running')");
+bd.setStage(30, solto.id, 'aguardando-imagens');
+ok(db.prepare('select board_moved m from runs where id = 900').get().m === 1, 'mexer no cartão durante a execução marca para não avançar');
+db.exec("delete from runs where id = 900; delete from task_boards where task_id = 30; delete from tasks where id = 30");
+db.exec("delete from board_cols where board_id = " + solto.id + " and key = 'aguardando-imagens'");
 ok(bd.nextStage(solto.id, 'pesquisa') === 'roteiro' && bd.nextStage(solto.id, 'publicado') === null, 'depois = a próxima coluna (a última não tem)');
 
 // a tarefa do projeto entra no quadro: a coluna com "kind" reflete no backlog principal

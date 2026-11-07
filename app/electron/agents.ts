@@ -224,7 +224,9 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
     if (at?.s && at.b) {
       // etapa de um quadro: terminou bem → próxima coluna (a escolhida ou a seguinte); não terminou → fica na etapa
       if (pr) run('update tasks set pr_url = coalesce(?, pr_url) where id = ?', pr, task);
-      const next = status === 'succeeded' ? nextStage(at.b, at.s) : null;
+      // o cartão foi movido durante a execução (devolvido, esperando algo, ou "fica aqui"): respeita, não avança por cima
+      const moved = !!get<{ m: number }>('select board_moved m from runs where id = ?', id)?.m;
+      const next = status === 'succeeded' && !moved ? nextStage(at.b, at.s) : null;
       if (next) setStage(task, at.b, next);
     } else moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
   }

@@ -118,6 +118,27 @@ export function saveColumns(boardId: number, input: BoardColumnInput[]): BoardCo
   return listColumns(boardId);
 }
 
+const toInput = (c: BoardColumnDto): BoardColumnInput => ({
+  key: c.key, label: c.label, description: c.description, kind: c.kind, agent_id: c.agent_id, instruction: c.instruction,
+  parallel: c.parallel, hours: c.hours, next_key: c.next_key, color: c.color ?? null,
+});
+
+/** Coluna nova (sem mexer nas outras nem nas tarefas): depois de "after" (nome ou key), ou no fim. */
+export function addColumn(boardId: number, col: BoardColumnInput, after?: string | null): BoardColumnDto[] {
+  const cols = listColumns(boardId).map(toInput);
+  const at = after ? cols.findIndex(c => c.key === (resolveStage(boardId, after) ?? '')) : -1;
+  if (after && at < 0) throw new Error(`Coluna "${after}" não existe neste quadro.`);
+  cols.splice(at < 0 ? cols.length : at + 1, 0, col);
+  return saveColumns(boardId, cols);
+}
+
+/** Edita uma coluna (nome, agente, instrução, tipo, para onde vai depois); as tarefas ficam onde estão. */
+export function patchColumn(boardId: number, column: string, patch: Partial<BoardColumnInput>): BoardColumnDto[] {
+  const key = resolveStage(boardId, column);
+  if (!key) throw new Error(`Coluna "${column}" não existe neste quadro.`);
+  return saveColumns(boardId, listColumns(boardId).map(toInput).map(c => (c.key === key ? { ...c, ...patch, key } : c)));
+}
+
 /**
  * Põe (ou move) a tarefa numa coluna do quadro. Se a coluna reflete no backlog principal (kind), a tarefa vai junto
  * para aquele estado lá.
@@ -125,6 +146,8 @@ export function saveColumns(boardId: number, input: BoardColumnInput[]): BoardCo
 export function setStage(taskId: number, boardId: number, key: string, position = 0): void {
   const col = listColumns(boardId).find(c => c.key === key);
   if (!col) throw new Error(`Coluna "${key}" não existe neste quadro.`);
+  // alguém (o agente da etapa, outro agente ou você) mexeu no cartão durante a execução: no fim ela não avança por cima
+  run(`update runs set board_moved = 1 where task_id = ? and board_id = ? and status in ('queued','preparing','running')`, taskId, boardId);
   if (!get('select 1 from tasks where id = ?', taskId)) throw new Error('Tarefa não encontrada.');
   run(`insert into task_boards (task_id, board_id, stage, position, updated_at) values (?,?,?,?,?)
        on conflict (task_id, board_id) do update set stage = excluded.stage, position = excluded.position, updated_at = excluded.updated_at`,

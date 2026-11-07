@@ -23,7 +23,7 @@ import {
   getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
-import { createBoard, deleteBoard, listBoards, updateBoard, resolveBoard, resolveStage, setStage, stagesOf } from './board';
+import { addColumn, createBoard, deleteBoard, listBoards, patchColumn, updateBoard, resolveBoard, resolveStage, setStage, stagesOf } from './board';
 import { digest, listDeliveries, reportDelivery } from './deliveries';
 import { releaseStatus } from './release';
 import { mcpConfigBody, setMcpConfig } from './mcp-config';
@@ -168,6 +168,26 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     if (!b) throw new Error('Quadro não encontrado.');
     updateBoard(b, patch);
     return `Quadro #${b} atualizado.`;
+  }, h.backlog);
+  const columnShape = {
+    label: z.string().optional(), description: z.string().nullable().optional(), agent_id: z.number().int().nullable().optional().describe('null = coluna sem agente (nada roda nela)'),
+    instruction: z.string().nullable().optional(), kind: z.enum(['backlog', 'todo', 'doing', 'review', 'dev', 'done']).nullable().optional().describe('reflete no backlog principal'),
+    next_key: z.string().nullable().optional().describe('para onde vai quando o agente termina bem (null = a próxima)'), parallel: z.number().int().min(1).max(4).optional(),
+  };
+  tool('add_board_column', 'Acrescenta uma coluna num quadro (as outras colunas e as tarefas ficam como estão). Coluna sem agente = espera (nada roda nem avança sozinho nela). Só quando o Gustavo pedir ou aprovar.', {
+    board: z.union([z.number().int(), z.string()]).describe('id ou nome do quadro'), after: z.string().optional().describe('depois de qual coluna (nome ou key); vazio = no fim'),
+    ...columnShape, label: z.string(),
+  }, ({ board, after, ...col }) => {
+    const b = resolveBoard(board);
+    if (!b) throw new Error('Quadro não encontrado.');
+    return addColumn(b, { ...col, label: col.label }, after ?? null).map(c => ({ key: c.key, label: c.label, agent_id: c.agent_id }));
+  }, h.backlog);
+  tool('update_board_column', 'Edita uma coluna de um quadro: nome, agente (null = sem agente), instrução, tipo, para onde vai depois. As tarefas ficam onde estão.', {
+    board: z.union([z.number().int(), z.string()]).describe('id ou nome do quadro'), column: z.string().describe('nome ou key da coluna'), ...columnShape,
+  }, ({ board, column, ...patch }) => {
+    const b = resolveBoard(board);
+    if (!b) throw new Error('Quadro não encontrado.');
+    return patchColumn(b, column, patch).map(c => ({ key: c.key, label: c.label, agent_id: c.agent_id }));
   }, h.backlog);
   tool('delete_board', 'Apaga um quadro (as tarefas continuam no backlog; só saem do quadro). Só quando o Gustavo pedir explicitamente.', {
     board: z.number().int().describe('id do quadro (veja list_boards)'), confirm: z.literal(true).describe('precisa ser true'),
