@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
-import { markProjects } from '../../../../shared/services/scope/scope.service';
+import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { RUN_STATUS_LABEL, Run, RunStatus, isActive } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -45,15 +45,13 @@ export class RunsPage {
   protected readonly agentFilter = computed(() => Number(this.query()?.get('agente')) || null);
   protected readonly status = signal<'all' | 'active' | 'attention' | 'done'>('all');
 
-  /** projeto-pai da execução ('-' = sem projeto): as frentes contam como o projeto */
-  private groupOf(r: Run): string { return r.projectSlug ? this.projects.bySlug().get(r.projectSlug)?.parentSlug ?? r.projectSlug : '-'; }
+  private readonly scope = inject(ScopeService);
   /** precisa de você: esperando (login, acesso), pausada, ou falhou/foi interrompida e ninguém assumiu */
   private readonly marks = markProjects(() => this.runs.runs().filter(r => this.attention(r)).map(r => r.projectSlug), 'bg-later text-night', 'precisam de você');
   protected attention(r: Run): boolean { return !!r.waiting || !!r.paused || ((r.status === 'failed' || r.status === 'killed') && !this.handedOff(r)); }
 
   private readonly byProject = computed(() => {
-    const f = this.filter();
-    return f ? this.runs.runs().filter(r => r.projectSlug === f || this.groupOf(r) === f) : this.runs.runs();
+    return this.runs.runs().filter(r => this.scope.matches(r.projectSlug));
   });
   protected readonly agentTabs = computed(() => {
     const n = new Map<number, { n: number; live: number }>();

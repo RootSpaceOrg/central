@@ -10,7 +10,8 @@ export const SCOPED = new Set(['/triagem', '/ideias', '/revisao', '/backlog', '/
 
 /**
  * Escopo de projeto: o projeto escolhido na barra lateral filtra a tela atual. A URL manda (?projeto=), então
- * links, voltar/avançar e atalhos continuam valendo; escolher um grupo inclui as frentes dele.
+ * links, voltar/avançar e atalhos continuam valendo; escolher um grupo inclui as frentes dele, a menos que
+ * venha com &frentes=nao (só o que é do projeto direto, sem frente).
  */
 @Injectable({ providedIn: 'root' })
 export class ScopeService {
@@ -22,12 +23,14 @@ export class ScopeService {
   readonly scopable = computed(() => SCOPED.has(this.path()));
   /** projeto valendo na tela atual (null = todos) */
   readonly slug = computed(() => (this.scopable() ? this.router.parseUrl(this.url()).queryParamMap.get('projeto') || null : null));
+  /** só o que é do projeto direto (sem as frentes dele) */
+  readonly direct = computed(() => !!this.slug() && this.router.parseUrl(this.url()).queryParamMap.get('frentes') === 'nao');
   readonly project = computed(() => (this.slug() ? this.projects.bySlug().get(this.slug()!) ?? null : null));
   /** o último escopo escolhido: acompanha você ao trocar de tela pela barra de ícones */
-  readonly sticky = signal<string | null>(null);
+  readonly sticky = signal<{ slug: string; direct: boolean } | null>(null);
 
   constructor() {
-    effect(() => { if (this.scopable()) this.sticky.set(this.slug()); });
+    effect(() => { if (this.scopable()) this.sticky.set(this.slug() ? { slug: this.slug()!, direct: this.direct() } : null); });
   }
 
   /** marca da tela aberta em cada projeto da barra lateral (ex.: na Revisão, quantos itens esperam em cada um) */
@@ -37,17 +40,21 @@ export class ScopeService {
   matches(slug: string | null | undefined): boolean {
     const s = this.slug();
     if (!s) return true;
-    return !!slug && (slug === s || this.projects.bySlug().get(slug)?.parentSlug === s);
+    return !!slug && (slug === s || (!this.direct() && this.projects.bySlug().get(slug)?.parentSlug === s));
   }
 
-  set(slug: string | null): void {
-    this.router.navigate([], { queryParams: { projeto: slug, agente: null }, queryParamsHandling: 'merge' });
+  /** direct: só o projeto, sem as frentes */
+  set(slug: string | null, direct = false): void {
+    this.router.navigate([], { queryParams: { projeto: slug, frentes: slug && direct ? 'nao' : null, agente: null }, queryParamsHandling: 'merge' });
   }
+
+  /** este escopo está valendo agora? */
+  is(slug: string, direct = false): boolean { return this.slug() === slug && this.direct() === direct; }
 
   /** link da barra de ícones: leva o escopo junto para as telas que o respeitam */
   queryFor(path: string): Record<string, string> | null {
     const s = this.sticky();
-    return s && SCOPED.has(path) ? { projeto: s } : null;
+    return s && SCOPED.has(path) ? { projeto: s.slug, ...(s.direct ? { frentes: 'nao' } : {}) } : null;
   }
 }
 

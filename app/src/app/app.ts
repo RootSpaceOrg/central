@@ -205,7 +205,7 @@ export class App {
   protected pickProject(e: MouseEvent, p: Project): void {
     if (!this.scope.scopable()) return;
     e.preventDefault();
-    this.scope.set(this.scope.slug() === p.slug ? null : p.slug);
+    this.scope.set(this.scope.is(p.slug) ? null : p.slug);
   }
   protected openProject(e: Event, slug: string): void {
     e.preventDefault(); e.stopPropagation();

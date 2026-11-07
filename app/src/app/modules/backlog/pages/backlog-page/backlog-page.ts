@@ -34,7 +34,7 @@ import { Icon } from '../../../../shared/ui/icon';
     }
     @if (tasks.error()) { <p role="alert" class="mt-3 text-no">{{ tasks.error() }}</p> }
 
-    <app-kanban-board class="mt-5 min-h-0 flex-1" [projectSlug]="slug()" [frentes]="true" />`,
+    <app-kanban-board class="mt-5 min-h-0 flex-1" [projectSlug]="slug()" [frentes]="!scope.direct()" />`,
 })
 export class BacklogPage {
   protected readonly projects = inject(ProjectsService);
@@ -43,7 +43,7 @@ export class BacklogPage {
   protected readonly dialogs = inject(DialogsService);
   private readonly query = toSignal(inject(ActivatedRoute).queryParamMap);
 
-  private readonly scope = inject(ScopeService);
+  protected readonly scope = inject(ScopeService);
   protected readonly slug = computed(() => this.query()?.get('projeto') || null);
   protected readonly project = computed(() => (this.slug() ? this.projects.bySlug().get(this.slug()!) ?? null : null));
   protected readonly open = computed(() => this.tasks.tasks().filter(t =>
