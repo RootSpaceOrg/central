@@ -3,7 +3,7 @@ import { NotifSoundService } from './shared/services/notif-sound/notif-sound.ser
 import { IS_WIN } from './shared/services/ipc/ipc.service';
 import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { QuickBar } from './shared/components/quick-bar/quick-bar';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ProjectDialog } from './shared/components/project-dialog/project-dialog';
@@ -43,6 +43,8 @@ import { LayoutService } from './shared/services/layout/layout.service';
 import { LiveService } from './shared/services/live/live.service';
 import { SessionsService } from './shared/services/sessions/sessions.service';
 
+type NavItem = { path: string; label: string; icon: IconName; tabs?: { path: string; label: string }[] };
+
 const GROUPS: { status: ProjectStatus; label: string }[] = [
   { status: 'active', label: 'Ativos' },
   { status: 'maintenance', label: 'Em manutenção' },
@@ -80,21 +82,29 @@ export class App {
   protected readonly working = computed(() => this.live.items().size + this.live.terminalsBusy().size);
   private readonly sessionsService = inject(SessionsService);
 
-  protected readonly nav: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
-    { path: '/', label: 'Início', icon: 'home', exact: true },
-    { path: '/visao-geral', label: 'Visão geral', icon: 'overview' },
-    { path: '/triagem', label: 'Triagem (decisões e ideias novas)', icon: 'inbox' },
-    { path: '/ideias', label: 'Ideias', icon: 'ideas' },
+  /** barra de ícones: telas irmãs ficam juntas num ícone e viram abas no topo da tela (as rotas antigas continuam valendo) */
+  protected readonly nav: NavItem[] = [
+    { path: '/', label: 'Início', icon: 'home', tabs: [{ path: '/', label: 'Início' }, { path: '/visao-geral', label: 'Visão geral' }] },
+    { path: '/triagem', label: 'Triagem e ideias', icon: 'inbox', tabs: [{ path: '/triagem', label: 'Triagem' }, { path: '/ideias', label: 'Ideias' }] },
     { path: '/revisao', label: 'Revisão (entregas esperando o seu olhar)', icon: 'pr' },
-    { path: '/backlog', label: 'Backlog', icon: 'kanban' },
-    { path: '/quadros', label: 'Quadros (workflows com agentes)', icon: 'workflow' },
+    { path: '/backlog', label: 'Backlog e quadros', icon: 'kanban', tabs: [{ path: '/backlog', label: 'Backlog' }, { path: '/quadros', label: 'Quadros' }] },
+    { path: '/agentes', label: 'Agentes, execuções e rotinas', icon: 'agent', tabs: [{ path: '/agentes', label: 'Agentes' }, { path: '/execucoes', label: 'Execuções' }, { path: '/rotinas', label: 'Rotinas' }] },
     { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
-    { path: '/agentes', label: 'Agentes', icon: 'agent' },
-    { path: '/execucoes', label: 'Execuções', icon: 'activity' },
-    { path: '/rotinas', label: 'Rotinas', icon: 'routine' },
     { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
-    { path: '/extensoes', label: 'Extensões (WhatsApp e outras integrações)', icon: 'puzzle' },
   ];
+  private readonly under = (path: string, tab: string) => (tab === '/' ? path === '/' : path === tab || path.startsWith(tab + '/'));
+  /** ícone aceso: a tela atual é ele ou uma das abas dele */
+  protected isOn(n: NavItem): boolean { const p = this.scope.path(); return (n.tabs ?? [n]).some(t => this.under(p, t.path)); }
+  protected isHere(tab: string): boolean { return this.under(this.scope.path(), tab); }
+  /** abas da tela atual (só quando ela faz parte de um grupo) */
+  protected readonly tabs = computed(() => this.nav.find(n => n.tabs && this.isOn(n))?.tabs ?? null);
+  /** última aba aberta de cada grupo: o ícone volta para ela */
+  private readonly lastTab = new Map<string, string>();
+  private readonly rememberTab = effect(() => {
+    const p = this.scope.path();
+    for (const n of this.nav) { const t = n.tabs?.find(x => this.under(p, x.path)); if (t) this.lastTab.set(n.path, t.path); }
+  });
+  protected target(n: NavItem): string { return this.isOn(n) ? n.path : this.lastTab.get(n.path) ?? n.path; }
 
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {

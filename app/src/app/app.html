@@ -26,24 +26,29 @@
       </button>
 
       @for (n of nav; track n.path) {
-        <a [routerLink]="n.path" [queryParams]="scope.queryFor(n.path)" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ paths: n.exact ? 'exact' : 'subset', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
-           class="nav-item group" [class.nav-active]="rla.isActive" [attr.aria-label]="n.label">
+        @let on = isOn(n);
+        <a [routerLink]="target(n)" [queryParams]="scope.queryFor(target(n))" class="nav-item group" [class.nav-active]="on" [attr.aria-label]="n.label" [attr.aria-current]="on ? 'page' : null">
           <span class="nav-bar" aria-hidden="true"></span>
-          <app-icon [name]="n.icon" [size]="21" [fill]="rla.isActive" class="transition-transform duration-150 group-hover:scale-110" />
+          <app-icon [name]="n.icon" [size]="21" [fill]="on" class="transition-transform duration-150 group-hover:scale-110" />
           @if (badge(n.path); as b) {
             <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold ring-2 ring-night {{ b.tone }}">{{ b.n }}</span>
           }
           @if (n.path === '/escritorio' && working()) {
             <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-yes px-1 text-[10.5px] font-bold text-night ring-2 ring-night">{{ working() }}</span>
           }
-          @if (n.path === '/execucoes' && runs.active().length) {
+          @if (n.path === '/agentes' && runs.active().length) {
             <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-yes ring-2 ring-night"></span>
           }
           <span class="nav-tip">{{ n.label }}</span>
         </a>
       }
 
-      <button type="button" (click)="dialogs.settings.set(true)" class="nav-item group mt-auto" aria-label="Preferências">
+      <a routerLink="/extensoes" routerLinkActive #rx="routerLinkActive" class="nav-item group mt-auto" [class.nav-active]="rx.isActive" aria-label="Extensões">
+        <span class="nav-bar" aria-hidden="true"></span>
+        <app-icon name="puzzle" [size]="19" [fill]="rx.isActive" />
+        <span class="nav-tip">Extensões (WhatsApp e outras integrações)</span>
+      </a>
+      <button type="button" (click)="dialogs.settings.set(true)" class="nav-item group" aria-label="Preferências">
         <app-icon name="settings" [size]="19" />
         <span class="nav-tip">Preferências</span>
       </button>
@@ -64,6 +69,15 @@
       </div>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <!-- nas telas com escopo: "Todos" tira o filtro de projeto -->
+        @if (scope.scopable()) {
+          <button type="button" (click)="scope.set(null)" [attr.aria-pressed]="!scope.slug()"
+                  class="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] text-left transition-colors hover:bg-raise/60 hover:text-text"
+                  [class]="!scope.slug() ? 'bg-frost/15 text-text' : 'text-mute'">
+            <span class="grid size-5 place-items-center rounded-md bg-edge text-faint"><app-icon name="overview" [size]="13" /></span>
+            <span class="flex-1">Todos os projetos</span>
+          </button>
+        }
         @for (g of groups(); track g.status) {
           <h3 class="px-2 pt-4 pb-1 text-[12px] font-semibold text-faint">{{ g.label }}</h3>
           <!-- arraste para reordenar; subprojetos ficam dentro do grupo e reordenam entre si -->
@@ -104,18 +118,20 @@
     </aside>
 
     <main class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-night">
-      <!-- escopo: o projeto escolhido na barra lateral filtra esta tela -->
-      @if (scope.project(); as sp) {
-        <div class="flex shrink-0 items-center gap-2 border-b border-frost/25 bg-frost/8 px-5 py-1.5 text-[13px]" role="status">
-          <app-icon name="flag" [size]="14" class="text-frost" />
-          <span class="text-mute">Só</span>
-          <app-project-avatar [project]="sp" [size]="18" />
-          <b class="font-semibold">{{ sp.name }}</b>
-          @if (projects.children(sp.slug).length) { <span class="text-faint">e frentes</span> }
-          <span class="flex-1"></span>
-          <a [routerLink]="['/projetos', sp.slug]" class="btn btn-sm btn-ghost"><app-icon name="folder" [size]="13" />Página do projeto</a>
-          <button type="button" class="btn btn-sm btn-ghost" (click)="scope.set(null)"><app-icon name="close" [size]="13" />Ver todos</button>
-        </div>
+      <!-- telas irmãs (mesmo ícone): abas -->
+      @if (tabs(); as ts) {
+        <nav class="flex shrink-0 gap-1 border-b border-edge bg-panel px-4 pt-2" aria-label="Telas desta seção">
+          @for (t of ts; track t.path) {
+            @let here = isHere(t.path);
+            <a [routerLink]="t.path" [queryParams]="scope.queryFor(t.path)" [attr.aria-current]="here ? 'page' : null"
+               class="-mb-px flex items-center gap-1.5 border-b-2 px-3 pb-2 pt-1 text-[13.5px] font-semibold transition-colors"
+               [class]="here ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+              {{ t.label }}
+              @if (badge(t.path); as b) { <span class="rounded-full px-1.5 text-[11px] font-bold {{ b.tone }}">{{ b.n }}</span> }
+              @if (t.path === '/execucoes' && runs.active().length) { <span class="pulse size-1.5 rounded-full bg-yes"></span> }
+            </a>
+          }
+        </nav>
       }
       <div class="min-h-0 flex-1 overflow-hidden"><router-outlet /></div>
     </main>
