@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, map } from 'rxjs';
@@ -30,6 +30,9 @@ export class ScopeService {
     effect(() => { if (this.scopable()) this.sticky.set(this.slug()); });
   }
 
+  /** marca da tela aberta em cada projeto da barra lateral (ex.: na Revisão, quantos itens esperam em cada um) */
+  readonly marks = signal<ProjectMarks | null>(null);
+
   /** a coisa (de um projeto ou frente) entra no escopo? sem escopo, tudo entra */
   matches(slug: string | null | undefined): boolean {
     const s = this.slug();
@@ -46,4 +49,28 @@ export class ScopeService {
     const s = this.sticky();
     return s && SCOPED.has(path) ? { projeto: s } : null;
   }
+}
+
+export interface ProjectMarks {
+  counts: ReadonlyMap<string, number>;
+  /** classes do selo (cor) */
+  tone: string;
+  /** o que o número quer dizer ("para revisar") */
+  label: string;
+}
+
+/**
+ * Marca os projetos da barra lateral enquanto a tela está aberta. Chame no construtor (ou num campo) da tela:
+ * `markProjects(() => itens.map(i => i.projectSlug), 'bg-frost text-night', 'para revisar')`. Some sozinha ao sair.
+ */
+export function markProjects(slugs: () => (string | null | undefined)[], tone: string, label: string): void {
+  const scope = inject(ScopeService);
+  const mine = { current: null as ProjectMarks | null };
+  effect(() => {
+    const counts = new Map<string, number>();
+    for (const s of slugs()) if (s) counts.set(s, (counts.get(s) ?? 0) + 1);
+    mine.current = { counts, tone, label };
+    scope.marks.set(mine.current);
+  });
+  inject(DestroyRef).onDestroy(() => { if (scope.marks() === mine.current) scope.marks.set(null); });
 }

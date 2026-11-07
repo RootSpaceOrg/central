@@ -5,7 +5,7 @@ import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { Delivery, DeliveriesService } from '../../../../shared/services/deliveries/deliveries.service';
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
-import { ScopeService } from '../../../../shared/services/scope/scope.service';
+import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
@@ -158,6 +158,7 @@ export class ReviewPage {
   private readonly router = inject(Router);
 
   private readonly scope = inject(ScopeService);
+  private readonly marks = markProjects(() => this.items().map(it => this.slugOf(it)), 'bg-frost text-night', 'para revisar');
   private readonly selected = signal<string | null>(null);
   protected readonly adjusting = signal(false);
   protected readonly note = signal('');

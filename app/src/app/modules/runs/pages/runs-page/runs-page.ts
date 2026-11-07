@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { DialogsService } from '../../../../shared/services/dialogs/dialogs.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
+import { markProjects } from '../../../../shared/services/scope/scope.service';
 import { RUN_STATUS_LABEL, Run, RunStatus, isActive } from '../../../../shared/services/runs/runs.model';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -47,6 +48,7 @@ export class RunsPage {
   /** projeto-pai da execução ('-' = sem projeto): as frentes contam como o projeto */
   private groupOf(r: Run): string { return r.projectSlug ? this.projects.bySlug().get(r.projectSlug)?.parentSlug ?? r.projectSlug : '-'; }
   /** precisa de você: esperando (login, acesso), pausada, ou falhou/foi interrompida e ninguém assumiu */
+  private readonly marks = markProjects(() => this.runs.runs().filter(r => this.attention(r)).map(r => r.projectSlug), 'bg-later text-night', 'precisam de você');
   protected attention(r: Run): boolean { return !!r.waiting || !!r.paused || ((r.status === 'failed' || r.status === 'killed') && !this.handedOff(r)); }
 
   private readonly byProject = computed(() => {

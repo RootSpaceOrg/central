@@ -11,7 +11,7 @@ import { LiveService } from '../../../../shared/services/live/live.service';
 import { IDEA_SOURCE_LABEL, Idea, IdeasService } from '../../../../shared/services/ideas/ideas.service';
 import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
-import { ScopeService } from '../../../../shared/services/scope/scope.service';
+import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
@@ -95,6 +95,9 @@ export class InboxPage {
 
   // ---------- abas, filtros e grade ----------
   protected readonly scope = inject(ScopeService);
+  private readonly marks = markProjects(() => this.focus.tab() === 'decision'
+    ? this.proposals.inbox().filter(p => this.focus.decision(p)).map(p => p.projectSlug)
+    : this.ideas.fresh().filter(i => this.focus.idea(i)).map(i => i.projectSlug), 'bg-later text-night', 'para triar');
   protected readonly decisionCount = computed(() => this.proposals.inbox().filter(p => this.focus.decision(p) && this.scope.matches(p.projectSlug)).length);
   protected readonly ideaCount = computed(() => this.ideas.fresh().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).length);
   protected readonly stuckCount = computed(() => this.proposals.inbox().filter(p => blocking(p) && this.focus.decision(p, { ...this.focus.focus(), blocking: false })).length);

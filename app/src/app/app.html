@@ -187,7 +187,9 @@
         <app-icon name="chevron" [size]="12" class="transition-transform" [class.rotate-90]="!collapsed().has(p.slug)" /></button>
     }
     @if (runningIn(p)) { <span class="pulse size-1.5 rounded-full bg-yes" title="Agente trabalhando"></span> }
-    @if (p.openProposals) {
+    @if (scope.marks(); as m) {
+      @if (markOf(p); as n) { <span class="rounded-full px-1.5 text-[11px] font-bold tabular-nums {{ m.tone }}" [title]="n + ' ' + m.label">{{ n }}</span> }
+    } @else if (p.openProposals) {
       <span class="rounded-full bg-later/15 px-1.5 text-[11px] font-semibold text-later" title="Decisões esperando">{{ p.openProposals }}</span>
     }
   </a>

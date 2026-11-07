@@ -212,6 +212,14 @@ export class App {
     this.router.navigate(['/projetos', slug]);
   }
 
+  /** número da marca da tela aberta neste projeto (grupo fechado soma as frentes) */
+  protected markOf(p: Project): number {
+    const m = this.scope.marks();
+    if (!m) return 0;
+    const own = m.counts.get(p.slug) ?? 0;
+    return this.collapsed().has(p.slug) ? own + this.projects.children(p.slug).reduce((n, c) => n + (m.counts.get(c.slug) ?? 0), 0) : own;
+  }
+
   protected projectMenu(e: MouseEvent, p: Project): void {
     const go = (aba?: string) => this.router.navigate(['/projetos', p.slug], { queryParams: aba ? { aba } : {} });
     const agent = this.agents.agents().find(a => a.projectSlug === p.slug);
