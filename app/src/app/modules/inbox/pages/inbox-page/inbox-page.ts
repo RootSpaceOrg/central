@@ -14,6 +14,7 @@ import { ProjectsService } from '../../../../shared/services/projects/projects.s
 import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
+import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { SettingsApiService } from '../../../../shared/services/settings/settings-api.service';
 import { TriageFocusService, TriageTab, blocking } from '../../../../shared/services/triage-focus/triage-focus.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
@@ -302,7 +303,24 @@ export class InboxPage {
       .map(c => ({ id: c.id, title: c.title.slice(PREFIX.length), at: c.updatedAt, live: this.live.chat(c.id) }));
   });
 
+  /** quem recebe o direcionamento ('' = a Central): o agente que pediu a decisão (ou o último que trabalhou na tarefa dela) */
+  protected readonly steerTo = signal('');
+  private readonly runsService = inject(RunsService);
+  private askedBy(p: Proposal): number | null {
+    if (p.agentId && this.agents.byId().has(p.agentId)) return p.agentId;
+    if (!p.taskId) return null;
+    const r = this.runsService.runs().filter(x => x.taskId === p.taskId && x.agentId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    return r?.agentId ?? null;
+  }
+  protected steerName(): string {
+    const a = this.steerTo() ? this.agents.byId().get(Number(this.steerTo())) : null;
+    return a && !a.builtin ? a.name : 'a Central';
+  }
+
   protected openSteer(): void {
+    const item = this.current();
+    const by = item?.kind === 'decision' ? this.askedBy(item.p) : null;
+    this.steerTo.set(by && by !== this.agents.central()?.id ? String(by) : '');
     this.steering.set(true);
     queueMicrotask(() => document.querySelector<HTMLTextAreaElement>('#tri-guidance')?.focus());
   }
@@ -315,12 +333,13 @@ export class InboxPage {
     const item = this.current();
     const text = this.guidance().trim();
     const central = this.agents.central();
-    if (!item || !text || !central) return;
+    const target = this.steerTo() ? this.agents.byId().get(Number(this.steerTo())) ?? central : central;
+    if (!item || !text || !target) return;
     const l = this.flat(), next = l[this.position() + 1] ?? l[this.position() - 1];
     this.sending.set(true);
     this.error.set(null);
     try {
-      await this.chat.startBackground(central.id, item.kind === 'idea' ? ideaPrompt(item.i, this.project(item.i.projectSlug)?.name ?? null, text)
+      await this.chat.startBackground(target.id, item.kind === 'idea' ? ideaPrompt(item.i, this.project(item.i.projectSlug)?.name ?? null, text)
         : decisionPrompt(item.p, this.project(item.p.projectSlug)?.name ?? null, text));
       // sai da fila desta visita; volta com o que a Central mudar (ou some, se ela aprovou/descartou)
       if (item.kind === 'idea') this.skipped.update(s => new Set([...s, item.i.id]));

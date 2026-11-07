@@ -279,7 +279,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('create_decision', 'Cria uma decisão para o Gustavo aprovar ou recusar. summary: uma linha com o que você pede (ele lê isso primeiro). options: quando houver caminhos, 2 a 4 respostas curtas e completas (ex.: "Usar Stripe", "Usar Pagar.me"); escolher uma aprova com ela; o que você faz em cada uma vai no body. next_action: o que acontece se ele aprovar. tier: 0 risco baixo, 1 médio, 2 alto. task_id: quando a escolha é sobre uma tarefa que já existe (a decisão volta para ela, sem criar outra tarefa).', {
     title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), next_action: z.string().optional(), tier: z.number().int().min(0).max(2).optional(),
     task_id: z.number().int().optional(), summary: z.string().optional(), options: z.array(z.string()).max(4).optional(),
-  }, a => createProposal({ summary: a.summary ?? null, options: a.options ?? null, title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, next_action: a.next_action ?? null, tier: a.tier ?? null, source: 'central', task_id: a.task_id ?? null }), () => { h.backlog(); h.projects(); });
+  }, a => createProposal({ summary: a.summary ?? null, options: a.options ?? null, title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, next_action: a.next_action ?? null, tier: a.tier ?? null, source: 'central', task_id: a.task_id ?? null, agent_id: who }), () => { h.backlog(); h.projects(); });
   tool('delete_decision', 'Apaga uma decisão de vez (some da Triagem e do histórico). Só quando o Gustavo pedir para apagar/excluir; para dizer não, use decide com reject.', {
     id: z.number().int(),
   }, a => { deleteProposal(a.id); return `Decisão #${a.id} apagada.`; }, () => { h.backlog(); h.projects(); });
@@ -357,7 +357,7 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
     const chat = caller?.kind === 'chat' ? get<{ title: string; contact: string | null }>('select title, contact from chats where id = ?', caller.id) : null;
     const me = who ? listAgents().find(x => x.id === who)?.name ?? 'Um agente' : 'Um agente';
     const p = createProposal({ project_slug: restricted?.project_slug ?? null, title: `${me} precisa de você${chat?.contact ? ` (+${chat.contact})` : ''}`,
-      body: `${a.resumo}${chat ? `\n\nConversa: ${chat.title}` : ''}`, next_action: a.sugestao ?? null, tier: 1, source: 'atendimento' });
+      body: `${a.resumo}${chat ? `\n\nConversa: ${chat.title}` : ''}`, next_action: a.sugestao ?? null, tier: 1, source: 'atendimento', agent_id: who });
     notifyOwners(`🙋 ${me} precisa de você${chat?.contact ? ` (cliente +${chat.contact})` : ''}:\n${a.resumo}`);
     return `Pronto: o Gustavo foi avisado (decisão #${p.id}). Diga à pessoa que alguém da equipe vai responder.`;
   }, h.backlog);

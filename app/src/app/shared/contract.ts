@@ -121,6 +121,8 @@ export interface ProposalDto {
   summary?: string | null;
   /** JSON: respostas prontas que o agente sugeriu (escolher uma = aprovar com ela) */
   options?: string | null;
+  /** agente que criou a decisão */
+  agent_id?: number | null;
 }
 
 export interface NewProposalInput {

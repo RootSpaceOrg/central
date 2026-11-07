@@ -17,6 +17,7 @@ const toModel = (d: ProposalDto): Proposal => ({
   source: d.source,
   createdAt: new Date(d.created_at),
   taskId: d.task_id ?? null,
+  agentId: d.agent_id ?? null,
   summary: d.summary ?? null,
   options: d.options ? JSON.parse(d.options) : [],
 });

@@ -239,11 +239,13 @@
             <textarea id="tri-guidance" class="mt-1.5 min-h-24 w-full resize-y bg-transparent px-1 leading-relaxed outline-none placeholder:text-faint"
                       placeholder="Ex.: divide em duas · aprova só para o KultivAi · junta com a ideia de onboarding · pesquisa antes e me traz 2 opções"
                       [value]="guidance()" (input)="guidance.set($any($event.target).value)" (keydown.control.enter)="steer()"></textarea>
-            <div class="mt-2 flex items-center gap-2">
-              <span class="flex-1 px-1 text-[12px] text-faint">A Central recebe o item inteiro e o seu texto, e age pelas ferramentas dela. Ctrl+Enter envia.</span>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <span class="px-1 text-[12px] text-faint">Para</span>
+              <app-agent-select class="w-56" [compact]="true" [value]="steerTo()" (valueChange)="steerTo.set($event)" noneLabel="A Central" [hideCentral]="true" />
+              <span class="min-w-40 flex-1 px-1 text-[12px] text-faint">Recebe o item inteiro e o seu texto. Ctrl+Enter envia.</span>
               <button type="button" class="btn btn-sm btn-ghost" (click)="steering.set(false)">Cancelar</button>
               <button type="button" class="btn btn-sm btn-primary" (click)="steer()" [disabled]="!guidance().trim() || sending()">
-                <app-icon name="send" [size]="14" />{{ sending() ? 'Enviando…' : 'Mandar para a Central' }}</button>
+                <app-icon name="send" [size]="14" />{{ sending() ? 'Enviando…' : 'Mandar para ' + steerName() }}</button>
             </div>
           </div>
         }
