@@ -38,6 +38,12 @@
         <h2 class="mt-3 font-display text-2xl font-bold">Para onde vamos agora?</h2>
         <p class="mx-auto mt-2 max-w-lg text-mute">O estrategista lê o projeto inteiro (rumo, roadmap, backlog, ideias, decisões, o que andou e o que espera
           produção) e abre o debate. A Central responde e monta as decisões para você. Usa Opus nos dois.</p>
+        <label class="mx-auto mt-5 block max-w-lg text-left">
+          <span class="text-[13px] font-semibold">Tem algo em mente? <span class="font-normal text-faint">(opcional)</span></span>
+          <textarea class="field mt-1 min-h-20 w-full resize-y text-[13.5px]" placeholder="ex.: acho que precisamos focar em x, y e z" aria-label="Foco da sessão"
+                    [value]="focusText()" (input)="focusText.set($any($event.target).value)"></textarea>
+          <span class="text-[12px] text-faint">O estrategista e a Central levam isso em conta (e dizem se os números apontarem outra coisa).</span>
+        </label>
         <button type="button" class="btn btn-primary mt-5" (click)="start()" [disabled]="starting()">
           <app-icon name="compass" [size]="18" />{{ starting() ? 'Montando o retrato…' : 'Guiar este projeto' }}</button>
       </div>
@@ -115,6 +121,19 @@
                   </div>
                 }
               </div>
+
+              <!-- direcionar antes de decidir -->
+              <div class="mt-4 rounded-2xl border border-edge bg-panel px-4 py-3">
+                <p class="text-[13px] font-semibold">Direcionar antes de decidir</p>
+                @if (g.focus) { <p class="mt-1 whitespace-pre-line text-[13px] text-mute"><span class="text-faint">Seu foco:</span> {{ g.focus }}</p> }
+                <div class="mt-2 flex flex-wrap items-end gap-2">
+                  <textarea class="field min-h-16 min-w-0 flex-1 basis-72 resize-y text-[13.5px]" placeholder="ex.: acho que precisamos focar em x, y e z" aria-label="Direcionamento"
+                            [value]="focusText()" (input)="focusText.set($any($event.target).value)" (keydown.control.enter)="sendFocus(g)"></textarea>
+                  <button type="button" class="btn btn-sm" (click)="sendFocus(g)" [disabled]="!focusText().trim() || sendingFocus() || !g.centralChat || working()"
+                          [title]="g.centralChat ? 'A Central refaz os cards em torno disso (Ctrl+Enter)' : 'Espere o estrategista abrir o debate'">
+                    <app-icon name="send" [size]="13" />{{ g.cards.length ? 'Refazer os cards' : 'Mandar' }}</button>
+                </div>
+              </div>
               @if (g.cards.length) {
                 <button type="button" class="btn btn-primary mt-5" (click)="go(g, 2)">Ir para as decisões <app-icon name="chevron" [size]="14" /></button>
               }
@@ -122,6 +141,19 @@
 
             <!-- 2. decisões -->
             @case (2) {
+
+              <!-- direcionar antes de decidir -->
+              <div class="mb-4 rounded-2xl border border-edge bg-panel px-4 py-3">
+                <p class="text-[13px] font-semibold">Direcionar antes de decidir</p>
+                @if (g.focus) { <p class="mt-1 whitespace-pre-line text-[13px] text-mute"><span class="text-faint">Seu foco:</span> {{ g.focus }}</p> }
+                <div class="mt-2 flex flex-wrap items-end gap-2">
+                  <textarea class="field min-h-16 min-w-0 flex-1 basis-72 resize-y text-[13.5px]" placeholder="ex.: acho que precisamos focar em x, y e z" aria-label="Direcionamento"
+                            [value]="focusText()" (input)="focusText.set($any($event.target).value)" (keydown.control.enter)="sendFocus(g)"></textarea>
+                  <button type="button" class="btn btn-sm" (click)="sendFocus(g)" [disabled]="!focusText().trim() || sendingFocus() || !g.centralChat || working()"
+                          [title]="g.centralChat ? 'A Central refaz os cards em torno disso (Ctrl+Enter)' : 'Espere o estrategista abrir o debate'">
+                    <app-icon name="send" [size]="13" />{{ g.cards.length ? 'Refazer os cards' : 'Mandar' }}</button>
+                </div>
+              </div>
               <p class="text-[13px] text-mute">{{ answered(g) }} de {{ g.cards.length }} respondidas. Escolha uma opção ou escreva a sua; o que ficar sem resposta não entra no plano.</p>
               <div class="mt-3 space-y-3">
                 @for (c of g.cards; track c.id) {
@@ -202,18 +234,63 @@
                 @if (working()) { <span class="pulse size-2 rounded-full bg-yes"></span> A Central está executando o plano (acompanhe na conversa). }
                 @else { <app-icon name="check" [size]="16" class="text-yes" /> A Central terminou a parte dela. A sessão fecha quando ela escrever a ata. }
               </div>
-              <h3 class="mt-5 font-semibold">Plano aprovado</h3>
-              <ul class="mt-2 space-y-1 text-[13.5px]">
-                @for (i of g.plan; track i.id) {
-                  @if (i.include) { <li><span class="rounded bg-raise px-1.5 text-[11px] font-semibold text-frost">{{ i.when }}</span> {{ i.title }}</li> }
+              <h3 class="mt-6 font-display text-lg font-semibold">Plano aprovado</h3>
+              @if (g.focus) { <p class="mt-1 text-[13px] text-mute"><span class="text-faint">Foco:</span> {{ g.focus }}</p> }
+              <div class="mt-3 grid gap-3 @4xl:grid-cols-3">
+                @for (col of columns(g); track col.id) {
+                  <section class="rounded-2xl border border-edge bg-panel/60 p-3" [attr.aria-label]="col.label">
+                    <header class="mb-2 flex items-baseline gap-2 px-1">
+                      <h4 class="font-semibold" [class]="col.tone">{{ col.label }}</h4>
+                      <span class="text-[12px] tabular-nums text-faint">{{ col.items.length }}</span>
+                      <span class="ml-auto text-[11.5px] text-faint">{{ col.hint }}</span>
+                    </header>
+                    <ul class="space-y-2">
+                      @for (i of col.items; track i.id) {
+                        <li class="rounded-xl border border-edge bg-night px-3 py-2.5">
+                          <p class="flex items-start gap-2">
+                            <span class="mt-0.5 shrink-0 rounded px-1.5 text-[10.5px] font-bold uppercase tracking-wide {{ kindTone[i.kind] ?? 'bg-raise text-mute' }}">{{ itemKind[i.kind] ?? i.kind }}</span>
+                            <span class="min-w-0 text-[13.5px] font-semibold leading-snug" [innerHTML]="i.title | refs"></span>
+                          </p>
+                          @if (i.agent) { <p class="mt-1 flex items-center gap-1 text-[12px] text-mute"><app-icon name="agent" [size]="12" />{{ i.agent }}</p> }
+                          @if (i.detail) {
+                            <details class="mt-1 text-[12.5px] text-mute">
+                              <summary class="cursor-pointer text-faint hover:text-mute">detalhes</summary>
+                              <p class="mt-1 whitespace-pre-line" [innerHTML]="i.detail | refs"></p>
+                            </details>
+                          }
+                        </li>
+                      } @empty { <li class="px-1 text-[12.5px] text-faint">nada aqui</li> }
+                    </ul>
+                  </section>
                 }
-              </ul>
-              <h3 class="mt-5 font-semibold">Execuções desde a aprovação</h3>
-              <ul class="mt-2 space-y-1 text-[13.5px]">
-                @for (r of since(); track r.id) {
-                  <li><a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="hover:underline">#{{ r.id }} {{ r.prompt.split('\n')[0] }}</a> <span class="text-faint">· {{ r.status }}</span></li>
-                } @empty { <li class="text-faint">Nenhuma ainda.</li> }
-              </ul>
+              </div>
+
+              <h3 class="mt-6 font-display text-lg font-semibold">Desde a aprovação</h3>
+              <div class="mt-2 grid gap-3 @3xl:grid-cols-2">
+                <section class="rounded-2xl border border-edge bg-panel/60 p-3" aria-label="Execuções">
+                  <h4 class="mb-2 px-1 text-[13px] font-semibold">Execuções <span class="font-normal text-faint">{{ since().length }}</span></h4>
+                  <ul class="space-y-1 text-[13px]">
+                    @for (r of since(); track r.id) {
+                      <li class="flex items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-raise/50">
+                        <span class="size-1.5 shrink-0 rounded-full" [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' || r.status === 'killed' ? 'bg-no' : 'pulse bg-frost'"></span>
+                        <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="min-w-0 flex-1 truncate hover:underline">#{{ r.id }} {{ r.prompt.split('\n')[0] }}</a>
+                      </li>
+                    } @empty { <li class="px-1 text-faint">Nenhuma ainda. Os itens de Agora aparecem aqui quando um agente começa.</li> }
+                  </ul>
+                </section>
+                <section class="rounded-2xl border border-edge bg-panel/60 p-3" aria-label="Tarefas">
+                  <h4 class="mb-2 px-1 text-[13px] font-semibold">Tarefas criadas ou mexidas <span class="font-normal text-faint">{{ movedTasks().length }}</span></h4>
+                  <ul class="space-y-1 text-[13px]">
+                    @for (t of movedTasks(); track t.id) {
+                      <li class="flex items-center gap-2 rounded-lg px-1 py-0.5 hover:bg-raise/50">
+                        <a [href]="'#tarefa-' + t.id" class="ref-link shrink-0">#{{ t.id }}</a>
+                        <span class="min-w-0 flex-1 truncate">{{ t.title }}</span>
+                        <span class="shrink-0 text-[11.5px] text-faint">{{ colLabel[t.column] ?? t.column }}</span>
+                      </li>
+                    } @empty { <li class="px-1 text-faint">Nenhuma ainda.</li> }
+                  </ul>
+                </section>
+              </div>
             }
           }
         </div>

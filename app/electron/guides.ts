@@ -90,7 +90,7 @@ O Gustavo quer decidir "para onde vamos agora". Você é o estrategista: abra o 
 
 Retrato em números (montado agora):
 ${g.snapshot}
-
+${g.focus ? `\nO Gustavo já adiantou o que tem em mente (leve a sério, mas questione se os números disserem outra coisa):\n"${g.focus}"\n` : ''}
 Aprofunde com as ferramentas da Central (get_direction, list_milestones, list_tasks, list_ideas, list_decisions,
 list_deliveries, what_happened, production_status, memory_recall; o código se precisar). Depois escreva, para o Gustavo e a
 Central, em até ~400 palavras:
@@ -107,7 +107,7 @@ ${said}
 
 Retrato em números:
 ${g.snapshot}
-
+${g.focus ? `\nO foco que o Gustavo deu: "${g.focus}". Os cards devem girar em torno disso (sem esconder o que for urgente fora dele).\n` : ''}
 Agora você:
 1. Responda ao estrategista em poucas linhas: onde concorda, onde discorda e por quê (é o debate que o Gustavo acompanha).
 2. Chame guide_update(guide_id ${g.id}) com:
@@ -171,11 +171,11 @@ function toCentral(g: GuideDto, text: string, d: GuideDeps): void {
   sendChat(g.central_chat, central, text, d.notify, d.changed, null, null, true);
 }
 
-export async function startGuide(slug: string, direct: boolean, d: GuideDeps): Promise<GuideDto> {
+export async function startGuide(slug: string, direct: boolean, focus: string | null, d: GuideDeps): Promise<GuideDto> {
   const open = get<GuideDto>(`select * from guides where project_slug = ? and direct = ? and status = 'open'`, slug, direct ? 1 : 0);
   if (open) return open;
   const snap = await snapshot(slug, direct);
-  const id = Number(run(`insert into guides (project_slug, direct, snapshot, phase) values (?,?,?, 'analysis')`, slug, direct ? 1 : 0, JSON.stringify(snap, null, 1)).lastInsertRowid);
+  const id = Number(run(`insert into guides (project_slug, direct, snapshot, phase, focus) values (?,?,?, 'analysis', ?)`, slug, direct ? 1 : 0, JSON.stringify(snap, null, 1), focus?.trim() || null).lastInsertRowid);
   const g = getGuide(id)!;
   const sid = sendChat(null, strategist(), analysisPrompt(g), d.notify, d.changed, null, MODEL);
   run('update guides set strategist_chat = ? where id = ?', sid, id);
@@ -253,6 +253,21 @@ export function updateGuide(id: number, patch: { reading?: string; cards?: Guide
   run('update guides set updated_at = ? where id = ?', now(), id);
   guidesChanged();
   return 'Pronto: o Gustavo já vê isso na tela.';
+}
+
+/** Direcionar com a sessão aberta ("precisamos focar em x, y e z"): a Central refaz os cards em torno disso */
+export function setFocus(id: number, text: string, d: GuideDeps): void {
+  const g = getGuide(id);
+  const t = text.trim();
+  if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
+  if (!t) throw new Error('Escreva o direcionamento.');
+  if (!g.central_chat) throw new Error('Espere o estrategista abrir o debate (o direcionamento vai para a Central).');
+  run(`update guides set focus = ?, phase = 'reply' where id = ?`, g.focus ? `${g.focus}\n${t}` : t, id);
+  saveMessage(g.central_chat, 'user', `🧭 Direcionamento: ${t}`, d.notify);
+  toCentral(g, `[Guia #${id}] O Gustavo deu um direcionamento antes de decidir: "${t}".
+Refaça os cards com guide_update em torno disso (pode manter, mudar ou trocar cards; os que continuarem iguais mantêm o mesmo id).
+Se o foco dele deixar de fora algo urgente, diga. Responda aqui em 2 a 3 linhas o que mudou.`, d);
+  d.changed();
 }
 
 export function answerCard(id: number, cardId: string, answer: GuideCard['answer']): void {

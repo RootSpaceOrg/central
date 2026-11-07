@@ -1,6 +1,6 @@
 {
   "name": "central",
-  "version": "0.60.2",
+  "version": "0.60.3",
   "scripts": {
     "ng": "ng",
     "start": "npm run icons && npm run build:main && ng build && electron .",

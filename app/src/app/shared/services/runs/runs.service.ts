@@ -5,6 +5,9 @@ import { errorMessage } from '../ipc/ipc.service';
 import { RunsApiService } from './runs-api.service';
 import { NewRun, Run, RunEvent, isActive } from './runs.model';
 
+/** título da execução: a primeira linha inteira (a lista corta em 2 linhas); só textos enormes param numa palavra, com … */
+const firstLine = (p: string) => { const l = p.split('\n')[0].trim(); return l.length <= 400 ? l : `${l.slice(0, 400).replace(/\s+\S*$/, '')}…`; };
+
 const toRun = (d: RunDto): Run => ({
   id: d.id,
   projectSlug: d.project_slug,
@@ -21,7 +24,7 @@ const toRun = (d: RunDto): Run => ({
   branch: d.branch,
   baseBranch: d.base_branch,
   prompt: d.prompt,
-  title: d.prompt.split('\n')[0].slice(0, 140),
+  title: firstLine(d.prompt),
   status: d.status,
   permission: d.permission,
   budgetUsd: d.budget_usd,

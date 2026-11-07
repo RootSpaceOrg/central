@@ -290,6 +290,8 @@ export interface GuideDto {
   central_chat: number | null;
   strategist_chat: number | null;
   minutes: string | null;
+  /** o que o Gustavo disse que quer focar (antes das decisões) */
+  focus: string | null;
   created_at: string;
   approved_at: string | null;
   finished_at: string | null;
@@ -1112,7 +1114,8 @@ export interface Api {
   'ideas:update': (id: number, patch: IdeaPatch) => void;
   'direction:get': (projectSlug: string) => DirectionDto | null;
   'guides:list': () => GuideDto[];
-  'guides:start': (projectSlug: string, direct: boolean) => GuideDto;
+  'guides:start': (projectSlug: string, direct: boolean, focus: string | null) => GuideDto;
+  'guides:focus': (id: number, text: string) => void;
   'guides:step': (id: number, step: number) => void;
   'guides:answer': (id: number, cardId: string, answer: GuideCard['answer']) => void;
   'guides:plan': (id: number) => void;

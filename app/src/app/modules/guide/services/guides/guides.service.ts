@@ -35,6 +35,7 @@ export interface Guide {
   centralChat: number | null;
   strategistChat: number | null;
   minutes: string | null;
+  focus: string | null;
   createdAt: Date;
   approvedAt: Date | null;
   finishedAt: Date | null;
@@ -44,7 +45,7 @@ const json = <T>(v: string | null, d: T): T => { try { return v ? JSON.parse(v) 
 const toGuide = (d: GuideDto): Guide => ({
   id: d.id, projectSlug: d.project_slug, direct: !!d.direct, status: d.status, step: d.step, phase: d.phase,
   snapshot: json(d.snapshot, {} as GuideSnapshot), reading: d.reading, cards: json(d.cards, []), plan: json(d.plan, []),
-  centralChat: d.central_chat, strategistChat: d.strategist_chat, minutes: d.minutes, createdAt: new Date(d.created_at),
+  centralChat: d.central_chat, strategistChat: d.strategist_chat, minutes: d.minutes, focus: d.focus ?? null, createdAt: new Date(d.created_at),
   approvedAt: d.approved_at ? new Date(d.approved_at) : null, finishedAt: d.finished_at ? new Date(d.finished_at) : null,
 });
 
@@ -71,7 +72,8 @@ export class GuidesService {
     try { const r = await p; this.load(); return r; } catch (e) { this.error.set(errorMessage(e)); return null; }
   }
 
-  start(slug: string, direct: boolean) { return this.act(this.ipc.invoke('guides:start', slug, direct)); }
+  start(slug: string, direct: boolean, focus: string | null) { return this.act(this.ipc.invoke('guides:start', slug, direct, focus)); }
+  focus(id: number, text: string) { return this.act(this.ipc.invoke('guides:focus', id, text)); }
   step(id: number, step: number) { this.guides.update(l => l.map(g => (g.id === id ? { ...g, step } : g))); return this.act(this.ipc.invoke('guides:step', id, step)); }
   answer(id: number, cardId: string, answer: GuideCard['answer']) {
     this.guides.update(l => l.map(g => (g.id === id ? { ...g, cards: g.cards.map(c => (c.id === cardId ? { ...c, answer } : c)) } : g)));

@@ -8,6 +8,7 @@ import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { ScopeService } from '../../../../shared/services/scope/scope.service';
+import { TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe, RefsPipe } from '../../../../shared/ui/markdown';
@@ -40,6 +41,7 @@ export class GuidePage {
   protected readonly projects = inject(ProjectsService);
   private readonly agents = inject(AgentsService);
   private readonly runs = inject(RunsService);
+  private readonly tasks = inject(TasksService);
   private readonly chat = inject(ChatService);
 
   protected readonly steps = STEPS;
@@ -48,6 +50,9 @@ export class GuidePage {
   protected readonly whens = WHEN;
   protected readonly starting = signal(false);
   protected readonly question = signal('');
+  /** "precisamos focar em x, y e z": antes de começar e com a sessão aberta */
+  protected readonly focusText = signal('');
+  protected readonly sendingFocus = signal(false);
   protected readonly asking = signal(false);
 
   /** o que está escolhido na barra lateral */
@@ -84,7 +89,8 @@ export class GuidePage {
     const s = this.slug();
     if (!s) return;
     this.starting.set(true);
-    await this.guides.start(s, this.scope.direct());
+    await this.guides.start(s, this.scope.direct(), this.focusText().trim() || null);
+    this.focusText.set('');
     this.starting.set(false);
   }
 
@@ -104,6 +110,37 @@ export class GuidePage {
     this.asking.set(false);
     this.question.set('');
   }
+
+  protected async sendFocus(g: Guide): Promise<void> {
+    const t = this.focusText().trim();
+    if (!t) return;
+    this.sendingFocus.set(true);
+    const ok = await this.guides.focus(g.id, t);
+    this.sendingFocus.set(false);
+    if (ok !== null) this.focusText.set('');
+  }
+
+  /** plano aprovado em três colunas (agora, backlog, depois) */
+  protected columns(g: Guide) {
+    const inc = g.plan.filter(p => p.include);
+    return [
+      { id: 'agora', label: 'Agora', hint: 'agente começa já', tone: 'text-yes', items: inc.filter(p => p.when === 'agora') },
+      { id: 'backlog', label: 'Backlog', hint: 'tarefa em A fazer', tone: 'text-frost', items: inc.filter(p => p.when === 'backlog') },
+      { id: 'depois', label: 'Depois', hint: 'marco ou ideia', tone: 'text-mute', items: inc.filter(p => p.when === 'depois') },
+    ];
+  }
+  /** tarefas do escopo que andaram desde a aprovação */
+  protected readonly movedTasks = computed(() => {
+    const g = this.guide();
+    if (!g?.approvedAt) return [];
+    const t = g.approvedAt.getTime();
+    return this.tasks.tasks().filter(x => this.scope.matches(x.projectSlug) && x.updatedAt.getTime() >= t).slice(0, 20);
+  });
+  protected readonly colLabel: Record<string, string> = { backlog: 'Backlog', todo: 'A fazer', doing: 'Fazendo', review: 'Revisão', dev: 'Em dev', done: 'Feito' };
+  protected readonly kindTone: Record<string, string> = {
+    rumo: 'bg-[#C8A2FF]/15 text-[#C8A2FF]', marco: 'bg-later/15 text-later', tarefa: 'bg-frost/15 text-frost',
+    ideia: 'bg-yes/15 text-yes', cortar: 'bg-no/15 text-no', agente: 'bg-frost/15 text-frost',
+  };
 
   protected abandon(g: Guide): void { if (confirm('Descartar esta sessão de guia? A conversa fica no histórico do agente.')) this.guides.abandon(g.id); }
 
