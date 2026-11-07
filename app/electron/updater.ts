@@ -82,7 +82,7 @@ export async function checkUpdate(force = false): Promise<UpdateInfoDto> {
 }
 
 /** Baixa (se vier do GitHub), roda o instalador em silêncio pedindo para reabrir, e fecha este app. */
-export async function installUpdate(): Promise<void> {
+export async function installUpdate(beforeInstall: () => void = () => {}): Promise<void> {
   const info = await checkUpdate(true);
   if (!info.latest) throw new Error('Nenhuma versão nova encontrada.');
   // Mac: baixa o .dmg da versão e abre (arrastar para Aplicativos, como todo app de Mac)
@@ -104,7 +104,10 @@ export async function installUpdate(): Promise<void> {
     installer = join(dir, `Central Setup ${info.latest}.exe`);
     if (!existsSync(installer)) throw new Error('O download não trouxe o instalador.');
   }
-  spawn(installer, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  // antes de o instalador fechar a Central: pausa as execuções (voltam na mesma sessão) e guarda as conversas para retomar
+  beforeInstall();
+  // --updated: o instalador mantém os atalhos (os ícones fixados na barra de tarefas e no Iniciar não somem)
+  spawn(installer, ['/S', '--updated', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   setTimeout(() => app.quit(), 300);
 }
 

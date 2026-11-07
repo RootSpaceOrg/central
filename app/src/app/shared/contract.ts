@@ -939,6 +939,9 @@ export interface UpdateInfoDto {
   github_error: string | null;
 }
 
+export type NotifLevel = 'all' | 'failed' | 'none';
+export type NotifSound = 'system' | 'none' | 'chime' | 'drop' | 'pop' | 'bell';
+export interface NotifPrefsDto { agents: NotifLevel; boards: NotifLevel; routines: NotifLevel; idle: boolean; waiting: boolean; ci: boolean; sound: NotifSound; quiet: string }
 export interface Prefs {
   /** fechar a janela esconde na bandeja (rotinas e agentes seguem rodando) */
   tray: boolean;
@@ -1104,6 +1107,10 @@ export interface Api {
   'mcp:list': (force: boolean) => { list: McpServerDto[]; checked_at: string | null };
   'mcp:add': (input: { name: string; type: 'http' | 'sse' | 'stdio'; target: string; env?: Record<string, string> }) => void;
   'mcp:remove': (name: string) => void;
+  /** notificações: o que avisa, som e não perturbe */
+  'notif:get': () => NotifPrefsDto;
+  'notif:set': (patch: Partial<NotifPrefsDto>) => NotifPrefsDto;
+  'notif:test': () => void;
   /** exportar todos os dados num arquivo (devolve o caminho; null = cancelou) */
   'data:export': () => string | null;
   /** escolher um arquivo exportado: devolve quantos projetos, tarefas… ele tem (null = cancelou) */
@@ -1155,6 +1162,8 @@ export interface Events {
   'gov:changed': null;
   /** extensão instalada, ligada ou com status novo (WhatsApp conectou, código de pareamento) */
   'ext:changed': null;
+  /** tocar o som de notificação escolhido (a tela toca) */
+  'notify:sound': string;
   'pty:data': { id: number; data: string };
   'pty:exit': { id: number; code: number };
   'run:event': RunEventDto;

@@ -7,6 +7,14 @@ import { join } from 'node:path';
 
 import type { Prefs } from '../src/app/shared/contract';
 import { getSetting, setSetting } from './backlog';
+import { NotifKind, NotifPrefs, parseNotif, shouldNotify } from './notif';
+
+export const getNotif = () => parseNotif(getSetting('pref:notif'));
+export function setNotif(patch: Partial<NotifPrefs>): NotifPrefs {
+  const n = { ...getNotif(), ...patch };
+  setSetting('pref:notif', JSON.stringify(n));
+  return n;
+}
 
 const ICON = join(__dirname, '..', 'build', 'icon.png');
 let tray: Tray | null = null;
@@ -73,9 +81,14 @@ export function keepAliveOnClose(win: BrowserWindow): void {
   });
 }
 
-export function notify(title: string, body: string, route: string | null, win: () => BrowserWindow | null, navigate: (route: string) => void): void {
+/** kind e ok decidem se avisa (Preferências → Notificações); o som próprio toca na tela, o do sistema vem com o aviso */
+export function notify(title: string, body: string, route: string | null, win: () => BrowserWindow | null, navigate: (route: string) => void,
+  kind: NotifKind = 'system', ok = true): void {
   if (!getPrefs().notify || !Notification.isSupported()) return;
-  const n = new Notification({ title, body: body.slice(0, 220), icon: nativeImage.createFromPath(ICON), silent: false });
+  const p = getNotif();
+  if (!shouldNotify(p, kind, ok, new Date())) return;
+  const n = new Notification({ title, body: body.slice(0, 220), icon: nativeImage.createFromPath(ICON), silent: p.sound !== 'system' });
   n.on('click', () => { show(win()); if (route) navigate(route); });
   n.show();
+  if (p.sound !== 'system' && p.sound !== 'none') win()?.webContents.send('notify:sound', p.sound);
 }

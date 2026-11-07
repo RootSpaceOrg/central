@@ -49,8 +49,26 @@ function save(chatId: number, role: ChatRole, text: string, notify: Notify): voi
 
 /** A Central vai fechar: encerra as conversas respondendo (senão o Claude seguiria sozinho, sem ninguém ouvindo). */
 export function stopAllChats(): void {
+  // conversas respondendo agora: ao abrir de novo, elas continuam (resumeInterruptedChats)
+  const busy = [...procs.keys()].filter(id => !get('select 1 from chats where id = ? and contact is not null', id));
+  if (busy.length) run(`insert into settings (key, value) values ('chats:interrupted', ?) on conflict (key) do update set value = excluded.value`, JSON.stringify(busy));
   for (const p of procs.values()) killTree(p.pid, true);
   procs.clear();
+}
+
+/** Ao abrir: as conversas que a Central interrompeu ao fechar (atualização, desligar) continuam de onde pararam. */
+export function resumeInterruptedChats(notify: Notify, onCentralChange: () => void): void {
+  const raw = get<{ value: string }>(`select value from settings where key = 'chats:interrupted'`)?.value;
+  run(`delete from settings where key = 'chats:interrupted'`);
+  let ids: number[] = [];
+  try { ids = raw ? JSON.parse(raw) : []; } catch { /* valor antigo */ }
+  for (const id of ids) {
+    const c = get<{ agent_id: number }>('select agent_id from chats where id = ?', id);
+    if (!c) continue;
+    try {
+      sendChat(id, c.agent_id, 'A Central fechou (atualização ou saída) no meio da sua resposta. Continue de onde parou; se você já tinha terminado, diga só isso em uma linha.', notify, onCentralChange);
+    } catch { /* conversa sem sessão: fica como estava */ }
+  }
 }
 
 export function stopChat(chatId: number): void {

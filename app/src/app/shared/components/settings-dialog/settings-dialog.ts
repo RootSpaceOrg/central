@@ -9,6 +9,7 @@ import { UpdateService } from '../../services/update/update.service';
 import { UsageService } from '../../services/usage/usage.service';
 import { Icon, IconName } from '../../ui/icon';
 import { McpSettings } from '../mcp-settings/mcp-settings';
+import { NotifSettings } from '../notif-settings/notif-settings';
 import { DataTransferService } from '../../services/data-transfer/data-transfer.service';
 import { CHAT_WIDTHS, ChatPrefsService, FONT_MAX, FONT_MIN } from '../../services/chat-prefs/chat-prefs.service';
 
@@ -21,9 +22,10 @@ const PRESETS: { id: string; label: string; hint: string; limits: GovLimits }[] 
   { id: 'urgent', label: 'Só o urgente', hint: 'Só agentes de prioridade alta começam trabalho.', limits: { session: [85, 0, 0], week: [90, 0, 0], pause: { session: 95, week: 98 } } },
 ];
 
-type Tab = 'general' | 'chat' | 'quota' | 'mcps' | 'about';
+type Tab = 'general' | 'notif' | 'chat' | 'quota' | 'mcps' | 'about';
 const TABS: { id: Tab; label: string; icon: IconName; hint: string }[] = [
   { id: 'general', label: 'Geral', icon: 'settings', hint: 'Como a Central roda no Windows e quando ela te avisa.' },
+  { id: 'notif', label: 'Notificações', icon: 'flag', hint: 'O que avisa no sistema, o som e o horário de não perturbe.' },
   { id: 'chat', label: 'Chat', icon: 'central', hint: 'Aparência das conversas com os agentes.' },
   { id: 'quota', label: 'Cota do Claude', icon: 'timer', hint: 'Quando os agentes param de começar trabalho para não estourar a cota.' },
   { id: 'mcps', label: 'MCPs', icon: 'puzzle', hint: 'Servidores MCP do Claude Code: o que os agentes podem usar, o status de cada um, adicionar e remover.' },
@@ -38,7 +40,7 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
 
 @Component({
   selector: 'app-settings-dialog',
-  imports: [Icon, McpSettings],
+  imports: [Icon, McpSettings, NotifSettings],
   template: `
     <dialog #dlg (close)="dialogs.settings.set(false)" aria-labelledby="st-title"
             class="m-auto h-[min(640px,88vh)] w-[min(920px,94vw)] overflow-hidden rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
@@ -153,6 +155,7 @@ const OPTIONS: { key: keyof Prefs; title: string; hint: string }[] = [
         <p class="mt-2 text-[12px] text-faint">Pausadas voltam sozinhas, na mesma sessão, quando a cota renova. A cota conta também o que você usa fora da Central: deixe folga.</p>
       </section>
               }
+              @case ('notif') { <app-notif-settings /> }
               @case ('mcps') { <app-mcp-settings /> }
               @case ('about') {
                 <dl class="space-y-3 text-[13.5px]">

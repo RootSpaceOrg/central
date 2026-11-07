@@ -552,6 +552,8 @@ for (const { id } of db.prepare(`select id from runs where status = 'running' an
 run(`update runs set status = 'queued', resume = 'a Central fechou no meio da execução',
        paused = json_object('reason', 'a Central fechou no meio da execução', 'until', null, 'at', ?)
      where status = 'running' and session_id is not null`, now());
+// sem sessão (caiu antes de o Claude começar): volta para a fila e recomeça do zero; comando de rotina fica como falhou
+run(`update runs set status = 'queued', started_at = null where status in ('preparing','running') and session_id is null and scope <> 'command'`);
 run(`update runs set status = 'failed', result = coalesce(result, 'App fechado durante a execução.'), finished_at = ?
      where status in ('preparing','running')`, now());
 

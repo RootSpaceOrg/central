@@ -1,4 +1,4 @@
-import { BrowserWindow, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,8 +14,9 @@ import {
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
 } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
-import { getPrefs, keepAliveOnClose, markQuitting, notify, setPrefs, setupTray } from './desktop';
-import { chatFromRun, deleteChat, grantChat, setChatYolo, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
+import { getNotif, getPrefs, keepAliveOnClose, markQuitting, notify, setNotif, setPrefs, setupTray } from './desktop';
+import type { NotifKind } from './notif';
+import { chatFromRun, deleteChat, grantChat, resumeInterruptedChats, setChatYolo, listChats, listMessages, onChatStream, renameChat, sendChat, stopChat, stopAllChats } from './central-agent';
 import { closeSession, createSession, listSessions, updateSession } from './sessions';
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { claimOf, listActivity, onActivity } from './activity';
@@ -44,6 +45,7 @@ import { fixPath } from './proc';
 
 // macOS: o PATH do terminal (claude, git, gh) antes de qualquer agente rodar
 fixPath();
+if (process.platform === 'win32') app.setAppUserModelId('dev.gustavoreis.central');
 
 const DEV = process.argv.includes('--dev');
 const arg = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
@@ -102,18 +104,41 @@ const contextChanged = (project: string) => send('context:changed', { project })
 const factProject = (id: number) => get<{ p: string }>('select project_slug p from facts where id = ?', id)?.p ?? '';
 const navigate = (route: string) => send('app:navigate', route);
 // testes (--capture) não mostram notificação na tela de quem está usando o PC
-const toast = (title: string, body: string, route: string | null) => { if (!CAPTURE) notify(title, body, route, () => win, navigate); };
-onRoutineFail((title, body) => toast(title, body, '/execucoes'));
-/** avisa uma vez quando cada execução termina */
+const toast = (title: string, body: string, route: string | null, kind: NotifKind = 'system', ok = true) => { if (!CAPTURE) notify(title, body, route, () => win, navigate, kind, ok); };
+// a falha da rotina de comando já avisa como execução (abaixo); não avisa duas vezes
+onRoutineFail(() => {});
+/** avisa uma vez quando cada execução termina (o tipo decide se avisa: Preferências → Notificações) */
 const notified = new Set<number>();
+const notifiedWaiting = new Set<number>();
+/** "tudo terminou": conta o que terminou desde o último aviso e avisa quando nada mais roda nem espera na fila */
+const sinceIdle = { done: 0, failed: 0, timer: undefined as ReturnType<typeof setTimeout> | undefined };
+const checkIdle = () => {
+  clearTimeout(sinceIdle.timer);
+  sinceIdle.timer = setTimeout(() => {
+    const active = get<{ n: number }>(`select count(*) n from runs where status in ('queued','preparing','running') and paused is null`)!.n;
+    if (active || !sinceIdle.done) return;
+    toast('Tudo pronto', `${sinceIdle.done} ${sinceIdle.done === 1 ? 'execução terminou' : 'execuções terminaram'}${sinceIdle.failed ? `, ${sinceIdle.failed} com falha` : ''}. Nada rodando nem na fila.`, '/execucoes', 'idle');
+    sinceIdle.done = 0; sinceIdle.failed = 0;
+  }, 45_000);
+};
 const emitRun = {
   event: (e: Events['run:event']) => send('run:event', e),
   update: (r: Events['run:update']) => {
     send('run:update', r);
     if ((r.status === 'succeeded' || r.status === 'failed') && r.finished_at && !notified.has(r.id)) {
       notified.add(r.id);
-      const who = r.routine_id ? 'Rotina' : 'Agente';
-      toast(r.status === 'succeeded' ? `${who} concluiu` : `${who} falhou`, `${r.prompt.split('\n')[0]}${r.pr_url ? ' (PR aberto)' : ''}`, `/execucoes?run=${r.id}`);
+      const ok = r.status === 'succeeded';
+      const kind: NotifKind = r.routine_id ? 'routine' : r.board_id ? 'board' : 'run';
+      const who = kind === 'routine' ? 'Rotina' : kind === 'board' ? 'Etapa do quadro' : 'Agente';
+      toast(ok ? `${who} concluiu` : `${who} falhou`, `${r.prompt.split('\n')[0]}${r.pr_url ? ' (PR aberto)' : ''}`, `/execucoes?run=${r.id}`, kind, ok);
+      sinceIdle.done++; if (!ok) sinceIdle.failed++;
+      checkIdle();
+    }
+    if (r.waiting && !notifiedWaiting.has(r.id)) {
+      notifiedWaiting.add(r.id);
+      let reason = '';
+      try { reason = JSON.parse(r.waiting).reason ?? ''; } catch { /* texto antigo */ }
+      toast('Um agente está esperando você', reason || r.prompt.split('\n')[0], `/execucoes?run=${r.id}`, 'waiting');
     }
   },
   changed: () => { backlogChanged(); changed(); },
@@ -210,7 +235,7 @@ function registerIpc(): void {
   handle('prefs:get', () => getPrefs());
   handle('prefs:set', patch => setPrefs(patch, () => win, navigate));
   handle('update:check', force => checkUpdate(force));
-  handle('update:install', () => installUpdate());
+  handle('update:install', () => installUpdate(() => { markQuitting(); pauseAllOnQuit(); stopAllChats(); stopAllExtensions(); killAllTerminals(); }));
   handle('update:build', publish => buildUpdate(publish, line => send('update:log', { line }), (ok, message) => send('update:built', { ok, message })));
 
   handle('routines:list', () => listRoutines());
@@ -344,6 +369,14 @@ function registerIpc(): void {
     app.exit(0);
   });
   handle('projects:discover', () => discoverProjects());
+  // notificações: o que avisa, som, não perturbe
+  handle('notif:get', () => getNotif());
+  handle('notif:set', patch => setNotif(patch));
+  handle('notif:test', () => {
+    const p = getNotif();
+    if (Notification.isSupported()) new Notification({ title: 'Central', body: 'Assim chegam os avisos.', silent: p.sound !== 'system' }).show();
+    if (p.sound !== 'system' && p.sound !== 'none') win?.webContents.send('notify:sound', p.sound);
+  });
   // MCPs do Claude Code (Preferências → MCPs)
   handle('mcp:list', force => listMcpServers(!!force));
   handle('mcp:add', input => addMcpServer(input));
@@ -405,6 +438,8 @@ function createWindow(): void {
   const hash = ROUTE ? `#${ROUTE}` : '';
   if (DEV) win.loadURL(`http://localhost:4300/${hash}`);
   else win.loadFile(join(__dirname, '..', 'dist', 'web', 'browser', 'index.html'), { hash: ROUTE });
+  // Windows desligando ou saindo da conta: o before-quit pode não rodar; pausa igual ao fechar normal
+  win.on('session-end', () => { markQuitting(); pauseAllOnQuit(); stopAllChats(); stopAllExtensions(); });
   if (CAPTURE) {
     win.webContents.once('did-finish-load', () => setTimeout(async () => {
       const js = arg('exec64') && Buffer.from(arg('exec64')!, 'base64').toString('utf8');
@@ -427,6 +462,8 @@ app.whenReady().then(() => {
   seedAgentsV2();
   registerIpc();
   createWindow();
+  // conversas que a Central interrompeu ao fechar continuam (as execuções voltam pela fila, na mesma sessão)
+  if (!CAPTURE || process.argv.includes('--dispatch')) setTimeout(() => resumeInterruptedChats((chat_id, message, busy) => send('chat:event', { chat_id, message, busy }), () => { changed(); backlogChanged(); }), 4000);
   if (!CAPTURE) setupTray(() => win, navigate);
   // extensões instaladas (WhatsApp…) ligam junto; o WhatsApp conversa com a Central pelos donos cadastrados
   onExtensionsChange(() => send('ext:changed', null));
@@ -454,7 +491,7 @@ app.whenReady().then(() => {
   const watchGithub = () => Promise.all([syncPullRequests(), syncCiFailures()])
     .then(([prs, ci]) => {
       if (prs) backlogChanged();
-      if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/triagem'); }
+      if (ci) { backlogChanged(); changed(); toast('CI quebrado', `${ci} ${ci === 1 ? 'repositório está' : 'repositórios estão'} com o GitHub Actions falhando.`, '/triagem', 'ci', false); }
     });
   // depois da varredura dos repositórios, o índice pega os que acabaram de aparecer (incremental: barato)
   syncProjects(null, changed).then(() => { indexAll(); return watchGithub(); });

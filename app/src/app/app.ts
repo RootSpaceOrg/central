@@ -1,4 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { NotifSoundService } from './shared/services/notif-sound/notif-sound.service';
 import { IS_WIN } from './shared/services/ipc/ipc.service';
 import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { QuickBar } from './shared/components/quick-bar/quick-bar';
@@ -56,6 +57,8 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
 export class App {
   /** botões da janela: à direita no Windows, à esquerda no Mac */
   protected readonly isWin = IS_WIN;
+  /** toca o som escolhido quando chega um aviso (mesmo com as Preferências fechadas) */
+  private readonly notifSound = inject(NotifSoundService);
   protected readonly projects = inject(ProjectsService);
   protected readonly proposals = inject(ProposalsService);
   protected readonly runs = inject(RunsService);
