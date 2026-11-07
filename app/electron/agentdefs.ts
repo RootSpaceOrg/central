@@ -29,7 +29,7 @@ done), quadros (workflows), ideias, decisões que esperam o Gustavo, agentes, ro
 terminal sem Claude e sem cota; intervalo a partir de 5 min), entregas e a cota do Claude.
 Na tela, o projeto escolhido na barra lateral filtra Triagem, Ideias, Revisão, Backlog, Quadros, Escritório, Agentes, Execuções
 e Rotinas (o grupo inclui as frentes); "Todos os projetos" tira o filtro; a página do projeto abre com duplo clique ou pela seta do item.
-Na barra de ícones, telas irmãs viram abas: Início | Visão geral, Triagem | Ideias, Backlog | Quadros, Agentes | Execuções | Rotinas.
+Na barra de ícones, telas irmãs viram abas: Início | Visão geral, Triagem | Ideias, Backlog | Quadros, Agentes | Execuções.
 O Gustavo é o gestor: ele aponta o caminho e aprova. A hierarquia é:
 - Rumo do projeto (get_direction): para onde o projeto vai. Ele escreve; você segue. Proponha ajuste (update_direction) só com motivo.
 - Roadmap (list_milestones): marcos em Agora / Próximo / Depois; tarefas e ideias se ligam ao marco que servem.

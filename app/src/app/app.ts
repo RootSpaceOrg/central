@@ -88,7 +88,8 @@ export class App {
     { path: '/triagem', label: 'Triagem e ideias', icon: 'inbox', tabs: [{ path: '/triagem', label: 'Triagem' }, { path: '/ideias', label: 'Ideias' }] },
     { path: '/revisao', label: 'Revisão (entregas esperando o seu olhar)', icon: 'pr' },
     { path: '/backlog', label: 'Backlog e quadros', icon: 'kanban', tabs: [{ path: '/backlog', label: 'Backlog' }, { path: '/quadros', label: 'Quadros' }] },
-    { path: '/agentes', label: 'Agentes, execuções e rotinas', icon: 'agent', tabs: [{ path: '/agentes', label: 'Agentes' }, { path: '/execucoes', label: 'Execuções' }, { path: '/rotinas', label: 'Rotinas' }] },
+    { path: '/agentes', label: 'Agentes e execuções', icon: 'agent', tabs: [{ path: '/agentes', label: 'Agentes' }, { path: '/execucoes', label: 'Execuções' }] },
+    { path: '/rotinas', label: 'Rotinas (agentes e scripts na agenda)', icon: 'routine' },
     { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
     { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
   ];
