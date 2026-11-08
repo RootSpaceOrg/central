@@ -234,7 +234,9 @@ export function sendChat(chatId: number | null, agentId: number, text: string, n
     notify(id, null, false);
     if (later.length) setTimeout(() => { try { sendChat(id, agent.id, later.join('\n\n'), notify, onCentralChange, null, null, true); } catch { /* conversa apagada */ } }, 100);
     // terminou um ajuste pedido na entrega: ela volta para a revisão com o diff novo
-    const runId = fromRun ? get<{ id: number }>('select id from runs where worktree_path = ?', chat!.cwd)?.id : null;
+    const sess = get<{ s: string | null }>('select session_id s from chats where id = ?', id)?.s;
+    const runId = (fromRun ? get<{ id: number }>('select id from runs where worktree_path = ?', chat!.cwd)?.id : null)
+      ?? (sess ? get<{ id: number }>('select id from runs where session_id = ?', sess)?.id : null);
     if (runId) reopenDelivery(runId).then(onCentralChange, () => {});
   });
   return id;

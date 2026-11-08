@@ -75,7 +75,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
           <!-- decidir: fica no topo, fixo ao rolar -->
           <div class="sticky top-0 z-10 -mx-10 mt-4 border-b border-edge bg-night/95 px-10 py-3 backdrop-blur">
             @if (adjusting()) {
-              <textarea id="rv-adjust" class="field mb-2 h-24 w-full resize-y text-[14px]" placeholder="O que ajustar. Vai para o mesmo agente, na mesma sessão e pasta da entrega (Ctrl+Enter manda)."
+              <textarea id="rv-adjust" class="field mb-2 h-24 w-full resize-y text-[14px]" placeholder="O que ajustar. A mesma execução roda de novo, na mesma sessão, e a entrega volta para cá atualizada (Ctrl+Enter manda)."
                         aria-label="Ajuste pedido" [value]="note()" (input)="note.set($any($event.target).value)" (keydown.control.enter)="adjust(it)" (keydown.escape)="adjusting.set(false)"></textarea>
             }
             <div class="flex flex-wrap items-center gap-2">
@@ -219,7 +219,7 @@ export class ReviewPage {
     try {
       this.advance(it);
       const chatId = await this.deliveries.adjust(it.d, text);
-      this.chat.openInPanel(chatId);
+      if (chatId) this.chat.openInPanel(chatId);
     } catch (e) {
       this.error.set((e as Error).message);
     } finally {

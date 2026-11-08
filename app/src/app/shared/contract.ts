@@ -1040,6 +1040,8 @@ export interface Api {
   /** o Gustavo resolveu o que o agente esperava: retoma a sessão da execução de onde parou (devolve a conversa) */
   /** retoma a execução que esperava você (a mesma, na mesma sessão); devolve a conversa só quando não há sessão para retomar */
   'runs:resume': (id: number, note: string | null) => number | null;
+  /** pedir ajuste numa entrega: true = a execução roda de novo na mesma sessão; false = sem sessão (usar conversa) */
+  'deliveries:adjust': (id: number, text: string) => boolean;
   /** descarta o "esperando você" sem retomar (a tarefa volta para a fila do quadro / A fazer) */
   'runs:dismissWaiting': (id: number) => void;
   'runs:events': (id: number) => RunEventDto[];

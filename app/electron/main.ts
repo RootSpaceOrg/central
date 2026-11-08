@@ -9,7 +9,7 @@ import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
 import { imageDataUrl, saveImage } from './chat-images';
 import { addMcpServer, listMcpServers, removeMcpServer } from './mcp-servers';
 import { adaptImport, discoverProjects, exportData, inspectImport, swapDatabase } from './data-transfer';
-import { continueRun, grantRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
+import { adjustRun, continueRun, grantRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
@@ -55,6 +55,7 @@ const arg = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))
 // Depuração: --route=/projetos/x abre direto numa tela; --capture=arquivo.png salva um print e fecha.
 const ROUTE = arg('route');
 const CAPTURE = arg('capture');
+if (CAPTURE && !process.argv.includes('--dispatch')) process.env.CENTRAL_HOLD_RUNS = '1';
 let win: BrowserWindow | null = null;
 
 /**
@@ -361,6 +362,15 @@ function registerIpc(): void {
   handle('deliveries:list', (since, status) => listDeliveries(since, status));
   handle('deliveries:board', () => reviewBoard());
   handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); backlogChanged(); });
+  // pedir ajuste: a própria execução roda de novo (mesma sessão); sem sessão guardada, a tela usa a conversa (caminho antigo)
+  handle('deliveries:adjust', (id, text) => {
+    const d = get<{ run_id: number; session: string | null }>('select d.run_id, r.session_id session from deliveries d join runs r on r.id = d.run_id where d.id = ?', id);
+    if (!d) throw new Error('Entrega não encontrada.');
+    if (!d.session) return false;
+    adjustRun(d.run_id, text, emitRun);
+    backlogChanged();
+    return true;
+  });
   handle('digest:get', since => digest(since));
   handle('release:status', (slug, refresh) => releaseStatus(slug, !!refresh));
   handle('release:summary', () => releaseSummary());

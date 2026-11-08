@@ -2,7 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { DeliveryDto, DeliveryStatus, DigestDto } from '../../contract';
 import { ChatService } from '../chat/chat.service';
-import { errorMessage } from '../ipc/ipc.service';
+import { IpcService, errorMessage } from '../ipc/ipc.service';
 import { DeliveriesApiService } from './deliveries-api.service';
 
 /** O que uma execução entregou: a nota do agente + o diff + a revisão. */
@@ -65,6 +65,7 @@ const toDigest = (d: DigestDto): Digest => ({
 export class DeliveriesService {
   private readonly api = inject(DeliveriesApiService);
   private readonly chat = inject(ChatService);
+  private readonly ipc = inject(IpcService);
 
   /** fila de revisão: entregas que mexeram em código e esperam você */
   readonly queue = signal<Delivery[]>([]);
@@ -90,8 +91,14 @@ export class DeliveriesService {
   discard(d: Delivery): void { this.review(d, 'discarded', null); }
 
   /** Pedir ajuste: continua a sessão da execução (mesma pasta e contexto) com o seu texto. Devolve a conversa. */
-  async adjust(d: Delivery, text: string): Promise<number> {
+  /** devolve a conversa só no caminho antigo (execução sem sessão); senão a própria execução roda de novo */
+  async adjust(d: Delivery, text: string): Promise<number | null> {
     try {
+      if (await this.ipc.invoke('deliveries:adjust', d.id, text)) {
+        this.queue.update(q => q.filter(x => x.id !== d.id));
+        this.board.update(q => q.filter(x => x.id !== d.id));
+        return null;
+      }
       const chatId = await this.chat.fromRun(d.runId);
       const agentId = this.chat.chats().find(c => c.id === chatId)?.agentId ?? d.agentId;
       if (agentId) await this.chat.sendTo(chatId, agentId, `Ajuste pedido pelo Gustavo na entrega "${d.title}":\n\n${text}\n\nFaça o ajuste, rode o que for preciso e, se houver PR, atualize-o.`);

@@ -285,6 +285,8 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
  * Pausadas ficam na fila (seguram a tarefa) até o freio retomar.
  */
 export function pump(emit: Emit): void {
+  // testes (--capture sem --dispatch) nunca põem agente para rodar: nem o que já estava na fila
+  if (process.env.CENTRAL_HOLD_RUNS) return;
   const active = get<{ n: number }>(`select count(*) n from runs where status in ('preparing','running') and scope <> 'command'`)!.n;
   const queued = all<{ id: number; priority: number; created_at: string; paused: string | null }>(
     `select id, priority, created_at, paused from runs where status = 'queued'`);
@@ -486,6 +488,27 @@ export function continueRun(id: number, note: string | null, emit: Emit): RunDto
     `${why}; o Gustavo pediu para continuar${note?.trim() ? `. Ele disse: ${note.trim()}` : ''}`, id);
   event(id, 'system', waitingWhy ? 'O Gustavo resolveu o que faltava: continuando a mesma sessão, de onde parou.' : 'Continuando a mesma sessão, de onde parou.', emit);
   if (r.task_id && !r.stage) moveTaskForRun(r.task_id, 'doing');
+  emit.update(dto(id));
+  emit.changed();
+  pump(emit);
+  return dto(id);
+}
+
+/**
+ * Ajuste pedido na Revisão: a MESMA execução volta a rodar na mesma sessão do Claude, com o pedido do Gustavo.
+ * No fim ela atualiza a nota (report_delivery), o diff é medido de novo e a entrega volta sozinha para a revisão.
+ */
+export function adjustRun(id: number, text: string, emit: Emit): RunDto {
+  const r = dto(id);
+  if (['queued', 'preparing', 'running'].includes(r.status)) throw new Error('A execução já está rodando.');
+  if (!r.session_id) throw new Error('Essa execução não guardou a sessão do Claude.');
+  run(`update runs set status = 'queued', paused = null, waiting = null, resume = ?, finished_at = null, result = null where id = ?`,
+    `o Gustavo revisou a sua entrega e pediu um ajuste: "${text.trim()}". Faça o ajuste (rode o que for preciso; se houver PR, atualize) e, no fim, chame report_delivery de novo com a nota inteira atualizada, dizendo o que mudou neste ajuste`, id);
+  run(`update deliveries set status = 'pending', review_note = ?, reviewed_at = ? where run_id = ?`, text.trim(), now(), id);
+  event(id, 'system', `Ajuste pedido pelo Gustavo: ${text.trim()}`, emit);
+  if (r.task_id && !r.stage) moveTaskForRun(r.task_id, 'doing');
+  // etapa de quadro: o cartão já seguiu; o ajuste não empurra de novo
+  if (r.stage) run('update runs set board_moved = 1 where id = ?', id);
   emit.update(dto(id));
   emit.changed();
   pump(emit);

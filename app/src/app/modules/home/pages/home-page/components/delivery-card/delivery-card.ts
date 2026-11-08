@@ -82,7 +82,7 @@ export class DeliveryCard {
     this.busy.set(true);
     try {
       const chatId = await this.deliveries.adjust(this.delivery(), text);
-      this.chat.openInPanel(chatId);
+      if (chatId) this.chat.openInPanel(chatId);
     } catch (e) {
       this.error.set((e as Error).message);
     } finally {
