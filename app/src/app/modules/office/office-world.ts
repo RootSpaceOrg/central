@@ -1,5 +1,5 @@
 import {
-  AmbientLight, BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, IcosahedronGeometry,
+  ACESFilmicToneMapping, AmbientLight, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, IcosahedronGeometry,
   Material, Mesh, MeshLambertMaterial, NearestFilter, Object3D, OrthographicCamera, PCFSoftShadowMap, PlaneGeometry, Raycaster,
   RepeatWrapping, RingGeometry, SRGBColorSpace, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
@@ -7,7 +7,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
-import { Avatar, BODY, avatar, boxGeo, clearAvatarCaches, mat } from '../../shared/ui/avatar3d';
+import { boxGeo, clearAvatarCaches, mat } from '../../shared/ui/avatar3d';
+import { CHARACTERS, Character, Kit, Prop, fitBox, loadKit } from './office-assets';
 import type { AvatarLook } from '../../shared/ui/avatar-look';
 import { BOARD_SPOT, CORRIDOR_Y, ELEVATOR, MAP_H, MAP_W, Placement, ROOM, ROOMS, RoomId, TASK_BOARD, route, skinOf } from './office-map';
 
@@ -34,6 +35,8 @@ export interface Person {
   between?: boolean;
   /** aparência escolhida no editor do agente (sem = boneco padrão) */
   look?: AvatarLook;
+  /** qual personagem (índice em CHARACTERS); sem = escolhido pela chave */
+  model?: number;
 }
 
 /** Um agente avisou outro (notify_agent): quem recebe vai até a mesa de quem avisou, os dois conversam e cada um volta. */
@@ -43,7 +46,9 @@ const WALL_H = 2.4;
 const TALK_S = 8; // segundos de conversa depois que chega
 const SPEED = 2.6; // ladrilhos por segundo
 const SUB_SPOTS: [number, number][] = [[1.25, -0.55], [1.35, 0.35], [-0.95, 0.2]]; // estagiários, em relação a quem está sentado
-const SUB_HAIR = ['#3b2a20', '#e2c072', '#7a3b2e'];
+/** sentado: altura e recuo do corpo para cair no assento da cadeira (ajuste fino da animação 'sit') */
+const SEAT_Y = 0.22;
+const SEAT_BACK = 0.12;
 
 // ---------- peças ----------
 
@@ -121,7 +126,9 @@ function floorLabel(text: string, color: string): Mesh {
 
 interface Actor {
   key: string;
-  av: Avatar;
+  ch: Character;
+  /** disco no chão na cor do projeto */
+  base: Mesh;
   label: CSS2DObject;
   el: { root: HTMLDivElement; say: HTMLDivElement; nick: HTMLDivElement };
   ring: Mesh;
@@ -137,7 +144,7 @@ interface Actor {
   phase: number;
   leaving: boolean;
   hidden: boolean;
-  subs: { av: Avatar; label: CSS2DObject }[];
+  subs: { ch: Character; label: CSS2DObject }[];
   name: string;
   /** numa conversa: não sai do lugar até acabar; next = para onde vai depois */
   hold: number;
@@ -184,6 +191,10 @@ export class OfficeWorld {
   private interacting = false;
   /** até quando continuar desenhando a cada quadro (zoom pela roda, fim do arraste) */
   private moving = 0;
+  /** modelos 3D (chegam depois de montar a planta); até lá, o sync fica guardado */
+  private kit: Kit | null = null;
+  private pending: Parameters<OfficeWorld['sync']> | null = null;
+  private dead = false;
   /** medição (depuração): quadros desenhados, ms gastos, chamadas de desenho */
   readonly stats = { frames: 0, ms: 0, calls: 0 };
 
@@ -192,12 +203,14 @@ export class OfficeWorld {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
     host.appendChild(this.renderer.domElement);
     Object.assign(this.labels.domElement.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
     host.appendChild(this.labels.domElement);
 
-    this.scene.add(new HemisphereLight('#dfe8ff', '#3a3328', 1.5), new AmbientLight('#ffffff', 0.35));
-    const sun = new DirectionalLight('#fff3e0', 2.1);
+    this.scene.add(new HemisphereLight('#e6eeff', '#4a3f33', 1.6), new AmbientLight('#ffffff', 0.45));
+    const sun = new DirectionalLight('#fff1dc', 2.6);
     sun.position.set(9, 16, 11);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -209,6 +222,14 @@ export class OfficeWorld {
     this.scene.add(this.floor);
     this.build();
     for (const g of [this.floor, ...this.walls.map(w => w.g)]) merge(g);
+    // móveis e pessoas de verdade (modelos 3D): chegam em seguida
+    loadKit().then(kit => {
+      if (this.dead) return;
+      this.kit = kit;
+      this.furnish(kit);
+      if (this.pending) { const p = this.pending; this.pending = null; this.sync(...p); }
+      this.moving = performance.now() + 500;
+    }, e => console.error('escritório: modelos 3D', e));
 
     this.home = new Vector3(18, 17, 20);
     this.camera.position.copy(this.home);
@@ -321,50 +342,83 @@ export class OfficeWorld {
       pane(r.door + 1.2, z, r.x + r.w, z, 0.9);
     }
 
-    // mesas: tampo, monitor (a tela acende com alguém trabalhando), teclado, cadeira
+  }
+
+  /** Mobília com modelos 3D: mesas com monitor/teclado/cadeira, copa, estantes, plantas. A tela do monitor acende com alguém trabalhando. */
+  private furnish(kit: Kit): void {
+    const f = this.floor;
+    /** móvel nas medidas (l, a, p) em ladrilhos, girado em rot, sobre y */
+    const put = (name: Prop, l: number, h: number, p: number, x: number, z: number, rot = 0, y = 0, tint: Record<string, string> = {}) => {
+      const g = fitBox(kit.prop(name), l, h, p, tint);
+      g.position.set(x, y, z);
+      g.rotation.y = rot;
+      f.add(g);
+      return g;
+    };
+    const DESK = { wood: '#c8a77c', woodDark: '#8a6a48', metal: '#3a3f4b' };
+    const CHAIR = { metal: '#2b2f38', metalMedium: '#2b2f38', carpet: '#465267', carpetBlue: '#465267', wood: '#3a3f4b' };
+    const SCREEN = { metal: '#262a33', metalDark: '#1b1e25' };
+    const SOFA = { carpet: '#4f6f8f', carpetBlue: '#4f6f8f', wood: '#3a3028' };
+    const RUG = { carpet: '#6a5546', carpetDarker: '#5b4839' };
     for (const r of ROOMS) r.desks.forEach(([x, z], i) => {
-      box(f, 2, 0.06, 0.9, '#c9a77a', x + 1, 0.7, z + 0.45);
-      box(f, 0.06, 0.7, 0.85, '#8f7350', x + 0.06, 0, z + 0.45);
-      box(f, 0.06, 0.7, 0.85, '#8f7350', x + 1.94, 0, z + 0.45);
-      box(f, 0.08, 0.22, 0.08, '#2b2f38', x + 1, 0.76, z + 0.22);
-      box(f, 0.95, 0.56, 0.06, '#22262e', x + 1, 0.95, z + 0.2);
-      const screen = new MeshLambertMaterial({ color: '#141a24', emissive: '#000000' });
+      put('desk', 2, 0.74, 0.9, x + 1, z + 0.45, Math.PI, 0, DESK);
+      put('computerScreen', 0.95, 0.6, 0, x + 1, z + 0.22, Math.PI, 0.74, SCREEN);
+      put('computerKeyboard', 0.6, 0.04, 0.2, x + 1, z + 0.62, Math.PI, 0.74);
+      put('computerMouse', 0.09, 0.04, 0.14, x + 1.45, z + 0.62, Math.PI, 0.74);
+      put('chairDesk', 0.62, 1.05, 0.62, x + 1, z + 1.62, 0, 0, CHAIR);
+      // tela do monitor: acende quando alguém trabalha nessa mesa
+      const screen = new MeshLambertMaterial({ color: '#0e131c', emissive: '#000000' });
       this.screens.set(`${r.id}:${i}`, screen);
-      const s = new Mesh(new PlaneGeometry(0.86, 0.47), screen);
-      s.position.set(x + 1, 1.23, z + 0.235);
-      f.add(s);
-      box(f, 0.62, 0.025, 0.18, '#3a3f4b', x + 1, 0.76, z + 0.62);
-      const cz = z + 1.55;
-      box(f, 0.05, 0.52, 0.05, '#22262e', x + 1, 0, cz);
-      box(f, 0.55, 0.07, 0.55, '#3a3f4b', x + 1, 0.52, cz);
-      box(f, 0.55, 0.4, 0.06, '#3a3f4b', x + 1, 0.59, cz + 0.29);
+      const sc = new Mesh(new PlaneGeometry(0.84, 0.46), screen);
+      sc.position.set(x + 1, 1.07, z + 0.27);
+      f.add(sc);
+      if (i % 2 === 0) put(i % 4 === 0 ? 'plantSmall1' : 'plantSmall3', 0, 0.32, 0, x + 0.3, z + 0.3, 0, 0.74);
+      else put('books', 0.32, 0.18, 0, x + 1.7, z + 0.3, Math.PI, 0.74);
     });
 
-    // móveis por sala
-    box(f, 1.7, 0.05, 1.0, '#e0d2b0', 4.2, 0.62, 4.3); // gestão: mesa de reunião
-    box(f, 0.1, 0.62, 0.1, '#8f8064', 4.2, 0, 4.3);
-    box(f, 0.8, 2.0, 1.2, '#2a2f38', 23.4, 0, 1.6); // monitoração: rack
-    for (let i = 0; i < 6; i++) box(f, 0.02, 0.05, 0.05, i % 2 ? '#5FD3B5' : '#E8C46A', 22.99, 0.3 + i * 0.28, 1.3 + (i % 3) * 0.2, false);
-    box(f, 0.9, 0.95, 3, '#b9b2a5', 0.5, 0, 10.1); // copa: balcão
-    box(f, 0.45, 0.45, 0.4, '#2b2f38', 0.5, 0.95, 9.3); // cafeteira
-    box(f, 0.25, 0.2, 0.25, '#e9e4d8', 0.5, 0.95, 10.4);
-    box(f, 0.8, 1.9, 0.8, '#d8dde6', 0.5, 0, 12.6); // geladeira
-    box(f, 2.6, 0.38, 0.85, '#c0705a', 3.3, 0, 13.4); // sofá
-    box(f, 2.6, 0.5, 0.22, '#9a5847', 3.3, 0.3, 13.8);
-    const table = new Mesh(new CylinderGeometry(0.5, 0.5, 0.05, 20), mat('#d9c49c'));
-    table.position.set(3.5, 0.72, 10.7); table.castShadow = true; f.add(table);
-    box(f, 0.08, 0.72, 0.08, '#8d7b58', 3.5, 0, 10.7);
-    box(f, 0.08, 1.4, 0.8, '#f2efe6', 14.7, 0, 9.5); // criativo: cavalete
-    const puff = new Mesh(new SphereGeometry(0.32, 14, 10), mat('#ff8fb1'));
-    puff.scale.y = 0.6; puff.position.set(15.2, 0.2, 11.4); puff.castShadow = true; f.add(puff);
-    box(f, 0.6, 2.0, 2.4, '#6b4b33', 23.55, 0, 10.2); // negócios: estante
-    ['#E8C46A', '#7FA2FF', '#c0705a', '#7ED69A'].forEach((c, i) => box(f, 0.4, 0.32, 0.5, c, 23.4, 0.35 + i * 0.42, 9.6 + (i % 2) * 1.1));
-    for (const [x, z] of [[6.5, 0.5], [16.5, 0.5], [6.4, 13.4], [23.4, 6.5], [15.5, 13.5], [9.2, 6.4], [14.5, 6.4], [6.5, 5.4]]) plant(f, x, z);
+    // gestão: mesa de reunião com cadeiras e estante
+    put('table', 1.9, 0.72, 1.0, 4.3, 4.6, 0, 0, DESK);
+    for (const [dx, dz, rt] of [[-0.55, -0.75, 0], [0.55, -0.75, 0], [-0.55, 0.75, Math.PI], [0.55, 0.75, Math.PI]] as [number, number, number][])
+      put('chairModernCushion', 0.48, 0.85, 0.48, 4.3 + dx, 4.6 + dz, rt, 0, CHAIR);
+    put('bookcaseClosedWide', 1.4, 1.6, 0.45, 0.35, 4.6, Math.PI / 2);
+    // engenharia: estante e luminária
+    put('bookcaseOpen', 0.9, 1.7, 0.4, 16.7, 2.3, -Math.PI / 2);
+    put('lampRoundFloor', 0, 1.6, 0, 16.5, 4.8);
+    // monitoração: rack de servidores e caixa de som
+    box(f, 0.8, 2.0, 1.2, '#232833', 23.4, 0, 1.6);
+    for (let i = 0; i < 8; i++) box(f, 0.02, 0.05, 0.05, i % 2 ? '#5FD3B5' : '#E8C46A', 22.99, 0.3 + i * 0.22, 1.3 + (i % 3) * 0.2, false);
+    put('speaker', 0, 0.9, 0, 23.5, 3.2, -Math.PI / 2);
+    // copa: balcão com cafeteira e micro-ondas, geladeira, sofás, mesinha, banquetas, TV
+    put('kitchenBar', 2.8, 0.95, 0.8, 0.45, 10.3, Math.PI / 2);
+    put('kitchenCoffeeMachine', 0, 0.42, 0, 0.45, 9.4, Math.PI / 2, 0.95);
+    put('kitchenMicrowave', 0, 0.32, 0, 0.45, 10.9, Math.PI / 2, 0.95);
+    put('kitchenFridgeLarge', 0.9, 1.95, 0.75, 0.45, 12.75, Math.PI / 2);
+    put('loungeSofaCorner', 1.9, 0.8, 1.9, 2.4, 12.95, Math.PI, 0, SOFA);
+    put('loungeSofa', 2.0, 0.8, 0.9, 4.9, 13.45, Math.PI, 0, SOFA);
+    put('rugRound', 2.6, 0.02, 2.6, 4.1, 12.2, 0, 0, RUG);
+    put('tableCoffee', 1.1, 0.4, 0.6, 4.1, 12.3);
+    put('tableRound', 1.0, 0.75, 1.0, 3.5, 10.3, 0, 0, DESK);
+    for (const [dx, dz] of [[-0.8, 0], [0.8, 0], [0, -0.8]]) put('stoolBar', 0, 0.75, 0, 3.5 + dx, 10.3 + dz, 0, 0, CHAIR);
+    put('loungeDesignChair', 0.9, 0.85, 0.9, 6.2, 10.6, -Math.PI / 2, 0, SOFA);
+    put('televisionModern', 1.5, 0.95, 0, 6.85, 12.1, -Math.PI / 2, 0.6);
+    put('trashcan', 0, 0.45, 0, 1.3, 13.5);
+    // estúdio criativo: cavalete, poltrona com tapete, caixas
+    box(f, 0.08, 1.4, 0.8, '#f2efe6', 14.7, 0, 9.5);
+    put('rugRectangle', 2.2, 0.02, 1.5, 15.0, 11.6, Math.PI / 2, 0, { carpet: '#7a5a8f', carpetDarker: '#664a78' });
+    put('loungeChair', 0.9, 0.85, 0.9, 15.0, 11.6, -Math.PI / 2, 0, { carpet: '#c98a5a', wood: '#3a3028' });
+    put('cardboardBoxClosed', 0, 0.45, 0, 15.5, 13.4, 0.3);
+    // negócios: estante e mesa lateral
+    put('bookcaseClosedWide', 2.2, 1.8, 0.5, 23.65, 10.2, -Math.PI / 2);
+    put('sideTable', 0, 0.55, 0, 23.4, 12.6);
+    // plantas pelo andar
+    for (const [x, z, k] of [[6.5, 0.5, 0], [16.5, 0.5, 1], [6.4, 13.4, 0], [23.4, 6.5, 1], [15.5, 13.5, 0], [9.2, 6.4, 1], [14.5, 6.4, 0], [6.5, 5.4, 1], [0.6, 6.5, 0], [17.4, 13.4, 1]] as [number, number, number][])
+      put(k ? 'plantSmall2' : 'pottedPlant', 0, k ? 0.7 : 1.1, 0, x, z, (x * 7) % 3);
   }
 
   // ---------- pessoas ----------
 
   sync(people: Person[], placed: Map<string, Placement>, selected: string | null, milestones: string[]): void {
+    if (!this.kit) { this.pending = [people, placed, selected, milestones]; return; }
     this.selected = selected;
     const seen = new Set<string>();
     for (const p of people) {
@@ -385,13 +439,11 @@ export class OfficeWorld {
         a.path = this.viaBoard(a, route(from, to).slice(1).map(([x, y]) => new Vector2(x, y)), starting && (!from || from.room !== to.room));
         a.leaving = false;
       }
-      if (JSON.stringify(p.look ?? null) !== a.lookKey) this.restyle(a, p);
       if (!a.hold) a.at = to;
       a.working = p.working;
       a.hidden = !!p.hidden;
-      a.av.root.visible = !a.hidden;
-      a.av.shirt.color.set(p.shirt);
-      a.av.hair.color.set(p.hair);
+      a.ch.root.visible = !a.hidden;
+      (a.base.material as MeshLambertMaterial).color.set(p.shirt);
       (a.ring.material as MeshLambertMaterial).color.set(p.hair);
       a.ring.visible = p.key === selected;
       this.text(a, p);
@@ -426,12 +478,17 @@ export class OfficeWorld {
   }
 
   private spawn(p: Person): Actor {
-    const av = avatar(p.hair, p.shirt, skinOf(p.key), p.look);
-    av.root.userData['key'] = p.key;
-    const ring = new Mesh(new RingGeometry(0.36, 0.46, 28), new MeshLambertMaterial({ color: p.hair }));
+    const ch = this.kit!.character(p.model ?? hash(p.key));
+    ch.root.userData['key'] = p.key;
+    const ring = new Mesh(new RingGeometry(0.38, 0.48, 32), new MeshLambertMaterial({ color: p.hair, emissive: p.hair, emissiveIntensity: 0.5 }));
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    av.root.add(ring);
+    ring.position.y = 0.025;
+    ch.root.add(ring);
+    // disco na cor do projeto: quem é de qual projeto, de longe
+    const base = new Mesh(new CircleGeometry(0.3, 24), new MeshLambertMaterial({ color: p.shirt, transparent: true, opacity: 0.55, depthWrite: false }));
+    base.rotation.x = -Math.PI / 2;
+    base.position.y = 0.015;
+    ch.root.add(base);
     const root = document.createElement('div');
     root.className = 'o3-label';
     const say = document.createElement('div');
@@ -443,31 +500,16 @@ export class OfficeWorld {
     root.addEventListener('dblclick', () => this.on.open(p.key));
     const label = new CSS2DObject(root);
     label.center.set(0.5, 1);
-    label.position.set(0, 1.5, 0);
-    av.root.add(label);
-    this.floor.add(av.root);
+    label.position.set(0, 1.75, 0);
+    ch.root.add(label);
+    this.floor.add(ch.root);
     const a: Actor = {
-      key: p.key, av, label, el: { root, say, nick }, ring, pos: new Vector2(), path: [], at: null, working: p.working,
+      key: p.key, ch, base, label, el: { root, say, nick }, ring, pos: new Vector2(), path: [], at: null, working: p.working,
       facing: Math.random() * Math.PI * 2, lookKey: JSON.stringify(p.look ?? null), turnAt: 0, phase: Math.random() * 10, leaving: false, hidden: false, subs: [],
       hold: 0, next: null, saying: null, visit: null, name: p.name, pauseAt: null, waitUntil: 0,
     };
     this.actors.set(p.key, a);
     return a;
-  }
-
-  /** troca o boneco mantendo lugar, direção, anel e nick */
-  private restyle(a: Actor, p: Person): void {
-    const old = a.av;
-    const av = avatar(p.hair, p.shirt, skinOf(p.key), p.look);
-    av.root.userData['key'] = p.key;
-    av.root.position.copy(old.root.position);
-    av.root.rotation.copy(old.root.rotation);
-    av.root.add(a.ring, a.label);
-    this.floor.remove(old.root);
-    old.shirt.dispose(); old.hair.dispose();
-    this.floor.add(av.root);
-    a.av = av;
-    a.lookKey = JSON.stringify(p.look ?? null);
   }
 
   private text(a: Actor, p: Person): void {
@@ -534,22 +576,22 @@ export class OfficeWorld {
     while (a.subs.length > n) {
       const s = a.subs.pop()!;
       s.label.element.remove();
-      this.floor.remove(s.av.root);
-      s.av.shirt.dispose(); s.av.hair.dispose();
+      this.floor.remove(s.ch.root);
+      s.ch.mixer.stopAllAction();
     }
     while (a.subs.length < n) {
       const i = a.subs.length;
-      const av = avatar(SUB_HAIR[i], '#9b7bff', skinOf(`sub${i}${a.key}`));
-      av.root.scale.setScalar(BODY * 0.72);
+      const ch = this.kit!.character(hash(`sub${i}${a.key}`));
+      ch.root.scale.setScalar(0.72);
       const el = document.createElement('div');
       el.className = 'o3-nick o3-sub';
       el.textContent = 'estagiário';
       const label = new CSS2DObject(el);
       label.center.set(0.5, 1);
-      label.position.set(0, 1.55, 0);
-      av.root.add(label);
-      this.floor.add(av.root);
-      a.subs.push({ av, label });
+      label.position.set(0, 2.25, 0);
+      ch.root.add(label);
+      this.floor.add(ch.root);
+      a.subs.push({ ch, label });
     }
   }
 
@@ -598,7 +640,7 @@ export class OfficeWorld {
   private hit(e: MouseEvent): string | null {
     const r = this.renderer.domElement.getBoundingClientRect();
     this.ray.setFromCamera(new Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
-    const roots = [...this.actors.values()].map(a => a.av.root);
+    const roots = [...this.actors.values()].map(a => a.ch.root);
     for (const h of this.ray.intersectObjects(roots, true)) {
       let o: Object3D | null = h.object;
       while (o && !o.userData['key']) o = o.parent;
@@ -644,7 +686,7 @@ export class OfficeWorld {
   }
 
   private animate(a: Actor, dt: number, s: number): void {
-    const { av } = a;
+    const { ch } = a;
     let walking = false;
     if (a.waitUntil) {
       // no quadro de tarefas: olhando para ele, até a hora de seguir
@@ -689,49 +731,39 @@ export class OfficeWorld {
       const other = [...this.actors.values()].find(o => o !== a && o.hold === a.hold);
       if (other && (!a.at?.seated || a.at.seat.startsWith('visit'))) a.facing = Math.atan2(other.pos.x - a.pos.x, other.pos.y - a.pos.y);
     }
-    av.root.position.set(a.pos.x, 0, a.pos.y);
-    av.root.rotation.y += angleTo(av.root.rotation.y, a.facing) * Math.min(1, dt * 8);
-
     const seated = !walking && !!a.at?.seated;
-    const ph = s * 9 + a.phase;
-    if (walking) {
-      const sw = Math.sin(ph) * 0.65;
-      av.legL.rotation.x = sw; av.legR.rotation.x = -sw;
-      av.armL.rotation.x = -sw * 0.8; av.armR.rotation.x = sw * 0.8;
-      av.root.position.y = Math.abs(Math.cos(ph)) * 0.05;
-    } else if (seated) {
-      av.legL.rotation.x = av.legR.rotation.x = -Math.PI / 2;
-      const typing = a.working ? Math.sin(s * 16 + a.phase) * 0.12 : 0;
-      av.armL.rotation.x = -1.15 + typing; av.armR.rotation.x = -1.15 - typing;
-      av.head.rotation.x = a.working ? Math.sin(s * 1.3 + a.phase) * 0.05 : 0;
-    } else {
-      av.legL.rotation.x = av.legR.rotation.x = 0;
-      av.armL.rotation.x = Math.sin(s * 1.6 + a.phase) * 0.06; av.armR.rotation.x = -av.armL.rotation.x;
-      av.head.rotation.x = 0;
-      av.root.position.y = 0;
-    }
+    // sentado: um pouco para trás, no assento da cadeira
+    ch.root.position.set(a.pos.x, seated ? SEAT_Y : 0, a.pos.y + (seated ? SEAT_BACK : 0));
+    ch.root.rotation.y += angleTo(ch.root.rotation.y, a.facing) * Math.min(1, dt * 8);
+    ch.play(walking ? 'walk' : seated ? 'sit' : a.waitUntil ? 'interact-right' : 'idle');
+    // conversa: um "sim" de vez em quando
+    if (!walking && a.saying && a.hold && s > a.turnAt) { ch.play('emote-yes', 0.2, true); a.turnAt = s + 4 + Math.random() * 3; }
+    ch.mixer.update(dt);
+    a.base.visible = !seated;
     a.label.visible = !a.hidden;
     a.el.say.style.visibility = walking ? 'hidden' : '';
 
     // estagiários em pé ao lado da mesa, virados para quem está sentado
     a.subs.forEach((sub, i) => {
       const [dx, dz] = SUB_SPOTS[i];
-      sub.av.root.visible = sub.label.visible = seated && !a.hidden;
-      sub.av.root.position.set(a.pos.x + dx, 0, a.pos.y + dz);
-      sub.av.root.rotation.y = Math.atan2(-dx, -dz);
-      sub.av.armL.rotation.x = Math.sin(s * 2 + i) * 0.1;
+      sub.ch.root.visible = sub.label.visible = seated && !a.hidden;
+      sub.ch.root.position.set(a.pos.x + dx, 0, a.pos.y + dz);
+      sub.ch.root.rotation.y = Math.atan2(-dx, -dz);
+      sub.ch.play(i === 0 ? 'interact-left' : 'idle');
+      sub.ch.mixer.update(dt);
     });
   }
 
   private remove(a: Actor): void {
     this.setSubs(a, 0);
-    a.av.shirt.dispose(); a.av.hair.dispose();
+    a.ch.mixer.stopAllAction();
     a.el.root.remove();
-    this.floor.remove(a.av.root);
+    this.floor.remove(a.ch.root);
     this.actors.delete(a.key);
   }
 
   destroy(): void {
+    this.dead = true;
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     this.controls.dispose();
@@ -782,3 +814,6 @@ function merge(parent: Object3D): void {
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** escolhe um personagem estável pela chave (mesma pessoa, mesmo personagem) */
+function hash(k: string): number { let h = 0; for (const c of k) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h) % CHARACTERS.length; }

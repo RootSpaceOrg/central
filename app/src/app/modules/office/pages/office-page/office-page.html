@@ -9,6 +9,9 @@
       <button type="button" class="flex items-center gap-1.5 rounded-full border px-3 py-1 transition-colors" (click)="toggleMap()" [attr.aria-pressed]="map3d()"
               [class]="map3d() ? 'border-frost/60 bg-frost/10 text-text' : 'border-edge bg-panel text-mute hover:text-text'"
               [title]="map3d() ? 'Esconder o mapa 3D (libera espaço)' : 'Mostrar o mapa 3D'"><app-icon name="office" [size]="14" />Mapa 3D {{ map3d() ? 'ligado' : 'desligado' }}</button>
+      <button type="button" class="flex items-center gap-1.5 rounded-full border px-3 py-1 transition-colors" (click)="toggleOnly()" [attr.aria-pressed]="onlyWorking()"
+              [class]="onlyWorking() ? 'border-yes/60 bg-yes/10 text-text' : 'border-edge bg-panel text-mute hover:text-text'"
+              title="Esconde quem está parado na copa"><span class="size-2 rounded-full" [class]="onlyWorking() ? 'bg-yes' : 'bg-faint'"></span>Só quem está trabalhando</button>
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b class="text-frost">{{ workers().length }}</b> trabalhando</span>
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b class="text-[#C6A6FF]">{{ subsRunning() }}</b> estagiários</span>
       <span class="rounded-full border border-edge bg-panel px-3 py-1"><b>{{ idle().length }}</b> na copa</span>

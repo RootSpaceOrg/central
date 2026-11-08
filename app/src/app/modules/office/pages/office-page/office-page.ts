@@ -1,3 +1,4 @@
+import { CHARACTERS } from '../../office-assets';
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
@@ -48,6 +49,7 @@ interface Worker {
 
 const GESTOR = '[gestor:planejar]';
 const MAP_KEY = 'central.office.map';
+const ONLY_KEY = 'central.office.only-working';
 const CLAUDE = '#D97757';
 
 /** Sala de um agente: a que ele escolheu, ou deduzida pelo papel (a Central fica na gestão). */
@@ -148,6 +150,28 @@ export class OfficePage {
   /** mapa 3D ligado (desligar libera espaço e não carrega o three.js; o quadro e as mesas continuam) */
   protected readonly map3d = signal(localStorage.getItem(MAP_KEY) !== 'off');
 
+  /** só quem está trabalhando: a copa some (e quem está entre tarefas também) */
+  protected readonly onlyWorking = signal(localStorage.getItem(ONLY_KEY) === '1');
+  protected toggleOnly(): void {
+    this.onlyWorking.update(v => !v);
+    localStorage.setItem(ONLY_KEY, this.onlyWorking() ? '1' : '0');
+  }
+
+  /**
+   * personagem de cada agente: dentro de um projeto, cada um diferente (em ordem, a partir de um ponto do projeto);
+   * fora de projeto, pela chave
+   */
+  private readonly models = computed(() => {
+    const m = new Map<number, number>();
+    const byProject = new Map<string, number[]>();
+    for (const a of this.agents.agents()) { const k = a.projectSlug ?? '-'; byProject.set(k, [...(byProject.get(k) ?? []), a.id]); }
+    for (const [slug, ids] of byProject) {
+      let start = 0; for (const c of slug) start = (start * 31 + c.charCodeAt(0)) | 0;
+      ids.sort((x, y) => x - y).forEach((id, i) => m.set(id, Math.abs(start + i * 5) % CHARACTERS.length));
+    }
+    return m;
+  });
+
   protected toggleMap(): void {
     this.map3d.update(v => !v);
     localStorage.setItem(MAP_KEY, this.map3d() ? 'on' : 'off');
@@ -172,7 +196,7 @@ export class OfficePage {
       const p = projectOf(w.slug);
       return {
         key: w.key, room: w.room, name: w.name, hair: w.hair, shirt: p?.color ?? '#6b7385', working: true,
-        look: w.agentId ? this.agents.byId().get(w.agentId)?.look : undefined,
+        look: w.agentId ? this.agents.byId().get(w.agentId)?.look : undefined, model: w.agentId ? this.models().get(w.agentId) : undefined,
         doing: w.phase ? `${PHASES[w.phase].label} · ${w.doing ?? 'pensando…'}` : w.doing,
         tag: p?.name ?? null, plan: w.plan.length ? [this.planDone(w), w.plan.length] : null, subs: w.subagents.filter(x => !x.finishedAt).length,
         hidden: !this.shown(w.slug),
@@ -183,7 +207,7 @@ export class OfficePage {
       const p = projectOf(a.projectSlug);
       const last = this.lastWork.get(a.id);
       const between = !!last && now - last.at < LINGER_MS;
-      out.push({ key: `a${a.id}`, room: between ? last!.room : 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', look: a.look, working: false, between, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) });
+      out.push({ key: `a${a.id}`, room: between ? last!.room : 'copa', name: a.name, hair: a.color, shirt: p?.color ?? '#6b7385', look: a.look, model: this.models().get(a.id), working: false, between, doing: null, tag: p?.name ?? null, plan: null, subs: 0, hidden: !this.shown(a.projectSlug) || this.onlyWorking() });
     }
     return out;
   });
