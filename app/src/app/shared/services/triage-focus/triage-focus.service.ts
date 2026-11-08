@@ -12,7 +12,7 @@ export interface Focus {
   /** só decisões com agente parado esperando você */
   blocking: boolean;
 }
-export type TriageTab = 'decision' | 'idea';
+export type TriageTab = 'decision' | 'idea' | 'waiting';
 
 export const ALL: Focus = { projects: [], blocking: false };
 

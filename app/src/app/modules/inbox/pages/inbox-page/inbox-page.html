@@ -38,7 +38,7 @@
 
   <!-- abas: decisões e ideias -->
   <div class="mt-6 flex flex-wrap items-center gap-3 border-b border-edge" role="tablist" aria-label="O que triar">
-    @for (t of [{ id: 'decision', label: 'Decisões', n: decisionCount() }, { id: 'idea', label: 'Ideias', n: ideaCount() }]; track t.id) {
+    @for (t of [{ id: 'decision', label: 'Decisões', n: decisionCount() }, { id: 'idea', label: 'Ideias', n: ideaCount() }, { id: 'waiting', label: 'Esperando você', n: waitingCount() }]; track t.id) {
       <button type="button" role="tab" [attr.aria-selected]="focus.tab() === t.id" (click)="setTab($any(t.id))"
               class="-mb-px flex items-center gap-2 border-b-2 px-1 pb-2.5 font-display text-[17px] font-semibold transition-colors"
               [class]="focus.tab() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
@@ -47,7 +47,7 @@
     }
     <span class="flex-1"></span>
     <!-- colunas da grade -->
-    <div class="mb-2 flex items-center gap-1 rounded-lg border border-edge p-0.5 text-[12.5px]" role="radiogroup" aria-label="Colunas da grade">
+    <div [hidden]="focus.tab() === 'waiting'" class="mb-2 flex items-center gap-1 rounded-lg border border-edge p-0.5 text-[12.5px]" role="radiogroup" aria-label="Colunas da grade">
       @for (n of [2, 3]; track n) {
         <button type="button" role="radio" [attr.aria-checked]="focus.cols() === n" (click)="focus.setCols($any(n))" [title]="n + ' colunas'"
                 class="flex items-center gap-1 rounded-md px-2 py-1" [class]="focus.cols() === n ? 'bg-raise font-semibold text-text' : 'text-mute hover:text-text'">
@@ -57,6 +57,10 @@
     </div>
   </div>
 
+  @if (focus.tab() === 'waiting') {
+    <!-- agentes parados por sua causa: as ações ficam aqui mesmo -->
+    <app-waiting-runs />
+  } @else {
   <!-- filtros: projetos (toggles) e só o que trava -->
   <div class="mt-4 flex flex-wrap items-center gap-1.5 text-[13px]" aria-label="Filtros">
     @if (!scope.slug()) {
@@ -159,6 +163,7 @@
         @else { Nenhuma ideia nova. <a routerLink="/ideias" class="text-frost hover:underline">Anote em Ideias</a>. }
       </div>
     }
+  }
   }
 </div>
 

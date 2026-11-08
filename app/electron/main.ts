@@ -380,8 +380,9 @@ function registerIpc(): void {
   // descarta o "esperando você" sem retomar: a tarefa volta para a fila e a próxima execução usa a configuração atual do agente
   handle('runs:dismissWaiting', runId => { run('update runs set waiting = null where id = ?', runId); emitRun.update(runDto(runId)); backlogChanged(); });
   handle('runs:resume', (runId, note) => {
-    const w = get<{ waiting: string | null; agent_id: number | null }>('select waiting, agent_id from runs where id = ?', runId);
+    const w = get<{ waiting: string | null; agent_id: number | null; session_id: string | null }>('select waiting, agent_id, session_id from runs where id = ?', runId);
     if (!w?.waiting) throw new Error('Essa execução não está esperando.');
+    if (w.session_id) { continueRun(runId, note, emitRun); backlogChanged(); return null; }
     const why = (JSON.parse(w.waiting) as { reason: string }).reason;
     const chatId = chatFromRun(runId);
     run('update runs set waiting = null where id = ?', runId);

@@ -20,6 +20,7 @@ import { UpdateService } from './shared/services/update/update.service';
 import { IdeasService } from './shared/services/ideas/ideas.service';
 import { TasksService } from './shared/services/tasks/tasks.service';
 import { FindBar } from './shared/components/find-bar/find-bar';
+import { needsYou } from './modules/inbox/pages/inbox-page/components/waiting-runs/waiting-runs';
 import { DeliveriesService } from './shared/services/deliveries/deliveries.service';
 import { TriageFocusService } from './shared/services/triage-focus/triage-focus.service';
 import { DialogsService } from './shared/services/dialogs/dialogs.service';
@@ -113,7 +114,8 @@ export class App {
 
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {
-    const triage = this.proposals.inbox().filter(p => this.focus.decision(p)).length + this.ideas.fresh().filter(i => this.focus.idea(i)).length;
+    const all = this.runs.runs();
+    const triage = this.proposals.inbox().filter(p => this.focus.decision(p)).length + this.ideas.fresh().filter(i => this.focus.idea(i)).length + all.filter(r => needsYou(r, all)).length;
     if (path === '/triagem' && triage) return { n: triage, tone: 'bg-later text-night' };
     if (path === '/ideias' && this.ideas.waiting().length) return { n: this.ideas.waiting().length, tone: 'bg-edge text-text' };
     // revisão: entregas na fila + tarefas em Revisão sem entrega (o mesmo que a tela Revisão lista)

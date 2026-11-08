@@ -137,7 +137,7 @@ export class RunsService {
   readonly waiting = computed(() => this.runs().filter(r => r.waiting && r.finishedAt));
 
   /** Você resolveu: retoma a sessão da execução de onde parou. Devolve a conversa. */
-  async resume(id: number, note: string | null = null): Promise<number> {
+  async resume(id: number, note: string | null = null): Promise<number | null> {
     try {
       const chatId = await this.api.resume(id, note);
       this.runs.update(list => list.map(r => (r.id === id ? { ...r, waiting: null } : r)));

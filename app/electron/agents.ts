@@ -474,13 +474,17 @@ export function pauseAllOnQuit(): void {
  */
 export function continueRun(id: number, note: string | null, emit: Emit): RunDto {
   const r = dto(id);
-  if (!['failed', 'killed'].includes(r.status)) throw new Error('Só dá para continuar uma execução que falhou ou foi interrompida.');
+  // esperando você (login, acesso, resposta) também volta a rodar: a MESMA execução, não uma conversa à parte
+  const waitingWhy = r.waiting ? (JSON.parse(r.waiting) as { reason: string }).reason : null;
+  if (!['failed', 'killed'].includes(r.status) && !waitingWhy) throw new Error('Só dá para continuar uma execução que falhou, foi interrompida ou está esperando você.');
+  if (['queued', 'preparing', 'running'].includes(r.status)) throw new Error('A execução já está rodando.');
   if (!r.session_id) throw new Error('Essa execução não guardou a sessão do Claude: use "Passar adiante" para outro agente continuar com o registro.');
   if (get(`select 1 from runs where handoff_from = ? and status in ('queued','preparing','running')`, id)) throw new Error('Outro agente já está continuando esse trabalho.');
-  const why = r.status === 'killed' ? 'a execução foi interrompida' : 'a execução parou com erro';
-  run(`update runs set status = 'queued', paused = null, resume = ?, finished_at = null, result = null where id = ?`,
+  const why = waitingWhy ? `você esperava o Gustavo (${waitingWhy}) e ele resolveu`
+    : r.status === 'killed' ? 'a execução foi interrompida' : 'a execução parou com erro';
+  run(`update runs set status = 'queued', paused = null, waiting = null, resume = ?, finished_at = null, result = null where id = ?`,
     `${why}; o Gustavo pediu para continuar${note?.trim() ? `. Ele disse: ${note.trim()}` : ''}`, id);
-  event(id, 'system', 'Continuando a mesma sessão, de onde parou.', emit);
+  event(id, 'system', waitingWhy ? 'O Gustavo resolveu o que faltava: continuando a mesma sessão, de onde parou.' : 'Continuando a mesma sessão, de onde parou.', emit);
   if (r.task_id && !r.stage) moveTaskForRun(r.task_id, 'doing');
   emit.update(dto(id));
   emit.changed();

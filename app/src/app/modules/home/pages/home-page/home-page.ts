@@ -143,7 +143,7 @@ export class HomePage {
 
   /** você resolveu: o agente continua de onde parou (abre a conversa no painel) */
   protected async resume(runId: number): Promise<void> {
-    try { this.chat.openInPanel(await this.runs.resume(runId)); }
+    try { const chat = await this.runs.resume(runId); if (chat) this.chat.openInPanel(chat); }
     catch (e) { this.quick.error.set((e as Error).message); }
   }
 

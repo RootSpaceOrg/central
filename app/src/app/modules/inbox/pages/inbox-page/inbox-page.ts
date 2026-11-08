@@ -12,6 +12,7 @@ import { IDEA_SOURCE_LABEL, Idea, IdeasService } from '../../../../shared/servic
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
+import { WaitingRuns, needsYou } from './components/waiting-runs/waiting-runs';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
@@ -69,7 +70,7 @@ export function oneLine(md: string | null): string {
  */
 @Component({
   selector: 'app-inbox-page',
-  imports: [Icon, RouterLink, ProjectSelect, AgentSelect, ProjectAvatar, AgoPipe, MarkdownPipe],
+  imports: [Icon, RouterLink, ProjectSelect, AgentSelect, ProjectAvatar, AgoPipe, MarkdownPipe, WaitingRuns],
   templateUrl: './inbox-page.html',
   host: { class: 'block h-full overflow-y-auto', '(document:keydown)': 'onKey($event)' },
 })
@@ -96,9 +97,14 @@ export class InboxPage {
 
   // ---------- abas, filtros e grade ----------
   protected readonly scope = inject(ScopeService);
+  private readonly runsSvc = inject(RunsService);
+  /** execuções paradas por sua causa (aba Esperando você) */
+  protected readonly waitingCount = computed(() => { const all = this.runsSvc.runs(); return all.filter(r => needsYou(r, all) && this.scope.matches(r.projectSlug)).length; });
   private readonly marks = markProjects(() => this.focus.tab() === 'decision'
     ? this.proposals.inbox().filter(p => this.focus.decision(p)).map(p => p.projectSlug)
+    : this.focus.tab() === 'waiting' ? this.runsWaiting().map(r => r.projectSlug)
     : this.ideas.fresh().filter(i => this.focus.idea(i)).map(i => i.projectSlug), 'bg-later text-night', 'para triar');
+  private readonly runsWaiting = computed(() => { const all = this.runsSvc.runs(); return all.filter(r => needsYou(r, all)); });
   protected readonly decisionCount = computed(() => this.proposals.inbox().filter(p => this.focus.decision(p) && this.scope.matches(p.projectSlug)).length);
   protected readonly ideaCount = computed(() => this.ideas.fresh().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).length);
   protected readonly stuckCount = computed(() => this.proposals.inbox().filter(p => blocking(p) && this.focus.decision(p, { ...this.focus.focus(), blocking: false })).length);

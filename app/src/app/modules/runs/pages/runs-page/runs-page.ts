@@ -87,7 +87,7 @@ export class RunsPage {
   /** esperando você (login, acesso): resolvido, retoma de onde parou e abre a conversa */
   protected async resume(r: Run): Promise<void> {
     this.chatError.set(null);
-    try { this.chat.openInPanel(await this.runs.resume(r.id)); } catch (e) { this.chatError.set((e as Error).message); }
+    try { const chat = await this.runs.resume(r.id); if (chat) this.chat.openInPanel(chat); } catch (e) { this.chatError.set((e as Error).message); }
   }
   protected readonly selected = computed<Run | null>(() => {
     const id = Number(this.query()?.get('run'));
