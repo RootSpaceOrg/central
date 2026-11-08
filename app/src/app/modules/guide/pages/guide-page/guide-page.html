@@ -263,7 +263,7 @@
 
             <!-- 3. plano -->
             @case (3) {
-              <p class="text-[13px] text-mute">Escolha o que entra e quando. {{ t.planHelp }}</p>
+              <p class="text-[13px] text-mute">Escolha o que entra e quando. {{ t.planHelp }}@if (kind === 'rumo') { Itens <b>para a Agência</b> não são executados aqui: viram o foco da sessão de Agência. }</p>
               <ul class="mt-3 space-y-2">
                 @for (i of g.plan; track i.id) {
                   <li class="@container flex flex-wrap items-start gap-3 rounded-2xl border bg-panel px-4 py-3" [class]="i.include ? 'border-edge' : 'border-edge opacity-50'">
@@ -298,6 +298,13 @@
                 @if (working()) { <span class="pulse size-2 rounded-full bg-yes"></span> A Central está executando o plano (acompanhe na conversa). }
                 @else { <app-icon name="check" [size]="16" class="text-yes" /> A Central terminou a parte dela. A sessão fecha quando ela escrever a ata. }
               </div>
+              @if (kind === 'rumo' && forAgency(g); as fa) {
+                <div class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#7ED6C2]/40 bg-[#7ED6C2]/5 px-5 py-3">
+                  <app-icon name="users" [size]="16" class="text-[#7ED6C2]" />
+                  <span class="min-w-0 flex-1 text-[13px]">O rumo pede mudanças no time (quem faz o quê). Isso se decide na Agência.</span>
+                  <a routerLink="/agencia" [queryParams]="{ projeto: g.projectSlug, foco: fa }" class="btn btn-sm">Levar para a Agência</a>
+                </div>
+              }
               <h3 class="mt-6 font-display text-lg font-semibold">Plano aprovado</h3>
               @if (g.focus) { <p class="mt-1 text-[13px] text-mute"><span class="text-faint">Foco:</span> {{ g.focus }}</p> }
               <div class="mt-3 grid gap-3 @4xl:grid-cols-3">
@@ -404,7 +411,7 @@
           <div class="md mt-2 text-[13.5px]" [innerHTML]="(h.minutes ?? 'Sem ata.') | markdown"></div>
           <div class="mt-2 flex flex-wrap gap-4 text-[13px]">
             @if (h.centralChat) { <a routerLink="/agentes" [queryParams]="{ conversa: h.centralChat }" class="text-frost hover:underline">Ver a conversa da sessão</a> }
-            @if (kind === 'rumo') { <a routerLink="/agencia" [queryParams]="{ projeto: h.projectSlug }" class="text-frost hover:underline">Revisar a agência para esse rumo</a> }
+            @if (kind === 'rumo') { <a routerLink="/agencia" [queryParams]="{ projeto: h.projectSlug, foco: forAgency(h) || null }" class="text-frost hover:underline">Revisar a agência para esse rumo</a> }
           </div>
         </details>
       }

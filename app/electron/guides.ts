@@ -115,6 +115,7 @@ Central, em até ~400 palavras:
 2. Riscos e o que deveria ser cortado ou congelado.
 3. 2 a 3 caminhos para o próximo ciclo, cada um com o porquê, o esforço e o risco.
 4. Sua recomendação.
+Quem faz o quê é da Agência (outra sessão): criar, ajustar ou aposentar agentes, quadros (fluxos), rotinas e o dono do A fazer NÃO se decide aqui. Se o rumo pedir um papel ou fluxo que não existe, diga só a necessidade (ex.: "falta alguém cuidando de X").
 Não crie nem mude nada: só analise.`;
 
 const replyPrompt = (g: GuideDto, said: string) => `[Guia #${g.id}: ${scopeText(g.project_slug, !!g.direct)}]
@@ -133,6 +134,7 @@ Agora você:
      'rumo' = validar o rumo e o roadmap (manter / ajustar com o texto proposto no detail / reescrever);
      'direcao' = 2 a 3 caminhos para o próximo ciclo;
      'prioridade' = o que sobe, o que congela e o que descarta (ideias, tarefas, frentes paradas).
+     Quem faz o quê é da Agência (outra sessão): criar, ajustar ou aposentar agentes, quadros (fluxos), rotinas e o dono do A fazer NÃO se decide aqui. Nada de card sobre agentes ou quadros.
      Cada card: id curto, kind, question, context (1-2 linhas), options [{label, detail}], recommended (índice),
      strategist (a posição dele em 1 linha) e central (a sua em 1 linha).
 Não mude nada no projeto ainda. Termine dizendo em 1 linha que os cards estão prontos.`;
@@ -150,7 +152,9 @@ ${cardsText(cards)}
 
 Monte o plano com guide_update(guide_id ${g.id}, plan): itens { id, kind, title, detail, agent, when }.
 kind: 'rumo' (ajuste do texto do rumo; detail = o texto novo), 'marco' (criar/mover marco do roadmap), 'tarefa', 'ideia',
-'cortar' (arquivar ideia/tarefa ou congelar frente) ou 'agente' (pôr um agente para trabalhar).
+'cortar' (arquivar ideia/tarefa ou congelar frente), 'agente' (pôr um agente QUE JÁ EXISTE para trabalhar) ou
+'agencia' (o rumo pede um papel, um fluxo ou uma rotina que não existe: title = a necessidade, detail = o porquê; quem decide é a
+sessão de Agência, você NÃO cria agente, quadro nem rotina aqui).
 agent = o nome do agente que faria (list_agents), quando fizer sentido.
 when (sugestão; ele escolhe): 'agora' = agente começa já; 'backlog' = tarefa em A fazer com o agente; 'depois' = vira marco ou ideia.
 Siga o que ele decidiu, sem inventar escopo. Explique o plano aqui em 3 linhas.`;
@@ -167,6 +171,7 @@ Como fazer:
 - 'backlog': create_task em column todo, com o agente responsável no corpo ou no quadro.
 - 'depois': marco em Próximo/Depois ou ideia aprovada (create_idea + update_idea approved).
 - cortar: update_idea archived, update_task done/backlog com o motivo, ou update_project status frozen se for uma frente.
+- agencia: NÃO execute (nada de create_agent, create_board, create_routine): vai na ata numa seção "Para a Agência"; o Gustavo leva para a sessão de Agência.
 - Guarde na memória do projeto (memory_remember) o porquê das escolhas e o que foi descartado, para ninguém propor de novo.
 
 Decisões que ele tomou nos cards (já registradas no histórico de decisões):

@@ -66,7 +66,7 @@ type TeamAgent = { id: number; name: string; role: string | null; model: string;
 export interface Team { agents: TeamAgent[]; boards: { name: string; stages: string[] }[]; routines: { name: string; agent: string | null; enabled: boolean; when: string; kind: string }[];
   todo_owner: string | null; backlog: { backlog: number; todo: number; doing: number; stale_14d: number; waiting_you: number } }
 const ITEM_KIND: Record<string, string> = {
-  rumo: 'rumo', marco: 'marco', tarefa: 'tarefa', ideia: 'ideia', cortar: 'cortar', agente: 'agente',
+  rumo: 'rumo', marco: 'marco', tarefa: 'tarefa', ideia: 'ideia', cortar: 'cortar', agente: 'agente', agencia: 'para a Agência',
   criar_agente: 'novo agente', ajustar_agente: 'ajustar agente', aposentar_agente: 'aposentar', quadro: 'quadro', rotina: 'rotina', dono_todo: 'dono do A fazer',
 };
 const WHEN: { id: GuidePlanItem['when']; label: string }[] = [{ id: 'agora', label: 'Agora' }, { id: 'backlog', label: 'Backlog' }, { id: 'depois', label: 'Depois' }];
@@ -86,6 +86,8 @@ export class GuidePage {
   /** tipo da sessão: vem da rota (/guiar = rumo, /agencia = agencia) */
   protected readonly kind: 'rumo' | 'agencia' = inject(ActivatedRoute).snapshot.data['kind'] ?? 'rumo';
   protected readonly t = TEXT[this.kind];
+  /** ?foco= (vindo do Guiar: "Levar para a Agência") já preenche o compositor */
+  private readonly initialFocus = inject(ActivatedRoute).snapshot.queryParamMap.get('foco');
   protected readonly scope = inject(ScopeService);
   protected readonly projects = inject(ProjectsService);
   private readonly agents = inject(AgentsService);
@@ -100,7 +102,7 @@ export class GuidePage {
   protected readonly starting = signal(false);
   protected readonly question = signal('');
   /** "precisamos focar em x, y e z": antes de começar e com a sessão aberta */
-  protected readonly focusText = signal('');
+  protected readonly focusText = signal(this.initialFocus ?? '');
   protected readonly sendingFocus = signal(false);
   protected readonly asking = signal(false);
 
@@ -193,8 +195,13 @@ export class GuidePage {
     rumo: 'bg-[#C8A2FF]/15 text-[#C8A2FF]', marco: 'bg-later/15 text-later', tarefa: 'bg-frost/15 text-frost',
     ideia: 'bg-yes/15 text-yes', cortar: 'bg-no/15 text-no', agente: 'bg-frost/15 text-frost',
     criar_agente: 'bg-yes/15 text-yes', ajustar_agente: 'bg-frost/15 text-frost', aposentar_agente: 'bg-no/15 text-no', quadro: 'bg-[#C6A6FF]/15 text-[#C6A6FF]',
-    rotina: 'bg-later/15 text-later', dono_todo: 'bg-frost/15 text-frost',
+    rotina: 'bg-later/15 text-later', dono_todo: 'bg-frost/15 text-frost', agencia: 'bg-[#7ED6C2]/15 text-[#7ED6C2]',
   };
+
+  /** Guiar → Agência: o que o rumo pede de time vira o foco da sessão de Agência */
+  protected forAgency(g: Guide): string {
+    return g.plan.filter(p => p.kind === 'agencia' && p.include).map(p => `- ${p.title}${p.detail ? `: ${p.detail}` : ''}`).join('\n');
+  }
 
   protected abandon(g: Guide): void { if (confirm('Descartar esta sessão? A conversa fica no histórico do agente.')) this.guides.abandon(g.id); }
 

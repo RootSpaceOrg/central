@@ -264,7 +264,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
       recommended: z.number().int().optional(), strategist: z.string().optional(), central: z.string().optional(),
     })).optional(),
     plan: z.array(z.object({
-      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente', 'criar_agente', 'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'dono_todo']), title: z.string(), detail: z.string().optional(),
+      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente', 'agencia', 'criar_agente', 'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'dono_todo']), title: z.string(), detail: z.string().optional(),
       agent: z.string().optional(), when: z.enum(['agora', 'backlog', 'depois']),
     })).optional(),
   }, a => updateGuide(a.guide_id, { reading: a.reading, cards: a.cards as never, plan: a.plan as never }), h.projects);

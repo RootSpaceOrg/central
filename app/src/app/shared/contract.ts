@@ -264,7 +264,7 @@ export interface GuideCard {
 /** Guiar projeto: um item do plano (etapa 3); when = o que o Gustavo escolheu */
 export interface GuidePlanItem {
   id: string;
-  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente' | 'criar_agente' | 'ajustar_agente' | 'aposentar_agente' | 'quadro' | 'rotina' | 'dono_todo';
+  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente' | 'agencia' | 'criar_agente' | 'ajustar_agente' | 'aposentar_agente' | 'quadro' | 'rotina' | 'dono_todo';
   title: string;
   detail?: string;
   agent?: string;
