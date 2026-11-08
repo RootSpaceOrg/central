@@ -1,3 +1,4 @@
+import { AgentList } from '../../../../shared/components/agent-list/agent-list';
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -30,7 +31,7 @@ type Filter = string;
  */
 @Component({
   selector: 'app-agents-page',
-  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, ChatView, AgentDialog, MemoryPanel],
+  imports: [AgentList, RouterLink, Icon, AgoPipe, ProjectAvatar, ChatView, AgentDialog, MemoryPanel],
   templateUrl: './agents-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -100,6 +101,13 @@ export class AgentsPage {
       if (first) untracked(() => this.pick(first));
     });
   }
+
+  /** coluna de agentes: trabalhando agora e, sem projeto escolhido, de qual projeto é */
+  protected readonly listItems = computed(() => this.visible().map(a => ({
+    agent: a, live: this.busy().has(a.id),
+    hint: a.builtin ? 'a Central' : this.filter() === 'all' ? (this.project(a.projectSlug)?.name ?? 'sem projeto') : (a.description ?? null),
+  })));
+  protected pickId(id: number | null): void { const a = this.visible().find(x => x.id === id); if (a) this.pick(a); }
 
   protected pick(a: Agent): void {
     this.chat.selectAgent(a.id);

@@ -1,3 +1,4 @@
+import { AgentList } from '../../../../shared/components/agent-list/agent-list';
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -21,7 +22,7 @@ const DOT: Record<RunStatus, string> = {
 
 @Component({
   selector: 'app-runs-page',
-  imports: [RouterLink, Icon, AgoPipe, MdLitePipe, ProjectAvatar, AgentSelect],
+  imports: [AgentList, RouterLink, Icon, AgoPipe, MdLitePipe, ProjectAvatar, AgentSelect],
   templateUrl: './runs-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })
@@ -50,7 +51,7 @@ export class RunsPage {
   private readonly marks = markProjects(() => this.runs.runs().filter(r => this.attention(r)).map(r => r.projectSlug), 'bg-later text-night', 'precisam de você');
   protected attention(r: Run): boolean { return !!r.waiting || !!r.paused || ((r.status === 'failed' || r.status === 'killed') && !this.handedOff(r)); }
 
-  private readonly byProject = computed(() => {
+  protected readonly byProject = computed(() => {
     return this.runs.runs().filter(r => this.scope.matches(r.projectSlug));
   });
   protected readonly agentTabs = computed(() => {
@@ -63,6 +64,9 @@ export class RunsPage {
     }
     return [...n].map(([id, c]) => ({ agent: this.agent(id), id, ...c })).filter(x => x.agent).sort((a, b) => b.live - a.live || b.n - a.n);
   });
+  protected readonly listItems = computed(() => this.agentTabs().map(t => ({
+    agent: t.agent!, live: t.live > 0, count: t.n, hint: this.project(t.agent!.projectSlug)?.name ?? (t.agent!.builtin ? 'a Central' : 'sem projeto'),
+  })));
   private readonly byAgent = computed(() => { const a = this.agentFilter(); return a ? this.byProject().filter(r => r.agentId === a) : this.byProject(); });
   protected readonly statusChips = computed(() => {
     const l = this.byAgent();

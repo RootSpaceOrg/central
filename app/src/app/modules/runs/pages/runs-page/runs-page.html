@@ -1,23 +1,14 @@
-<!-- topo: agentes e situação (o projeto vem da barra lateral) -->
+<!-- agentes numa coluna ao lado dos projetos; à direita, as execuções -->
+<div class="flex min-h-0 flex-1">
+<app-agent-list [items]="listItems()" [selected]="agentFilter()" allLabel="Todos os agentes" [total]="byProject().length" (picked)="setAgent($event)" />
+<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+<!-- topo -->
 <header class="border-b border-edge bg-panel">
-  <div class="flex items-center gap-3 px-6 pt-4">
+  <div class="flex items-center gap-3 px-6 py-3">
     <h1 class="font-display text-[20px] font-bold tracking-tight">Execuções</h1>
     <span class="flex-1"></span>
     <button type="button" class="btn btn-primary btn-sm shrink-0" (click)="dialogs.newRun({ projectSlug: filter() !== '-' ? filter() : null, agentId: agentFilter() ?? undefined })">
       <app-icon name="plus" [size]="14" />Nova tarefa</button>
-  </div>
-  <div class="flex gap-1 overflow-x-auto px-4 pt-3 [scrollbar-width:none]" role="tablist" aria-label="Agente" (wheel)="$any($event.currentTarget).scrollLeft = $any($event.currentTarget).scrollLeft + $event.deltaY">
-    <button type="button" role="tab" [attr.aria-selected]="!agentFilter()" (click)="setAgent(null)"
-            class="-mb-px shrink-0 rounded-t-xl border border-b-0 px-3 py-2 text-[13.5px] font-semibold" [class]="!agentFilter() ? 'border-edge bg-night text-text' : 'border-transparent text-mute hover:bg-raise/60 hover:text-text'">Todos os agentes</button>
-    @for (t of agentTabs(); track t.id) {
-      <button type="button" role="tab" [attr.aria-selected]="agentFilter() === t.id" (click)="setAgent(t.id)"
-              class="-mb-px flex shrink-0 items-center gap-2 rounded-t-xl border border-b-0 px-3 py-2" [class]="agentFilter() === t.id ? 'border-edge bg-night text-text' : 'border-transparent text-mute hover:bg-raise/60 hover:text-text'">
-        <span class="relative"><app-project-avatar [project]="t.agent!" [size]="22" />
-          @if (t.live) { <span class="pulse absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-panel bg-yes"></span> }</span>
-        <span class="max-w-44 truncate text-[13.5px] font-semibold">{{ t.agent!.name }}</span>
-        <span class="text-[12px] tabular-nums text-faint">{{ t.n }}</span>
-      </button>
-    }
   </div>
 </header>
 
@@ -204,4 +195,6 @@
     </div>
   </div>
 }
+</div>
+</div>
 </div>
