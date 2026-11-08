@@ -43,7 +43,11 @@
               class="-mb-px flex items-center gap-2 border-b-2 px-1 pb-2.5 font-display text-[17px] font-semibold transition-colors"
               [class]="focus.tab() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
         {{ t.label }}<span class="rounded-full px-2 text-[12.5px] tabular-nums" [class]="focus.tab() === t.id ? 'bg-frost/15 text-frost' : 'bg-raise text-faint'">{{ t.n }}</span>
+        @if (t.id === 'idea' && newIdeas()) { <span class="rounded-full bg-later px-2 text-[11.5px] font-bold tabular-nums text-night" [title]="newIdeas() + ' que você ainda não viu'">{{ newIdeas() }} novas</span> }
       </button>
+    }
+    @if (focus.tab() === 'idea' && newIdeas()) {
+      <button type="button" class="mb-2 text-[12.5px] text-mute hover:text-text" (click)="markAllSeen()" title="Tira o selo de novidade de todas (elas continuam aqui)">Marcar todas como vistas</button>
     }
     <span class="flex-1"></span>
     <!-- colunas da grade -->
@@ -142,7 +146,9 @@
               }
             } @else {
               @let i = q.i;
-              <p class="pr-7 text-[12px] text-faint">{{ i.author === 'gustavo' ? 'sua' : 'de um agente' }} · {{ i.createdAt | ago }}</p>
+              <p class="flex items-center gap-1.5 pr-7 text-[12px] text-faint">
+                @if (!i.seen) { <span class="rounded-full bg-later px-1.5 text-[10.5px] font-bold uppercase tracking-wide text-night">nova</span> }
+                {{ i.author === 'gustavo' ? 'sua' : 'de um agente' }} · {{ i.createdAt | ago }}</p>
               <h3 class="mt-2 line-clamp-2 pr-2 font-display text-[16px] font-semibold leading-snug">{{ i.title }}</h3>
               @if (i.body) { <p class="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-mute">{{ oneLine(i.body) }}</p> }
               @if (i.triage) {

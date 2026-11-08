@@ -177,6 +177,8 @@ export interface RunDto {
   parent_run_id?: number | null;
   /** assumiu o trabalho desta execução */
   handoff_from?: number | null;
+  /** o Gustavo descartou (falhou/interrompida e não precisa mais): sai de "precisa de você" */
+  dismissed?: number;
   /** motivo da pausa, quando vai retomar na mesma sessão */
   resume?: string | null;
   /** etapa de quadro */
@@ -242,6 +244,8 @@ export interface IdeaDto {
   tasks_done: number;
   /** agente de triagem pegou a ideia (null = ainda não) */
   triaged_at: string | null;
+  /** quando o Gustavo viu (abriu na Triagem ou deixou para depois); null = novidade */
+  seen_at?: string | null;
   /** recomendação do agente de triagem: "aprovar e planejar — motivo" */
   triage: string | null;
 }
@@ -1040,6 +1044,8 @@ export interface Api {
   /** o Gustavo resolveu o que o agente esperava: retoma a sessão da execução de onde parou (devolve a conversa) */
   /** retoma a execução que esperava você (a mesma, na mesma sessão); devolve a conversa só quando não há sessão para retomar */
   'runs:resume': (id: number, note: string | null) => number | null;
+  /** descartar uma execução parada (falhou, interrompida, esperando ou pausada): sai de "precisa de você"; a pausada não volta a rodar */
+  'runs:dismiss': (id: number) => void;
   /** pedir ajuste numa entrega: true = a execução roda de novo na mesma sessão; false = sem sessão (usar conversa) */
   'deliveries:adjust': (id: number, text: string) => boolean;
   /** descarta o "esperando você" sem retomar (a tarefa volta para a fila do quadro / A fazer) */
@@ -1118,6 +1124,8 @@ export interface Api {
   'usage:get': (force: boolean) => UsageDto;
   'ideas:list': () => IdeaDto[];
   'ideas:create': (input: NewIdeaInput) => IdeaDto;
+  /** marca ideias como vistas (as contagens só mostram novidades) */
+  'ideas:seen': (ids: number[]) => void;
   'ideas:update': (id: number, patch: IdeaPatch) => void;
   'direction:get': (projectSlug: string) => DirectionDto | null;
   'guides:list': () => GuideDto[];

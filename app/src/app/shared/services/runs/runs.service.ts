@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import { RunDto, RunEventDto } from '../../contract';
-import { errorMessage } from '../ipc/ipc.service';
+import { IpcService, errorMessage } from '../ipc/ipc.service';
 import { RunsApiService } from './runs-api.service';
 import { NewRun, Run, RunEvent, isActive } from './runs.model';
 
@@ -41,6 +41,7 @@ const toRun = (d: RunDto): Run => ({
   priority: d.priority ?? 1,
   parentRunId: d.parent_run_id ?? null,
   handoffFrom: d.handoff_from ?? null,
+  dismissed: !!d.dismissed,
 });
 
 function parsePaused(raw: string | null | undefined): Run['paused'] {
@@ -60,6 +61,7 @@ const toEvent = (d: RunEventDto): RunEvent => ({ at: new Date(d.at), kind: d.kin
 @Injectable({ providedIn: 'root' })
 export class RunsService {
   private readonly api = inject(RunsApiService);
+  private readonly ipcSvc = inject(IpcService);
 
   readonly runs = signal<Run[]>([]);
   /** trabalhando ou na fila para trabalhar (pausada pelo freio não conta: está esperando a cota) */
@@ -126,6 +128,12 @@ export class RunsService {
   }
 
   /** tira a pausa do freio (volta assim que a cota e as vagas deixarem) */
+  /** sai de "precisa de você" (fica no histórico) */
+  async dismiss(id: number): Promise<void> {
+    this.runs.update(list => list.map(r => (r.id === id ? { ...r, dismissed: true, waiting: null, paused: null } : r)));
+    try { await this.ipcSvc.invoke('runs:dismiss', id); } catch (e) { throw new Error(errorMessage(e)); }
+  }
+
   unpause(id: number): Promise<void> { return this.api.unpause(id).catch(e => { throw new Error(errorMessage(e)); }); }
 
   /** outro agente (ou o mesmo, do zero) assume o trabalho parado, na mesma branch, com o registro do que foi feito */

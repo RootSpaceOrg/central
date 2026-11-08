@@ -13,6 +13,7 @@ import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
 
 /** execução que precisa de você: esperando (login, acesso, resposta), falhou sem ninguém assumir, ou pausada */
 export function needsYou(r: Run, runs: Run[]): boolean {
+  if (r.dismissed) return false;
   if (r.waiting) return true;
   if (r.paused && r.status === 'queued') return true;
   return (r.status === 'failed' || r.status === 'killed') && !!r.sessionId && !runs.some(x => x.handoffFrom === r.id)
@@ -60,8 +61,10 @@ export function needsYou(r: Run, runs: Run[]): boolean {
               <button type="button" class="btn btn-sm btn-ghost" (click)="dismiss(r)" title="Tira o aviso sem retomar: a tarefa volta para a fila">Descartar a espera</button>
               <button type="button" class="btn btn-sm btn-primary" (click)="resume(r)" [disabled]="busy() === r.id" title="A mesma execução volta a rodar, na mesma sessão, de onde parou">Já resolvi, retomar</button>
             } @else if (r.paused) {
+              <button type="button" class="btn btn-sm btn-ghost" (click)="act(r, runs.dismiss(r.id))" title="Não roda mais: sai daqui (continua no histórico)">Descartar</button>
               <button type="button" class="btn btn-sm btn-primary" (click)="act(r, runs.unpause(r.id))" [disabled]="busy() === r.id">Retomar agora</button>
             } @else {
+              <button type="button" class="btn btn-sm btn-ghost" (click)="act(r, runs.dismiss(r.id))" title="Não precisa mais: sai daqui (continua no histórico)">Descartar</button>
               <button type="button" class="btn btn-sm btn-primary" (click)="act(r, runs.continue(r.id))" [disabled]="busy() === r.id" title="A mesma sessão do Claude, de onde parou">
                 <app-icon name="play" [size]="13" />Continuar</button>
             }

@@ -49,7 +49,7 @@ export class RunsPage {
   private readonly scope = inject(ScopeService);
   /** precisa de você: esperando (login, acesso), pausada, ou falhou/foi interrompida e ninguém assumiu */
   private readonly marks = markProjects(() => this.runs.runs().filter(r => this.attention(r)).map(r => r.projectSlug), 'bg-later text-night', 'precisam de você');
-  protected attention(r: Run): boolean { return !!r.waiting || !!r.paused || ((r.status === 'failed' || r.status === 'killed') && !this.handedOff(r)); }
+  protected attention(r: Run): boolean { return !r.dismissed && (!!r.waiting || !!r.paused || ((r.status === 'failed' || r.status === 'killed') && !this.handedOff(r))); }
 
   protected readonly byProject = computed(() => {
     return this.runs.runs().filter(r => this.scope.matches(r.projectSlug));

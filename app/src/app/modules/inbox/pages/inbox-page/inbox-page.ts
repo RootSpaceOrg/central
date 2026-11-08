@@ -103,9 +103,12 @@ export class InboxPage {
   private readonly marks = markProjects(() => this.focus.tab() === 'decision'
     ? this.proposals.inbox().filter(p => this.focus.decision(p)).map(p => p.projectSlug)
     : this.focus.tab() === 'waiting' ? this.runsWaiting().map(r => r.projectSlug)
-    : this.ideas.fresh().filter(i => this.focus.idea(i)).map(i => i.projectSlug), 'bg-later text-night', 'para triar');
+    : this.ideas.unseen().filter(i => this.focus.idea(i)).map(i => i.projectSlug), 'bg-later text-night', 'para triar');
   private readonly runsWaiting = computed(() => { const all = this.runsSvc.runs(); return all.filter(r => needsYou(r, all)); });
   protected readonly decisionCount = computed(() => this.proposals.inbox().filter(p => this.focus.decision(p) && this.scope.matches(p.projectSlug)).length);
+  /** novidades (o resto você já viu) */
+  protected readonly newIdeas = computed(() => this.ideas.unseen().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).length);
+  protected markAllSeen(): void { this.ideas.markSeen(this.ideas.fresh().filter(i => this.scope.matches(i.projectSlug)).map(i => i.id)); }
   protected readonly ideaCount = computed(() => this.ideas.fresh().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).length);
   protected readonly stuckCount = computed(() => this.proposals.inbox().filter(p => blocking(p) && this.focus.decision(p, { ...this.focus.focus(), blocking: false })).length);
   protected readonly total = computed(() => this.decisionCount() + this.ideaCount());
@@ -117,7 +120,7 @@ export class InboxPage {
   /** por projeto; dentro de cada um, o que trava primeiro (o mais antigo antes), depois o mais novo */
   protected readonly groups = computed(() => {
     const later = this.skipped();
-    const rank = (q: Item) => (stuck(q) ? 0 : 1) + (q.kind === 'idea' && later.has(q.i.id) ? 2 : 0);
+    const rank = (q: Item) => (stuck(q) ? 0 : 1) + (q.kind === 'idea' && (later.has(q.i.id) || q.i.seen) ? 2 : 0);
     const m = new Map<string, Item[]>();
     for (const q of this.items()) { const k = this.focus.top(slugOf(q)); m.set(k, [...(m.get(k) ?? []), q]); }
     return [...m].map(([slug, list]) => ({
@@ -187,7 +190,7 @@ export class InboxPage {
         if (q.kind === 'decision') this.proposals.decide(q.p, verdict);
         else if (verdict === 'approve') await this.ideas.approve(q.i.id, null);
         else if (verdict === 'reject') await this.ideas.setStatus(q.i.id, 'archived');
-        else this.skipped.update(s => new Set([...s, q.i.id]));
+        else { this.skipped.update(s => new Set([...s, q.i.id])); this.ideas.markSeen([q.i.id]); }
       }
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -210,6 +213,7 @@ export class InboxPage {
 
   protected open(q: Item | undefined): void {
     if (!q) return;
+    if (q.kind === 'idea') this.ideas.markSeen([q.i.id]);
     this.openKey.set(keyOf(q));
     this.steering.set(false);
     this.pickSlug.set('');

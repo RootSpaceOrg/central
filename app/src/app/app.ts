@@ -115,7 +115,7 @@ export class App {
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {
     const all = this.runs.runs();
-    const triage = this.proposals.inbox().filter(p => this.focus.decision(p)).length + this.ideas.fresh().filter(i => this.focus.idea(i)).length + all.filter(r => needsYou(r, all)).length;
+    const triage = this.proposals.inbox().filter(p => this.focus.decision(p)).length + this.ideas.unseen().filter(i => this.focus.idea(i)).length + all.filter(r => needsYou(r, all)).length;
     if (path === '/triagem' && triage) return { n: triage, tone: 'bg-later text-night' };
     if (path === '/ideias' && this.ideas.waiting().length) return { n: this.ideas.waiting().length, tone: 'bg-edge text-text' };
     // revisão: entregas na fila + tarefas em Revisão sem entrega (o mesmo que a tela Revisão lista)

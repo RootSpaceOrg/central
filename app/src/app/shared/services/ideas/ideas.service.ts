@@ -1,3 +1,4 @@
+import { IpcService } from '../ipc/ipc.service';
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import { IdeaDto, IdeaStatus, ImportResultDto } from '../../contract';
@@ -27,6 +28,8 @@ export interface Idea {
   triagedAt: Date | null;
   /** recomendação dele: "aprovar e planejar — motivo" */
   triage: string | null;
+  /** já vista por você (abriu ou deixou para depois); sem = novidade */
+  seen: boolean;
 }
 
 /** Ciclo de vida: nova (triagem) → aprovada (insumo do backlog) → em andamento (tem tarefas) → feita; ou descartada. */
@@ -47,7 +50,7 @@ const toModel = (d: IdeaDto): Idea => ({
   source: d.source, sourceRef: d.source_ref, taskId: d.task_id, createdAt: new Date(d.created_at),
   // ideias antigas criadas por agentes (pela Central) não guardavam o autor
   author: d.author && !(d.author === 'gustavo' && d.source === 'central') ? d.author : d.source === 'central' ? 'agente' : 'gustavo', approvedAt: d.approved_at ? new Date(d.approved_at) : null, milestoneId: d.milestone_id ?? null, tasks: d.tasks ?? 0, tasksDone: d.tasks_done ?? 0,
-  triagedAt: d.triaged_at ? new Date(d.triaged_at) : null, triage: d.triage ?? null,
+  triagedAt: d.triaged_at ? new Date(d.triaged_at) : null, triage: d.triage ?? null, seen: !!d.seen_at,
 });
 
 @Injectable({ providedIn: 'root' })
@@ -59,6 +62,15 @@ export class IdeasService {
   readonly error = signal<string | null>(null);
   /** esperando triagem */
   readonly fresh = computed(() => this.ideas().filter(i => i.status === 'new'));
+  /** novas que você ainda não viu: é isso que os números mostram */
+  readonly unseen = computed(() => this.fresh().filter(i => !i.seen));
+  private readonly ipc = inject(IpcService);
+  markSeen(ids: number[]): void {
+    const todo = ids.filter(id => this.ideas().some(i => i.id === id && !i.seen));
+    if (!todo.length) return;
+    this.ideas.update(l => l.map(i => (todo.includes(i.id) ? { ...i, seen: true } : i)));
+    this.ipc.invoke('ideas:seen', todo);
+  }
   /** aprovadas que ainda não viraram tarefa: o que o gestor do projeto tem para quebrar */
   readonly waiting = computed(() => this.ideas().filter(i => i.status === 'approved' && !i.tasks));
 

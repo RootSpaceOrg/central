@@ -45,6 +45,8 @@ export interface Run {
   parentRunId: number | null;
   /** assumiu o trabalho desta execução */
   handoffFrom: number | null;
+  /** descartada por você: não precisa mais de atenção */
+  dismissed: boolean;
 }
 
 export interface RunWaiting { reason: string; fix: string; command: string | null }

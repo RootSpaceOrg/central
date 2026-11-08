@@ -273,6 +273,7 @@ function registerIpc(): void {
   handle('ideas:list', () => listIdeas());
   handle('ideas:create', input => { const i = createIdea(input); backlogChanged(); return i; });
   handle('ideas:update', (id, patch) => { updateIdea(id, patch); backlogChanged(); });
+  handle('ideas:seen', ids => { for (const id of ids) run(`update ideas set seen_at = ? where id = ? and seen_at is null`, new Date().toISOString(), id); backlogChanged(); });
   handle('ideas:promote', (id, slug) => { const t = promoteIdea(id, slug); backlogChanged(); return t; });
   handle('ideas:import', async () => { const r = await importPending(); backlogChanged(); return r; });
 
@@ -388,6 +389,13 @@ function registerIpc(): void {
   handle('claude:import', (id, slug) => importClaudeSession(id, slug));
   handle('chat:fromRun', runId => chatFromRun(runId));
   // descarta o "esperando você" sem retomar: a tarefa volta para a fila e a próxima execução usa a configuração atual do agente
+  handle('runs:dismiss', runId => {
+    // pausada na fila: deixa de rodar (vira interrompida); qualquer uma sai de "precisa de você"
+    run(`update runs set status = case when status = 'queued' then 'killed' else status end, paused = null, waiting = null, resume = null, dismissed = 1,
+         finished_at = coalesce(finished_at, ?) where id = ? and status not in ('preparing','running')`, new Date().toISOString(), runId);
+    emitRun.update(runDto(runId));
+    backlogChanged();
+  });
   handle('runs:dismissWaiting', runId => { run('update runs set waiting = null where id = ?', runId); emitRun.update(runDto(runId)); backlogChanged(); });
   handle('runs:resume', (runId, note) => {
     const w = get<{ waiting: string | null; agent_id: number | null; session_id: string | null }>('select waiting, agent_id, session_id from runs where id = ?', runId);
