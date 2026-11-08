@@ -1,101 +1,107 @@
 <dialog #dlg (close)="close()" aria-labelledby="td-title"
-        class="m-auto w-[min(680px,92vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
-  <form (submit)="submit($event)">
-    <header class="flex items-start justify-between gap-4 px-8 pt-7 pb-4">
-      <h2 id="td-title" class="font-display text-2xl font-semibold">{{ editing() ? 'Tarefa' : 'Nova tarefa' }}</h2>
+        class="m-auto w-[min(1100px,94vw)] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+  <form (submit)="submit($event)" (keydown.control.enter)="submit($event)" class="@container flex max-h-[90vh] flex-col">
+    <!-- topo: o que é + ações da tarefa (o que se faz com ela fica junto do nome, longe do salvar) -->
+    <header class="flex flex-wrap items-center gap-2 border-b border-edge px-7 py-4">
+      <h2 id="td-title" class="mr-auto font-display text-xl font-semibold">
+        {{ editing() ? 'Tarefa' : 'Nova tarefa' }}@if (editing(); as t) { <span class="ml-1.5 font-normal text-faint">#{{ t.id }}</span> }
+      </h2>
+      @if (editing(); as t) {
+        <button type="button" class="btn btn-sm" (click)="talk()"><app-icon name="central" [size]="15" />Conversar</button>
+        @if (t.column !== 'doing' && t.column !== 'done') {
+          <button type="button" class="btn btn-sm" (click)="toAgent()"><app-icon name="agent" [size]="15" />Mandar para agente</button>
+        }
+        @if (t.column !== 'done') {
+          <button type="button" class="btn btn-sm" (click)="markDone()" title="Vai para Feito (e sai da fila de revisão, se estiver nela)"><app-icon name="check" [size]="15" />Marcar como feito</button>
+        }
+        <button type="button" class="btn btn-ghost !p-2 hover:!text-no" (click)="remove()" title="Excluir tarefa" aria-label="Excluir tarefa"><app-icon name="delete" [size]="16" /></button>
+        <span class="mx-1 h-6 w-px bg-edge" aria-hidden="true"></span>
+      }
       <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
     </header>
 
-    <div class="space-y-4 px-8 pb-6">
-      <input class="field font-display !text-lg" placeholder="O que precisa ser feito" aria-label="Título" required
-             [value]="title()" (input)="title.set($any($event.target).value)">
-      <textarea class="field min-h-32 resize-y leading-relaxed" placeholder="Contexto, critério de pronto, links. Um agente lê isto."
-                aria-label="Descrição" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
+    <!-- corpo: texto à esquerda (grande), propriedades à direita; no estreito, uma coluna -->
+    <div class="grid min-h-0 flex-1 overflow-y-auto @3xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div class="flex min-w-0 flex-col gap-3 px-7 py-5">
+        <input class="field font-display !text-lg" placeholder="O que precisa ser feito" aria-label="Título" required
+               [value]="title()" (input)="title.set($any($event.target).value)">
+        <textarea class="field min-h-[22rem] flex-1 resize-y leading-relaxed @3xl:min-h-[28rem]" placeholder="Contexto, critério de pronto, links. Um agente lê isto."
+                  aria-label="Descrição" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
+      </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <aside class="space-y-4 border-t border-edge bg-night/40 px-6 py-5 @3xl:border-t-0 @3xl:border-l" aria-label="Propriedades">
         <div>
-          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Projeto</span>
+          <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Projeto</span>
           <app-project-select [value]="projectSlug()" (valueChange)="selectProject($event)" />
         </div>
         <div>
-          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Repositório</span>
+          <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Repositório</span>
           <app-select [options]="repoOptions()" [value]="repoPath()" (valueChange)="repoPath.set($event)" label="Repositório" />
         </div>
         <div>
-          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Coluna</span>
+          <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Coluna</span>
           <app-select [options]="columns" [value]="column()" (valueChange)="column.set($any($event))" label="Coluna" />
         </div>
         <div>
-          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Prioridade</span>
-          <div class="flex gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Prioridade">
+          <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Prioridade</span>
+          <div class="grid grid-cols-4 gap-1 rounded-xl border border-edge bg-night p-1" role="radiogroup" aria-label="Prioridade">
             @for (p of priorities; track p.value) {
               <button type="button" role="radio" [attr.aria-checked]="priority() === p.value" (click)="priority.set(p.value)"
-                      class="flex-1 rounded-full py-1.5 text-[12.5px] font-semibold"
+                      class="rounded-lg py-1.5 text-[11.5px] font-semibold"
                       [class]="priority() === p.value ? 'bg-raise ' + p.tone : 'text-faint hover:text-mute'">{{ p.label }}</button>
             }
           </div>
         </div>
-      </div>
+        <label class="block">
+          <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Depende de</span>
+          <input class="field" placeholder="ex.: #21, #22" [value]="deps()" (input)="deps.set($any($event.target).value)" aria-label="Tarefas que precisam ser entregues antes">
+          <span class="mt-1 block text-[11.5px] leading-snug text-faint">Vazio = pode começar a qualquer hora. Com dependências, só é puxada quando elas estiverem em Revisão, Em dev ou Feito.</span>
+        </label>
 
-      <label class="block">
-        <span class="mb-1.5 block text-[13px] font-semibold text-mute">Depende de</span>
-        <input class="field" placeholder="ex.: #21, #22 (vazio = pode começar a qualquer hora)" [value]="deps()" (input)="deps.set($any($event.target).value)" aria-label="Tarefas que precisam ser entregues antes">
-        <span class="mt-1 block text-[12px] text-faint">O responsável pelo A fazer só puxa esta tarefa quando as anteriores estiverem em Revisão, Em dev ou Feito.</span>
-      </label>
-
-      <!-- quadros (workflows) em que a tarefa está, além do backlog principal -->
-      @if (editing(); as t) {
-        <div>
-          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Cor do cartão</span>
-          <div class="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Cor do cartão">
-            <button type="button" role="radio" [attr.aria-checked]="!t.color" class="h-6 rounded-full border border-edge px-2 text-[12px]" [class.text-mute]="!!t.color" (click)="tasksSvc.setColor(t.id, null)">padrão</button>
-            @for (k of colors; track k.value) {
-              <button type="button" role="radio" [attr.aria-checked]="t.color === k.value" [attr.aria-label]="k.label" [title]="k.label"
-                      class="size-6 rounded-full ring-offset-2 ring-offset-panel" [style.background]="k.value" [class.ring-2]="t.color === k.value" [class.ring-text]="t.color === k.value"
-                      (click)="tasksSvc.setColor(t.id, k.value)"></button>
-            }
-          </div>
-        </div>
-        <div>
-          <span class="mb-1.5 block text-[13px] font-semibold text-mute">Quadros</span>
-          <div class="space-y-1.5">
-            @for (p of placements(); track p.boardId) {
-              @if (boards.byId().get(p.boardId); as b) {
-                <div class="flex items-center gap-2 rounded-xl border border-edge bg-night px-3 py-1.5 text-[13px]">
-                  <app-icon name="workflow" [size]="13" class="text-[#C6A6FF]" />
-                  <a [routerLink]="['/quadros', b.id]" (click)="close()" class="min-w-0 flex-1 truncate hover:underline">{{ b.name }}</a>
-                  <app-select class="w-44" [compact]="true" [options]="stageOptions().get(b.id) ?? []" [value]="p.stage" (valueChange)="boards.place(t.id, b.id, $event)"
-                              [label]="'Coluna em ' + b.name" [minWidth]="200" />
-                  <button type="button" class="rounded p-1 text-faint hover:text-no" (click)="boards.unplace(t.id, b.id)" title="Tirar deste quadro" aria-label="Tirar deste quadro"><app-icon name="close" [size]="13" /></button>
-                </div>
+        @if (editing(); as t) {
+          <div>
+            <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Cor do cartão</span>
+            <div class="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Cor do cartão">
+              <button type="button" role="radio" [attr.aria-checked]="!t.color" class="h-6 rounded-full border border-edge px-2 text-[12px]" [class.text-mute]="!!t.color" (click)="tasksSvc.setColor(t.id, null)">padrão</button>
+              @for (k of colors; track k.value) {
+                <button type="button" role="radio" [attr.aria-checked]="t.color === k.value" [attr.aria-label]="k.label" [title]="k.label"
+                        class="size-6 rounded-full ring-offset-2 ring-offset-panel" [style.background]="k.value" [class.ring-2]="t.color === k.value" [class.ring-text]="t.color === k.value"
+                        (click)="tasksSvc.setColor(t.id, k.value)"></button>
               }
-            }
-            @if (otherBoards().length) {
-              <app-select [compact]="true" [action]="true" [options]="otherBoardOptions()" (picked)="addToBoard(t.id, $event)"
-                          placeholder="Pôr num quadro…" label="Pôr em um quadro" />
-            }
+            </div>
           </div>
-        </div>
-      }
+          <!-- quadros (workflows) em que a tarefa está, além do backlog principal -->
+          <div>
+            <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Quadros</span>
+            <div class="space-y-1.5">
+              @for (p of placements(); track p.boardId) {
+                @if (boards.byId().get(p.boardId); as b) {
+                  <div class="rounded-xl border border-edge bg-night px-3 py-2 text-[13px]">
+                    <div class="flex items-center gap-2">
+                      <app-icon name="workflow" [size]="13" class="text-[#C6A6FF]" />
+                      <a [routerLink]="['/quadros', b.id]" (click)="close()" class="min-w-0 flex-1 truncate hover:underline">{{ b.name }}</a>
+                      <button type="button" class="rounded p-1 text-faint hover:text-no" (click)="boards.unplace(t.id, b.id)" title="Tirar deste quadro" aria-label="Tirar deste quadro"><app-icon name="close" [size]="13" /></button>
+                    </div>
+                    <app-select class="mt-1.5 block" [compact]="true" [options]="stageOptions().get(b.id) ?? []" [value]="p.stage" (valueChange)="boards.place(t.id, b.id, $event)"
+                                [label]="'Coluna em ' + b.name" [minWidth]="200" />
+                  </div>
+                }
+              }
+              @if (otherBoards().length) {
+                <app-select [compact]="true" [action]="true" [options]="otherBoardOptions()" (picked)="addToBoard(t.id, $event)"
+                            placeholder="Pôr num quadro…" label="Pôr em um quadro" />
+              }
+            </div>
+          </div>
+        }
+      </aside>
     </div>
 
-    <!-- ações da tarefa à esquerda; salvar sempre à direita (quebra em duas linhas quando não cabe) -->
-    <footer class="flex flex-wrap items-center gap-2 border-t border-edge px-8 py-4">
-      @if (editing(); as t) {
-        <button type="button" class="btn btn-ghost !px-2.5 !text-no" (click)="remove()" title="Excluir tarefa" aria-label="Excluir tarefa"><app-icon name="delete" [size]="17" /></button>
-        <button type="button" class="btn" (click)="talk()"><app-icon name="central" [size]="17" />Conversar</button>
-        @if (t.column !== 'doing' && t.column !== 'done') {
-          <button type="button" class="btn" (click)="toAgent()"><app-icon name="agent" [size]="17" />Mandar para agente</button>
-        }
-        @if (t.column !== 'done') {
-          <button type="button" class="btn" (click)="markDone()" title="Vai para Feito (e sai da fila de revisão, se estiver nela)"><app-icon name="check" [size]="17" />Marcar como feito</button>
-        }
-      }
+    <footer class="flex flex-wrap items-center gap-2 border-t border-edge px-7 py-3.5">
       @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
-      <div class="ml-auto flex gap-2">
-        <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
-        <button class="btn btn-primary" [disabled]="busy() || !title().trim() || (!projectSlug() && !(editing() && !editing()!.projectSlug))">{{ editing() ? 'Salvar' : 'Criar tarefa' }}</button>
-      </div>
+      <span class="ml-auto hidden text-[12px] text-faint @2xl:inline">Ctrl+Enter salva</span>
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+      <button class="btn btn-primary" [disabled]="busy() || !title().trim() || (!projectSlug() && !(editing() && !editing()!.projectSlug))">{{ editing() ? 'Salvar' : 'Criar tarefa' }}</button>
     </footer>
   </form>
 </dialog>
