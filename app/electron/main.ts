@@ -1,8 +1,8 @@
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
 import { CHAT_MEDIA, DB_PATH, DEV_ROOT, all, get, run } from './db';
@@ -56,6 +56,31 @@ const arg = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))
 const ROUTE = arg('route');
 const CAPTURE = arg('capture');
 let win: BrowserWindow | null = null;
+
+/**
+ * Caminho citado num texto: absoluto (C:\\..., /Users/..., ~/...) ou relativo a onde ele foi escrito — a pasta da
+ * execução (worktree, repositório), da conversa ou do projeto (e frentes, repositórios). O primeiro que existir.
+ */
+function resolveCited(raw: string, ctx: { run?: number | null; chat?: number | null; project?: string | null }): string | null {
+  const abs = raw.startsWith('~') ? join(homedir(), raw.slice(1)) : raw;
+  if (/^([A-Za-z]:[\\/]|\/)/.test(abs)) return existsSync(abs) ? abs : null;
+  const rel = raw.replace(/^\.?[\\/]/, '');
+  const bases: (string | null | undefined)[] = [];
+  const r = ctx.run ? get<{ worktree_path: string | null; repo_path: string; project_slug: string | null }>('select worktree_path, repo_path, project_slug from runs where id = ?', ctx.run) : null;
+  if (r) bases.push(r.worktree_path, r.repo_path);
+  if (ctx.chat) bases.push(get<{ cwd: string | null }>('select cwd from chats where id = ?', ctx.chat)?.cwd);
+  const slug = ctx.project ?? r?.project_slug ?? null;
+  if (slug) {
+    const p = get<{ folder: string; parent_slug: string | null }>('select folder, parent_slug from projects where slug = ?', slug);
+    bases.push(p?.folder, ...all<{ path: string }>('select path from repos where project_slug = ?', slug).map(x => x.path));
+    if (p?.parent_slug) bases.push(get<{ folder: string }>('select folder from projects where slug = ?', p.parent_slug)?.folder);
+    for (const k of all<{ folder: string }>('select folder from projects where parent_slug = ?', slug)) bases.push(k.folder);
+    // "Plataforma/..." escrito a partir da pasta de cima do projeto
+    if (p?.folder) bases.push(dirname(p.folder));
+  }
+  for (const b of bases) if (b && existsSync(join(b, rel))) return join(b, rel);
+  return null;
+}
 
 function send<K extends keyof Events>(channel: K, payload: Events[K]): void {
   win?.webContents.send(channel, payload);
@@ -229,10 +254,12 @@ function registerIpc(): void {
 
   handle('shell:reveal', path => { shell.openPath(path); });
   // caminho clicado num texto (escrito por agente): existe? executável só aparece na pasta, nunca roda
-  handle('shell:open', async raw => {
-    const p = raw.startsWith('~') ? join(homedir(), raw.slice(1)) : raw;
-    if (!existsSync(p)) return 'missing';
-    if (/\.(exe|bat|cmd|com|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|lnk|reg|hta|cpl|jar|sh|command|app)$/i.test(p)) { shell.showItemInFolder(p); return 'shown'; }
+  handle('shell:open', async (raw, ctx) => {
+    const p = resolveCited(raw, ctx ?? {});
+    if (!p) return 'missing';
+    // só abre direto o que é documento, imagem, mídia ou pasta; o resto (código, script, executável) só aparece na pasta
+    const safe = statSync(p).isDirectory() || /\.(html?|md|markdown|txt|pdf|png|jpe?g|gif|webp|svg|ico|json|csv|tsv|css|xml|ya?ml|log|mp4|mov|webm|mp3|wav|m4a|docx?|xlsx?|pptx?|odt|rtf)$/i.test(p);
+    if (!safe) { shell.showItemInFolder(p); return 'shown'; }
     const err = await shell.openPath(p);
     return err ? 'error' : 'ok';
   });

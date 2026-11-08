@@ -62,7 +62,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
 
     <!-- detalhe -->
     @if (current(); as it) {
-      <section class="flex min-h-0 min-w-0 flex-col" aria-label="Revisão do item">
+      <section class="flex min-h-0 min-w-0 flex-col" aria-label="Revisão do item" [attr.data-run]="it.kind === 'delivery' ? it.d.runId : null" [attr.data-project]="slugOf(it)">
         <div class="min-h-0 flex-1 overflow-y-auto px-10 pt-7 pb-10">
           <p class="flex flex-wrap items-center gap-2 text-[13px]">
             @if (project(slugOf(it)); as p) {

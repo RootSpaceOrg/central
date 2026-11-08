@@ -1108,7 +1108,7 @@ export interface Api {
   'github:clone': (fullName: string, folder: string) => void;
   'shell:reveal': (path: string) => void;
   /** abrir um caminho citado num texto: missing = não existe; shown = executável, só mostrou na pasta */
-  'shell:open': (path: string) => 'ok' | 'missing' | 'shown' | 'error';
+  'shell:open': (path: string, ctx?: { run?: number | null; chat?: number | null; project?: string | null }) => 'ok' | 'missing' | 'shown' | 'error';
   'shell:vscode': (path: string) => void;
   'shell:external': (url: string) => void;
   'dialog:folder': (defaultPath: string) => string | null;

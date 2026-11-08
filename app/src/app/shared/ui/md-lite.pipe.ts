@@ -1,5 +1,7 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
+import { linkRefs, linkUrls } from './markdown';
+
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 /**
@@ -13,7 +15,10 @@ export function mdLite(text: string): string {
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong class="font-semibold text-text">$1</strong>');
 }
 
+/** com links: #67, caminhos e URLs */
+const rich = (text: string) => linkRefs(linkUrls(mdLite(text)));
+
 @Pipe({ name: 'mdLite' })
 export class MdLitePipe implements PipeTransform {
-  transform(text: string): string { return mdLite(text); }
+  transform(text: string): string { return rich(text); }
 }

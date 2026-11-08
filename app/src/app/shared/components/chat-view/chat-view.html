@@ -1,6 +1,6 @@
 @let chat = s();
 @let agent = avatar();
-<div #list class="min-h-0 flex-1 overflow-y-auto" [class]="compact() ? 'px-4 py-4' : 'px-6 py-6'" aria-live="polite"
+<div #list [attr.data-chat]="s().current()" class="min-h-0 flex-1 overflow-y-auto" [class]="compact() ? 'px-4 py-4' : 'px-6 py-6'" aria-live="polite"
      [style.font-size.px]="prefs.prefs().fontSize" (scroll)="onScroll()">
   <div #content class="mx-auto space-y-[1.1em]" [style.max-width.px]="compact() ? null : prefs.maxWidth()">
     @if (hidden()) {

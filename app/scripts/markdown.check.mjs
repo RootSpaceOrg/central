@@ -37,7 +37,10 @@ const cases = [
   // links sem esquema (o agente escreve github.com/...): abrem no navegador; ponto/parêntese do fim ficam fora
   ['PR #1 para main (github.com/G/livros/pull/1). 1) ok', '<p>PR #1 para main (<a href="https://github.com/G/livros/pull/1" target="_blank" rel="noopener">github.com/G/livros/pull/1</a>). 1) ok</p>'],
   ['veja https://app.x.dev/a?b=1.', '<p>veja <a href="https://app.x.dev/a?b=1" target="_blank" rel="noopener">https://app.x.dev/a?b=1</a>.</p>'],
-  ['arquivos css/pagina.css e aulas.json', '<p>arquivos css/pagina.css e aulas.json</p>'],
+  // relativos (pasta/arquivo.ext): link de abrir; o clique procura na pasta da execução/conversa/projeto
+  ['arquivos css/pagina.css e aulas.json', '<p>arquivos <a href="#abrir:css%2Fpagina.css" class="ref-link path-link" title="Abrir css/pagina.css">css/pagina.css</a> e aulas.json</p>'],
+  ['Abra Plataforma/modelo-experiencia/README.md. A §0 resume', '<p>Abra <a href="#abrir:Plataforma%2Fmodelo-experiencia%2FREADME.md" class="ref-link path-link" title="Abrir Plataforma/modelo-experiencia/README.md">Plataforma/modelo-experiencia/README.md</a>. A §0 resume</p>'],
+  ['volume → trilha e 12/11/2026 e e/ou', '<p>volume → trilha e 12/11/2026 e e/ou</p>'],
   ['https://x.com/Users/a','<p><a href="https://x.com/Users/a" target="_blank" rel="noopener">https://x.com/Users/a</a></p>'],
   ['[ver](https://x.com/a#12) e (#76)', '<p><a href="https://x.com/a#12" target="_blank" rel="noopener">ver</a> e (<a href="#tarefa-76" class="ref-link" title="Abrir a tarefa #76">#76</a>)</p>'],
 ];

@@ -131,18 +131,25 @@ export class MarkdownPipe implements PipeTransform {
  */
 const PATH = /(?:[A-Za-z]:\\|~\/|\/(?:Users|home|tmp|Volumes|private)\/)[^\s<>"'`|*?]*[^\s<>"'`|*?.,;:!)\]]/g;
 
+/** relativo: pelo menos uma pasta e um arquivo com extensão (Plataforma/modelo/README.md, css/pagina.css) */
+const REL = /(^|[\s(«"'`])((?:\.\/)?(?:[\w.\-À-ÿ]+\/)+[\w\-À-ÿ]+(?:\.[\w\-À-ÿ]+)*\.[A-Za-z][A-Za-z0-9]{0,5})(?![\w/])/g;
+function linkRel(text: string): string {
+  return text.replace(REL, (m, pre: string, path: string) =>
+    `${pre}<a href="#abrir:${encodeURIComponent(path)}" class="ref-link path-link" title="Abrir ${path}">${path}</a>`);
+}
+
 function linkPathsIn(text: string, refs: boolean): string {
   let out = '', last = 0;
   for (const m of text.matchAll(PATH)) {
     const at = m.index!;
     // não pega o meio de uma URL (https://x/Users/...)
     if (at > 0 && /[\w/:]/.test(text[at - 1])) continue;
-    out += refs ? linkNumbers(text.slice(last, at)) : text.slice(last, at);
+    out += refs ? linkNumbers(linkRel(text.slice(last, at))) : linkRel(text.slice(last, at));
     const raw = m[0].replace(/&amp;/g, '&');
     out += `<a href="#abrir:${encodeURIComponent(raw)}" class="ref-link path-link" title="Abrir ${m[0]}">${m[0]}</a>`;
     last = at + m[0].length;
   }
-  return out + (refs ? linkNumbers(text.slice(last)) : text.slice(last));
+  return out + (refs ? linkNumbers(linkRel(text.slice(last))) : linkRel(text.slice(last)));
 }
 
 function linkNumbers(part: string): string {

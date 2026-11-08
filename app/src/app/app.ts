@@ -165,7 +165,9 @@ export class App {
       const href = a.getAttribute('href')!;
       if (href.startsWith('#abrir:')) {
         const path = decodeURIComponent(href.slice(7));
-        this.ipc.invoke('shell:open', path).then(r => {
+        const ctx = a.closest<HTMLElement>('[data-run],[data-chat],[data-project]');
+        const num = (v: string | undefined) => (v ? Number(v) || null : null);
+        this.ipc.invoke('shell:open', path, { run: num(ctx?.dataset['run']), chat: num(ctx?.dataset['chat']), project: ctx?.dataset['project'] || null }).then(r => {
           if (r === 'missing') alert(`Não achei este caminho nesta máquina:\n${path}`);
           else if (r === 'error') alert(`Não consegui abrir:\n${path}`);
         });
