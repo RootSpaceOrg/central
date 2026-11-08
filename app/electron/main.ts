@@ -1,6 +1,7 @@
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
 import { execFile } from 'node:child_process';
-import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Api, Events } from '../src/app/shared/contract';
@@ -227,6 +228,14 @@ function registerIpc(): void {
   handle('github:clone', (fullName, folder) => cloneRepo(fullName, folder, p => send('clone:progress', p), () => syncProjects(null, changed)));
 
   handle('shell:reveal', path => { shell.openPath(path); });
+  // caminho clicado num texto (escrito por agente): existe? executável só aparece na pasta, nunca roda
+  handle('shell:open', async raw => {
+    const p = raw.startsWith('~') ? join(homedir(), raw.slice(1)) : raw;
+    if (!existsSync(p)) return 'missing';
+    if (/\.(exe|bat|cmd|com|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|scr|lnk|reg|hta|cpl|jar|sh|command|app)$/i.test(p)) { shell.showItemInFolder(p); return 'shown'; }
+    const err = await shell.openPath(p);
+    return err ? 'error' : 'ok';
+  });
   handle('shell:vscode', path => { execFile('code', [path], { shell: true, windowsHide: true }, () => {}); });
   handle('shell:external', url => {
     if (/^https:\/\//.test(url)) shell.openExternal(url);

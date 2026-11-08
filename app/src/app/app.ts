@@ -1,6 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { NotifSoundService } from './shared/services/notif-sound/notif-sound.service';
-import { IS_WIN } from './shared/services/ipc/ipc.service';
+import { IS_WIN, IpcService } from './shared/services/ipc/ipc.service';
 import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { QuickBar } from './shared/components/quick-bar/quick-bar';
 import { Component, computed, effect, inject, signal } from '@angular/core';
@@ -77,6 +77,7 @@ export class App {
   private readonly menu = inject(ContextMenuService);
   private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
+  private readonly ipc = inject(IpcService);
   protected readonly layout = inject(LayoutService);
   private readonly live = inject(LiveService);
   /** quantos estão trabalhando agora (selo do Escritório) */
@@ -161,7 +162,16 @@ export class App {
       if (!a) return;
       e.preventDefault();
       e.stopPropagation();
-      const [, kind, n] = a.getAttribute('href')!.match(/^#(tarefa|execucao)-(\d+)$/) ?? [];
+      const href = a.getAttribute('href')!;
+      if (href.startsWith('#abrir:')) {
+        const path = decodeURIComponent(href.slice(7));
+        this.ipc.invoke('shell:open', path).then(r => {
+          if (r === 'missing') alert(`Não achei este caminho nesta máquina:\n${path}`);
+          else if (r === 'error') alert(`Não consegui abrir:\n${path}`);
+        });
+        return;
+      }
+      const [, kind, n] = href.match(/^#(tarefa|execucao)-(\d+)$/) ?? [];
       const id = Number(n);
       if (!id) return;
       if (kind === 'tarefa' && this.tasks.tasks().some(t => t.id === id)) this.dialogs.editTask(id);

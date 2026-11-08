@@ -113,24 +113,50 @@ export class MarkdownPipe implements PipeTransform {
 }
 
 /**
+ * Caminho local (C:\pasta\arquivo.html, /Users/..., ~/...): sem espaço; pontuação do fim fica fora.
+ * O App abre no programa padrão (executáveis só aparecem na pasta).
+ */
+const PATH = /(?:[A-Za-z]:\\|~\/|\/(?:Users|home|tmp|Volumes|private)\/)[^\s<>"'`|*?]*[^\s<>"'`|*?.,;:!)\]]/g;
+
+function linkPathsIn(text: string, refs: boolean): string {
+  let out = '', last = 0;
+  for (const m of text.matchAll(PATH)) {
+    const at = m.index!;
+    // não pega o meio de uma URL (https://x/Users/...)
+    if (at > 0 && /[\w/:]/.test(text[at - 1])) continue;
+    out += refs ? linkNumbers(text.slice(last, at)) : text.slice(last, at);
+    const raw = m[0].replace(/&amp;/g, '&');
+    out += `<a href="#abrir:${encodeURIComponent(raw)}" class="ref-link path-link" title="Abrir ${m[0]}">${m[0]}</a>`;
+    last = at + m[0].length;
+  }
+  return out + (refs ? linkNumbers(text.slice(last)) : text.slice(last));
+}
+
+function linkNumbers(part: string): string {
+  return part.replace(/(^|[^&\w/])#(\d{1,6})\b/g, (m, pre: string, n: string, at: number, all: string) => {
+    const before = all.slice(Math.max(0, at - 24), at + pre.length).toLowerCase();
+    if (/(pr|pull request|issue|ideia|decis[aã]o|guia|release|vers[aã]o|issue)\s*$/.test(before)) return m;
+    const kind = /(execu[cç][aã]o|execu[cç][oõ]es|run)\s*$/.test(before) ? 'execucao' : 'tarefa';
+    return `${pre}<a href="#${kind}-${n}" class="ref-link" title="Abrir ${kind === 'tarefa' ? 'a tarefa' : 'a execução'} #${n}">#${n}</a>`;
+  });
+}
+
+/**
  * "#67" vira link (o App abre a tarefa; "execução #34" abre a execução). PR, issue, ideia e decisão ficam como texto.
- * Só no texto: nada dentro de tags, links e código.
+ * Caminhos locais viram link de abrir (também dentro de `código`). Nada dentro de tags, links e blocos de código.
  */
 export function linkRefs(html: string): string {
-  let skip = 0;
+  let inA = 0, inCode = 0;
   return html.split(/(<[^>]+>)/).map(part => {
     if (part.startsWith('<')) {
-      if (/^<(a|code|pre)\b/i.test(part)) skip++;
-      else if (/^<\/(a|code|pre)>/i.test(part)) skip = Math.max(0, skip - 1);
+      if (/^<a\b/i.test(part)) inA++;
+      else if (/^<\/a>/i.test(part)) inA = Math.max(0, inA - 1);
+      else if (/^<(code|pre)\b/i.test(part)) inCode++;
+      else if (/^<\/(code|pre)>/i.test(part)) inCode = Math.max(0, inCode - 1);
       return part;
     }
-    if (skip) return part;
-    return part.replace(/(^|[^&\w/])#(\d{1,6})\b/g, (m, pre: string, n: string, at: number, all: string) => {
-      const before = all.slice(Math.max(0, at - 24), at + pre.length).toLowerCase();
-      if (/(pr|pull request|issue|ideia|decis[aã]o|guia|release|vers[aã]o|issue)\s*$/.test(before)) return m;
-      const kind = /(execu[cç][aã]o|execu[cç][oõ]es|run)\s*$/.test(before) ? 'execucao' : 'tarefa';
-      return `${pre}<a href="#${kind}-${n}" class="ref-link" title="Abrir ${kind === 'tarefa' ? 'a tarefa' : 'a execução'} #${n}">#${n}</a>`;
-    });
+    if (inA) return part;
+    return linkPathsIn(part, !inCode);
   }).join('');
 }
 

@@ -31,6 +31,10 @@ const cases = [
   ['resolver #67 e a execução #34', '<p>resolver <a href="#tarefa-67" class="ref-link" title="Abrir a tarefa #67">#67</a> e a execução <a href="#execucao-34" class="ref-link" title="Abrir a execução #34">#34</a></p>'],
   ['PR #14, ideia #49 e `#12`', '<p>PR #14, ideia #49 e <code>#12</code></p>'],
   ['Release #22 em prod', '<p>Release #22 em prod</p>'],
+  // caminhos locais: viram link de abrir (também em código); pontuação do fim fica fora; URL não
+  [String.raw`Abra C:\Users\G\proto\index.html no Chrome.`, String.raw`<p>Abra <a href="#abrir:C%3A%5CUsers%5CG%5Cproto%5Cindex.html" class="ref-link path-link" title="Abrir C:\Users\G\proto\index.html">C:\Users\G\proto\index.html</a> no Chrome.</p>`],
+  ['veja `/Users/g/app/README.md`', '<p>veja <code><a href="#abrir:%2FUsers%2Fg%2Fapp%2FREADME.md" class="ref-link path-link" title="Abrir /Users/g/app/README.md">/Users/g/app/README.md</a></code></p>'],
+  ['https://x.com/Users/a', '<p><a href="https://x.com/Users/a" target="_blank" rel="noopener">https://x.com/Users/a</a></p>'],
   ['[ver](https://x.com/a#12) e (#76)', '<p><a href="https://x.com/a#12" target="_blank" rel="noopener">ver</a> e (<a href="#tarefa-76" class="ref-link" title="Abrir a tarefa #76">#76</a>)</p>'],
 ];
 for (const [src, want] of cases) {
