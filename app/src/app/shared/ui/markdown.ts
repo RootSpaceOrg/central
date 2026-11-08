@@ -3,6 +3,19 @@ import { Pipe, PipeTransform } from '@angular/core';
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ESC[c]);
 
+/**
+ * Links soltos no texto (já escapado): https://… e domínio com caminho sem o esquema (github.com/x/y/pull/1),
+ * que abrem no navegador. A pontuação do fim fica fora.
+ */
+const DOMAIN = '(?:[a-z0-9-]+\\.)+(?:com|org|net|io|dev|app|br|ai|co|so|me|sh|cloud|page|site|tech)(?:\\.br)?';
+const URL_RE = new RegExp(`(^|[\\s(\\[])((?:https?:\\/\\/[^\\s<)\\]]*[^\\s<)\\].,;:!?])|(?:${DOMAIN}\\/[^\\s<)\\]]*[^\\s<)\\].,;:!?]))`, 'gi');
+export function linkUrls(text: string): string {
+  return text.replace(URL_RE, (_, pre: string, url: string) => {
+    const href = /^https?:/i.test(url) ? url : `https://${url}`;
+    return `${pre}<a href="${href}" target="_blank" rel="noopener">${url}</a>`;
+  });
+}
+
 /** Inline: `código`, **negrito**, *itálico*, [link](https://…). Texto já escapado. */
 function inline(s: string): string {
   const codes: string[] = [];
@@ -11,8 +24,8 @@ function inline(s: string): string {
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
     .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, '$1<em>$2</em>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  out = linkUrls(out);
   return out.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
 }
 
@@ -163,5 +176,5 @@ export function linkRefs(html: string): string {
 /** texto puro com as referências (#67) clicáveis: use com [innerHTML] */
 @Pipe({ name: 'refs' })
 export class RefsPipe implements PipeTransform {
-  transform(text: string | null | undefined): string { return linkRefs(esc(text ?? '')); }
+  transform(text: string | null | undefined): string { return linkRefs(linkUrls(esc(text ?? ''))); }
 }

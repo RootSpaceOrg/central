@@ -34,7 +34,11 @@ const cases = [
   // caminhos locais: viram link de abrir (também em código); pontuação do fim fica fora; URL não
   [String.raw`Abra C:\Users\G\proto\index.html no Chrome.`, String.raw`<p>Abra <a href="#abrir:C%3A%5CUsers%5CG%5Cproto%5Cindex.html" class="ref-link path-link" title="Abrir C:\Users\G\proto\index.html">C:\Users\G\proto\index.html</a> no Chrome.</p>`],
   ['veja `/Users/g/app/README.md`', '<p>veja <code><a href="#abrir:%2FUsers%2Fg%2Fapp%2FREADME.md" class="ref-link path-link" title="Abrir /Users/g/app/README.md">/Users/g/app/README.md</a></code></p>'],
-  ['https://x.com/Users/a', '<p><a href="https://x.com/Users/a" target="_blank" rel="noopener">https://x.com/Users/a</a></p>'],
+  // links sem esquema (o agente escreve github.com/...): abrem no navegador; ponto/parêntese do fim ficam fora
+  ['PR #1 para main (github.com/G/livros/pull/1). 1) ok', '<p>PR #1 para main (<a href="https://github.com/G/livros/pull/1" target="_blank" rel="noopener">github.com/G/livros/pull/1</a>). 1) ok</p>'],
+  ['veja https://app.x.dev/a?b=1.', '<p>veja <a href="https://app.x.dev/a?b=1" target="_blank" rel="noopener">https://app.x.dev/a?b=1</a>.</p>'],
+  ['arquivos css/pagina.css e aulas.json', '<p>arquivos css/pagina.css e aulas.json</p>'],
+  ['https://x.com/Users/a','<p><a href="https://x.com/Users/a" target="_blank" rel="noopener">https://x.com/Users/a</a></p>'],
   ['[ver](https://x.com/a#12) e (#76)', '<p><a href="https://x.com/a#12" target="_blank" rel="noopener">ver</a> e (<a href="#tarefa-76" class="ref-link" title="Abrir a tarefa #76">#76</a>)</p>'],
 ];
 for (const [src, want] of cases) {
