@@ -32,19 +32,56 @@
     </div>
   } @else if (!guide()) {
     <!-- projeto escolhido, sem sessão aberta -->
-    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-8">
-      <div class="mx-auto max-w-2xl rounded-3xl border border-edge bg-panel px-8 py-8 text-center">
-        @if (project(); as p) { <app-project-avatar [project]="p" [size]="44" class="mx-auto" /> }
-        <h2 class="mt-3 font-display text-2xl font-bold">{{ t.startTitle }}</h2>
-        <p class="mx-auto mt-2 max-w-lg text-mute">{{ t.startBody }}</p>
-        <label class="mx-auto mt-5 block max-w-lg text-left">
-          <span class="text-[13px] font-semibold">Tem algo em mente? <span class="font-normal text-faint">(opcional)</span></span>
-          <textarea class="field mt-1 min-h-20 w-full resize-y text-[13.5px]" placeholder="ex.: acho que precisamos focar em x, y e z" aria-label="Foco da sessão"
-                    [value]="focusText()" (input)="focusText.set($any($event.target).value)"></textarea>
-          <span class="text-[12px] text-faint">O {{ t.specialist }} e a Central levam isso em conta (e dizem se os números apontarem outra coisa).</span>
-        </label>
-        <button type="button" class="btn btn-primary mt-5" (click)="start()" [disabled]="starting()">
-          <app-icon [name]="t.icon" [size]="18" />{{ starting() ? 'Montando o retrato…' : t.startButton }}</button>
+    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div class="mx-auto grid max-w-6xl gap-5 @4xl:grid-cols-[minmax(0,1fr)_340px]">
+        <!-- compositor: o que você tem em mente -->
+        <section class="flex flex-col rounded-3xl border border-edge bg-panel px-7 py-6" aria-labelledby="start-title">
+          <div class="flex items-start gap-4">
+            @if (project(); as p) { <app-project-avatar [project]="p" [size]="44" /> }
+            <div class="min-w-0">
+              <h2 id="start-title" class="font-display text-2xl font-bold">{{ t.startTitle }}</h2>
+              <p class="mt-1 text-[14px] text-mute">{{ t.startBody }}</p>
+            </div>
+          </div>
+          <label class="mt-5 flex flex-1 flex-col">
+            <span class="text-[13.5px] font-semibold">Tem algo em mente? <span class="font-normal text-faint">(opcional, mas ajuda muito)</span></span>
+            <textarea class="field mt-2 min-h-[16rem] flex-1 resize-y text-[14.5px] leading-relaxed @4xl:min-h-[22rem]"
+                      [placeholder]="t.placeholder" aria-label="Foco da sessão"
+                      [value]="focusText()" (input)="focusText.set($any($event.target).value)" (keydown.control.enter)="start()"></textarea>
+          </label>
+          <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Sugestões">
+            @for (s of t.suggestions; track s) {
+              <button type="button" class="rounded-full border border-edge px-3 py-1 text-[12.5px] text-mute transition-colors hover:border-frost/50 hover:text-text" (click)="addSuggestion(s)">+ {{ s }}</button>
+            }
+          </div>
+          <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-edge pt-4">
+            <span class="min-w-0 flex-1 text-[12.5px] text-faint">O {{ t.specialist }} e a Central levam isso em conta e dizem se os números apontarem outra coisa.</span>
+            <span class="text-[12px] text-faint">Ctrl+Enter</span>
+            <button type="button" class="btn btn-primary" (click)="start()" [disabled]="starting()">
+              <app-icon [name]="t.icon" [size]="18" />{{ starting() ? 'Montando o retrato…' : t.startButton }}</button>
+          </div>
+        </section>
+
+        <!-- ao lado: o que entra na análise e a última sessão -->
+        <aside class="space-y-4">
+          <section class="rounded-3xl border border-edge bg-panel px-5 py-5" aria-labelledby="reads-title">
+            <h3 id="reads-title" class="text-[13px] font-semibold text-mute">O que entra na análise</h3>
+            <ul class="mt-3 space-y-2.5">
+              @for (r of t.reads; track r.label) {
+                <li class="flex gap-2.5 text-[13px]">
+                  <app-icon [name]="r.icon" [size]="15" class="mt-0.5 shrink-0 text-frost" />
+                  <span><b class="font-semibold">{{ r.label }}</b> <span class="text-mute">{{ r.hint }}</span></span>
+                </li>
+              }
+            </ul>
+          </section>
+          @if (history()[0]; as last) {
+            <section class="rounded-3xl border border-edge bg-panel px-5 py-5" aria-labelledby="last-title">
+              <h3 id="last-title" class="text-[13px] font-semibold text-mute">Última sessão <span class="font-normal text-faint">· {{ last.finishedAt ? (last.finishedAt | ago) : '' }}</span></h3>
+              <div class="md mt-2 line-clamp-[12] text-[13px]" [innerHTML]="(last.minutes ?? 'Sem ata.') | markdown"></div>
+            </section>
+          }
+        </aside>
       </div>
       @if (kind === 'agencia') {
         <!-- agência sem sessão: revisão automática e o time ao vivo -->

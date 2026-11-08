@@ -32,6 +32,15 @@ const TEXT = {
     startBody: 'O estrategista lê o projeto inteiro (rumo, roadmap, backlog, ideias, decisões, o que andou e o que espera produção) e abre o debate. A Central responde e monta as decisões para você. Usa Opus nos dois.',
     analysing: 'O estrategista está lendo o projeto e vai abrir o debate na conversa ao lado…',
     hints: { agora: 'agente começa já', backlog: 'tarefa em A fazer', depois: 'marco ou ideia' },
+    placeholder: 'ex.: acho que precisamos focar em x, y e z. O que te preocupa, o que você quer validar, o que talvez devesse ser cortado…',
+    suggestions: ['Validar se o rumo ainda vale', 'O que devemos cortar?', 'Estamos prontos para ir para produção?', 'O que está travando a entrega?', 'Qual o próximo marco que mais importa?'],
+    reads: [
+      { icon: 'flag' as const, label: 'Rumo e roadmap', hint: 'o que você escreveu e os marcos de Agora e Próximo' },
+      { icon: 'kanban' as const, label: 'Backlog', hint: 'tarefas por coluna e o que está parado' },
+      { icon: 'ideas' as const, label: 'Ideias e decisões', hint: 'novas, aprovadas paradas e o que espera você' },
+      { icon: 'activity' as const, label: 'Trabalho recente', hint: 'execuções e entregas da semana' },
+      { icon: 'pr' as const, label: 'Produção', hint: 'o que está em develop esperando a main' },
+    ],
     planHelp: 'Agora: um agente começa já. Backlog: tarefa em A fazer com o agente. Depois: vira marco ou ideia.',
   },
   agencia: {
@@ -40,6 +49,15 @@ const TEXT = {
     startBody: 'O diretor de agência lê o rumo, o roadmap, o backlog e como cada agente tem trabalhado, e propõe o time (papéis, quadros e rotinas). A Central responde e monta as decisões. Usa Opus nos dois.',
     analysing: 'O diretor de agência está lendo o time e vai abrir o debate na conversa ao lado…',
     hints: { agora: 'aplica já', backlog: 'vira tarefa', depois: 'vira ideia' },
+    placeholder: 'ex.: quero um time enxuto focado em x; sinto que falta alguém para y; o agente z erra sempre em…',
+    suggestions: ['Quero um time enxuto', 'Falta algum papel?', 'Quem está falhando e por quê?', 'O A fazer tem dono certo?', 'Que rotina sobra ou falta?'],
+    reads: [
+      { icon: 'agent' as const, label: 'Time', hint: 'cada agente, papel, modelo e liberdade' },
+      { icon: 'activity' as const, label: 'Desempenho', hint: 'entregas, falhas e custo da semana por agente' },
+      { icon: 'workflow' as const, label: 'Fluxos', hint: 'quadros e o agente de cada etapa' },
+      { icon: 'routine' as const, label: 'Rotinas', hint: 'o que roda sozinho e quando' },
+      { icon: 'flag' as const, label: 'Rumo e último Guiar', hint: 'para onde o projeto vai' },
+    ],
     planHelp: 'Agora: a Central cria ou muda já. Backlog: vira tarefa para depois. Depois: fica anotado como ideia.',
   },
 };
@@ -116,6 +134,8 @@ export class GuidePage {
   protected agentById(id: number) { return this.agents.byId().get(id) ?? null; }
   protected projectOf(slug: string) { return this.projects.bySlug().get(slug) ?? null; }
   protected nameOf(g: Guide): string { const p = this.projectOf(g.projectSlug); return `${p?.name ?? g.projectSlug}${g.direct ? ' (sem frente)' : ''}`; }
+
+  protected addSuggestion(s: string): void { this.focusText.update(v => (v.trim() ? `${v.trimEnd()}\n` : '') + s); }
 
   protected async start(): Promise<void> {
     const s = this.slug();
