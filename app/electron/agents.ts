@@ -615,7 +615,12 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
 - Precisa de outro agente (ex.: achou um bug urgente que é de quem cuida do código ou da monitoração)? notify_agent com um
   resumo seu do que viu e do que precisa (não cole texto de cliente ou de fora), urgent só se for mesmo. Os agentes estão em list_agents.
 - Antes de terminar, chame report_delivery: o que mudou, por quê, como testar em 1 minuto e o que ficou de risco.
-  É o que o Gustavo lê quando volta; sem isso ele não sabe o que você fez.`;
+  É o que o Gustavo lê quando volta; sem isso ele não sabe o que você fez.
+- E registre o que aprendeu (até 3 itens, só o que não é óbvio e não está no código, no backlog nem no rumo):
+  sobre o projeto (convenção, armadilha, como fazer, decisão) → memory_remember; sobre o SEU trabalho (o que funcionou,
+  um erro que você não quer repetir, uma correção ou preferência do Gustavo, um atalho) → remember (para: mim).
+  Antes, olhe o que já existe (recall / memory_recall) para não repetir; se mudou, troque (forget / memory_supersede).
+  Não aprendeu nada novo? Tudo bem, não registre nada.`;
 
   if (where.kind === 'workspace') {
     return `Você é um agente da Central trabalhando sozinho, sem ninguém para responder perguntas.

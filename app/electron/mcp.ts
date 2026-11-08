@@ -474,7 +474,8 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
   tool('memory_remember', 'Registra um fato durável que o código não mostra (decisão, convenção, armadilha, como fazer). Uma afirmação curta e auto-contida.', {
     project: z.string(), kind: z.enum(['decision', 'convention', 'gotcha', 'fact', 'howto']), text: z.string().max(400),
     links: z.array(z.string()).optional().describe('keys de arquivos/símbolos relacionados (do code_search)'),
-  }, a => createFact({ project_slug: a.project, kind: a.kind, text: a.text, links: a.links, source_kind: 'agent', author: 'agente' }), h.projects);
+  }, a => createFact({ project_slug: a.project, kind: a.kind, text: a.text, links: a.links, source_kind: 'agent',
+    author: (who ? listAgents().find(x => x.id === who)?.name : null) ?? 'agente' }), h.projects);
   tool('memory_supersede', 'Marca um fato como inválido (com motivo) e opcionalmente registra o substituto.', {
     id: z.number().int(), reason: z.string(), replacement: z.string().max(400).optional(),
   }, a => supersedeFact(a.id, a.reason, a.replacement ?? null, 'agente') ?? 'ok', h.projects);
