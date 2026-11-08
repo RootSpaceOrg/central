@@ -1,10 +1,10 @@
 <div class="flex h-full min-h-0 flex-col">
   <!-- topo -->
   <header class="flex flex-wrap items-center gap-3 border-b border-edge bg-panel px-6 py-4">
-    <app-icon name="compass" [size]="22" class="text-frost" />
+    <app-icon [name]="t.icon" [size]="22" class="text-frost" />
     <div class="min-w-0 flex-1">
-      <h1 class="font-display text-[20px] font-bold tracking-tight">Guiar{{ project() ? ' · ' + project()!.name + (scope.direct() ? ' (sem frente)' : '') : '' }}</h1>
-      <p class="text-[13px] text-mute">Retrato do projeto, debate entre o estrategista e a Central, suas decisões e o plano que os agentes executam.</p>
+      <h1 class="font-display text-[20px] font-bold tracking-tight">{{ t.title }}{{ project() ? ' · ' + project()!.name + (scope.direct() ? ' (sem frente)' : '') : '' }}</h1>
+      <p class="text-[13px] text-mute">{{ t.subtitle }}</p>
     </div>
     @if (guide(); as g) {
       <button type="button" class="btn btn-sm btn-ghost hover:!text-no" (click)="abandon(g)"><app-icon name="delete" [size]="14" />Descartar sessão</button>
@@ -15,14 +15,14 @@
   @if (!slug()) {
     <!-- sem projeto escolhido: escolha um -->
     <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-      <p class="text-mute">Escolha um projeto na lista ao lado (ou aqui) para guiar.</p>
+      <p class="text-mute">Escolha um projeto na lista ao lado (ou aqui).</p>
       <div class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
         @for (c of choices(); track c.p.slug) {
           <button type="button" (click)="scope.set(c.p.slug)" class="flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 text-left transition hover:border-faint">
             <app-project-avatar [project]="c.p" [size]="28" />
             <span class="min-w-0 flex-1">
               <span class="block truncate font-semibold">{{ c.p.name }}</span>
-              <span class="block text-[12px]" [class]="c.open ? 'text-later' : 'text-faint'">{{ c.open ? 'sessão aberta, etapa ' + c.open.step : 'guiar' }}</span>
+              <span class="block text-[12px]" [class]="c.open ? 'text-later' : 'text-faint'">{{ c.open ? 'sessão aberta, etapa ' + c.open.step : t.title.toLowerCase() }}</span>
             </span>
             <app-icon name="chevron" [size]="14" class="text-faint" />
           </button>
@@ -35,18 +35,41 @@
     <div class="min-h-0 flex-1 overflow-y-auto px-6 py-8">
       <div class="mx-auto max-w-2xl rounded-3xl border border-edge bg-panel px-8 py-8 text-center">
         @if (project(); as p) { <app-project-avatar [project]="p" [size]="44" class="mx-auto" /> }
-        <h2 class="mt-3 font-display text-2xl font-bold">Para onde vamos agora?</h2>
-        <p class="mx-auto mt-2 max-w-lg text-mute">O estrategista lê o projeto inteiro (rumo, roadmap, backlog, ideias, decisões, o que andou e o que espera
-          produção) e abre o debate. A Central responde e monta as decisões para você. Usa Opus nos dois.</p>
+        <h2 class="mt-3 font-display text-2xl font-bold">{{ t.startTitle }}</h2>
+        <p class="mx-auto mt-2 max-w-lg text-mute">{{ t.startBody }}</p>
         <label class="mx-auto mt-5 block max-w-lg text-left">
           <span class="text-[13px] font-semibold">Tem algo em mente? <span class="font-normal text-faint">(opcional)</span></span>
           <textarea class="field mt-1 min-h-20 w-full resize-y text-[13.5px]" placeholder="ex.: acho que precisamos focar em x, y e z" aria-label="Foco da sessão"
                     [value]="focusText()" (input)="focusText.set($any($event.target).value)"></textarea>
-          <span class="text-[12px] text-faint">O estrategista e a Central levam isso em conta (e dizem se os números apontarem outra coisa).</span>
+          <span class="text-[12px] text-faint">O {{ t.specialist }} e a Central levam isso em conta (e dizem se os números apontarem outra coisa).</span>
         </label>
         <button type="button" class="btn btn-primary mt-5" (click)="start()" [disabled]="starting()">
-          <app-icon name="compass" [size]="18" />{{ starting() ? 'Montando o retrato…' : 'Guiar este projeto' }}</button>
+          <app-icon [name]="t.icon" [size]="18" />{{ starting() ? 'Montando o retrato…' : t.startButton }}</button>
       </div>
+      @if (kind === 'agencia') {
+        <!-- agência sem sessão: revisão automática e o time ao vivo -->
+        <div class="mx-auto mt-6 max-w-5xl">
+          @if (auto(); as au) {
+            <section class="rounded-2xl border border-edge bg-panel px-5 py-4" aria-label="Revisão automática">
+              <h3 class="font-semibold">Revisão automática</h3>
+              <p class="mt-0.5 text-[13px] text-mute">Rotinas do diretor de agência neste projeto (Opus). O backlog ele arruma sozinho; mudança no time vira proposta aqui.</p>
+              <div class="mt-3 grid gap-2 @2xl:grid-cols-2">
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-edge px-3 py-2.5">
+                  <input type="checkbox" class="mt-1 size-4 accent-frost" [checked]="au.daily" (change)="setAuto({ daily: $any($event.target).checked })">
+                  <span><b class="text-[13.5px]">Diária (leve)</b><br><span class="text-[12.5px] text-mute">Seg a sex, 07:30: cada item do backlog com destino (A fazer com dono, ideia, descarte ou decisão para você).</span></span>
+                </label>
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-edge px-3 py-2.5">
+                  <input type="checkbox" class="mt-1 size-4 accent-frost" [checked]="au.weekly" (change)="setAuto({ weekly: $any($event.target).checked })">
+                  <span><b class="text-[13.5px]">Semanal (completa)</b><br><span class="text-[12.5px] text-mute">Segunda, 08:00: backlog, roadmap e o time contra o rumo (desempenho, papéis, quadros, rotinas). Deixa proposta se precisar mudar.</span></span>
+                </label>
+              </div>
+              <p class="mt-2 text-[12px] text-faint">Dia e hora se ajustam na tela Rotinas.</p>
+            </section>
+          }
+          <h3 class="mt-6 font-display text-lg font-semibold">O time agora</h3>
+          <div class="mt-3"><ng-container *ngTemplateOutlet="teamView; context: { $implicit: liveTeam() }" /></div>
+        </div>
+      }
       <div class="mx-auto max-w-2xl"><ng-container *ngTemplateOutlet="minutes" /></div>
     </div>
   } @else {
@@ -72,21 +95,24 @@
             @case (1) {
               @if (g.reading) {
                 <div class="rounded-2xl border border-frost/30 bg-frost/5 px-5 py-4">
-                  <p class="text-[12px] font-semibold uppercase tracking-wide text-frost">Leitura do momento</p>
+                  <p class="text-[12px] font-semibold uppercase tracking-wide text-frost">{{ t.reading }}</p>
                   <div class="md mt-1.5" [innerHTML]="g.reading | markdown"></div>
                 </div>
               } @else {
                 <div class="flex items-center gap-2 rounded-2xl border border-edge px-5 py-4 text-mute">
                   <span class="pulse size-2 rounded-full bg-frost"></span>
-                  {{ g.phase === 'analysis' ? 'O estrategista está lendo o projeto e vai abrir o debate na conversa ao lado…' : 'A Central está respondendo e montando as decisões…' }}
+                  {{ g.phase === 'analysis' ? t.analysing : 'A Central está respondendo e montando as decisões…' }}
                 </div>
               }
+              @if (kind === 'agencia') {
+                <div class="mt-4"><ng-container *ngTemplateOutlet="teamView; context: { $implicit: team(g) }" /></div>
+              } @else {
               <div class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(170px,1fr))]">
-                @for (t of tiles(g); track t.label) {
+                @for (tl of tiles(g); track tl.label) {
                   <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
-                    <p class="text-[12px] text-mute">{{ t.label }}</p>
-                    <p class="font-display text-2xl font-bold tabular-nums">{{ t.value }}</p>
-                    <p class="text-[11.5px] text-faint">{{ t.hint }}</p>
+                    <p class="text-[12px] text-mute">{{ tl.label }}</p>
+                    <p class="font-display text-2xl font-bold tabular-nums">{{ tl.value }}</p>
+                    <p class="text-[11.5px] text-faint">{{ tl.hint }}</p>
                   </div>
                 }
               </div>
@@ -121,6 +147,7 @@
                   </div>
                 }
               </div>
+              }
 
               <!-- direcionar antes de decidir -->
               <div class="mt-4 rounded-2xl border border-edge bg-panel px-4 py-3">
@@ -177,14 +204,14 @@
                     </div>
                     @if (c.strategist || c.central) {
                       <div class="mt-3 grid gap-2 text-[12.5px] @3xl:grid-cols-2">
-                        @if (c.strategist) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-[#C8A2FF]">Estrategista:</b> <span [innerHTML]="c.strategist | refs"></span></p> }
+                        @if (c.strategist) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-[#C8A2FF]">{{ t.Specialist }}:</b> <span [innerHTML]="c.strategist | refs"></span></p> }
                         @if (c.central) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-frost">Central:</b> <span [innerHTML]="c.central | refs"></span></p> }
                       </div>
                     }
                     <div class="mt-3 flex flex-wrap items-center gap-2">
                       <input class="field !py-1.5 min-w-0 flex-1 text-[13px]" placeholder="Outra resposta ou observação (opcional)" [attr.aria-label]="'Observação: ' + c.question"
                              [value]="c.answer?.note ?? ''" (change)="note(g, c, $any($event.target).value)">
-                      <button type="button" class="btn btn-sm btn-ghost" (click)="ask(g, c)" [disabled]="working()">Perguntar ao estrategista</button>
+                      <button type="button" class="btn btn-sm btn-ghost" (click)="ask(g, c)" [disabled]="working() || !g.strategistChat">Perguntar ao {{ t.specialist }}</button>
                     </div>
                   </article>
                 }
@@ -199,7 +226,7 @@
 
             <!-- 3. plano -->
             @case (3) {
-              <p class="text-[13px] text-mute">Escolha o que entra e quando. <b>Agora</b>: um agente começa já. <b>Backlog</b>: tarefa em A fazer com o agente. <b>Depois</b>: vira marco ou ideia.</p>
+              <p class="text-[13px] text-mute">Escolha o que entra e quando. {{ t.planHelp }}</p>
               <ul class="mt-3 space-y-2">
                 @for (i of g.plan; track i.id) {
                   <li class="@container flex flex-wrap items-start gap-3 rounded-2xl border bg-panel px-4 py-3" [class]="i.include ? 'border-edge' : 'border-edge opacity-50'">
@@ -301,20 +328,27 @@
         <div class="border-b border-edge px-4 py-3">
           <p class="flex items-center gap-2 text-[13px] font-semibold">
             Debate
-            @if (strategistBusy()) { <span class="flex items-center gap-1.5 font-normal text-[#C8A2FF]"><span class="pulse size-1.5 rounded-full bg-[#C8A2FF]"></span>estrategista pensando</span> }
+            @if (strategistBusy()) { <span class="flex items-center gap-1.5 font-normal text-[#C8A2FF]"><span class="pulse size-1.5 rounded-full bg-[#C8A2FF]"></span>{{ t.specialist }} pensando</span> }
             @else if (centralBusy()) { <span class="flex items-center gap-1.5 font-normal text-frost"><span class="pulse size-1.5 rounded-full bg-frost"></span>Central respondendo</span> }
           </p>
           <form class="mt-2 flex gap-2" (submit)="$event.preventDefault(); ask(g)">
-            <input class="field !py-1.5 min-w-0 flex-1 text-[13px]" placeholder="Perguntar ao estrategista…" aria-label="Pergunta ao estrategista"
+            <input class="field !py-1.5 min-w-0 flex-1 text-[13px]" [placeholder]="'Perguntar ao ' + t.specialist + '…'" [attr.aria-label]="'Pergunta ao ' + t.specialist"
                    [value]="question()" (input)="question.set($any($event.target).value)">
-            <button type="submit" class="btn btn-sm" [disabled]="asking() || strategistBusy()">Perguntar</button>
+            <button type="submit" class="btn btn-sm" [disabled]="asking() || strategistBusy() || !g.strategistChat">Perguntar</button>
           </form>
         </div>
         @if (g.centralChat) {
           <app-chat-view class="min-h-0 flex-1" [session]="session" [compact]="true" />
         } @else {
           <div class="grid flex-1 place-items-center px-6 text-center text-[13px] text-mute">
-            <p><span class="pulse mr-1.5 inline-block size-2 rounded-full bg-[#C8A2FF]"></span>O estrategista está lendo o projeto. A fala dele abre o debate aqui, e a Central responde.</p>
+            @if (g.phase === 'analysis') {
+              <p><span class="pulse mr-1.5 inline-block size-2 rounded-full bg-[#C8A2FF]"></span>O {{ t.specialist }} está lendo. A fala dele abre o debate aqui, e a Central responde.</p>
+            } @else {
+              <div>
+                <p>Esta proposta veio da revisão automática. As decisões já estão prontas ao lado.</p>
+                <button type="button" class="btn btn-sm mt-3" (click)="guides.talk(g.id)"><app-icon name="central" [size]="14" />Conversar com a Central</button>
+              </div>
+            }
           </div>
         }
       </aside>
@@ -331,9 +365,63 @@
         <details class="rounded-2xl border border-edge bg-panel px-4 py-3">
           <summary class="cursor-pointer font-semibold">{{ nameOf(h) }} <span class="font-normal text-mute">· {{ h.finishedAt ? (h.finishedAt | ago) : '' }}</span></summary>
           <div class="md mt-2 text-[13.5px]" [innerHTML]="(h.minutes ?? 'Sem ata.') | markdown"></div>
-          @if (h.centralChat) { <a routerLink="/agentes" [queryParams]="{ conversa: h.centralChat }" class="mt-2 inline-block text-[13px] text-frost hover:underline">Ver a conversa da sessão</a> }
+          <div class="mt-2 flex flex-wrap gap-4 text-[13px]">
+            @if (h.centralChat) { <a routerLink="/agentes" [queryParams]="{ conversa: h.centralChat }" class="text-frost hover:underline">Ver a conversa da sessão</a> }
+            @if (kind === 'rumo') { <a routerLink="/agencia" [queryParams]="{ projeto: h.projectSlug }" class="text-frost hover:underline">Revisar a agência para esse rumo</a> }
+          </div>
         </details>
       }
     </div>
+  }
+</ng-template>
+
+<!-- agência: o time (agentes com desempenho, quadros, rotinas, backlog) -->
+<ng-template #teamView let-tm>
+  @if (tm) {
+    <div class="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+      <div class="rounded-2xl border border-edge bg-panel px-4 py-3"><p class="text-[12px] text-mute">Agentes</p><p class="font-display text-2xl font-bold tabular-nums">{{ tm.agents?.length ?? 0 }}</p></div>
+      <div class="rounded-2xl border border-edge bg-panel px-4 py-3"><p class="text-[12px] text-mute">Backlog + A fazer</p><p class="font-display text-2xl font-bold tabular-nums">{{ (tm.backlog?.backlog ?? 0) + (tm.backlog?.todo ?? 0) }}</p><p class="text-[11.5px] text-faint">{{ tm.backlog?.stale_14d ?? 0 }} parados há 14+ dias</p></div>
+      <div class="rounded-2xl border border-edge bg-panel px-4 py-3"><p class="text-[12px] text-mute">Esperando você</p><p class="font-display text-2xl font-bold tabular-nums">{{ tm.backlog?.waiting_you ?? 0 }}</p><p class="text-[11.5px] text-faint">decisões abertas</p></div>
+      <div class="rounded-2xl border border-edge bg-panel px-4 py-3"><p class="text-[12px] text-mute">Dono do A fazer</p><p class="mt-1 truncate font-semibold" [class.text-later]="!tm.todo_owner">{{ tm.todo_owner ?? 'ninguém' }}</p></div>
+    </div>
+    <div class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
+      @for (a of tm.agents ?? []; track a.id) {
+        <article class="rounded-2xl border border-edge bg-panel px-4 py-3">
+          <p class="flex items-center gap-2">
+            @if (agentById(a.id); as ag) { <app-project-avatar [project]="ag" [size]="22" /> }
+            <span class="min-w-0 flex-1 truncate font-semibold">{{ a.name }}</span>
+            @if (a.todo_owner) { <span class="rounded-full bg-frost/15 px-2 text-[10.5px] font-semibold text-frost">A fazer</span> }
+          </p>
+          @if (a.role) { <p class="mt-1 line-clamp-2 text-[12.5px] text-mute">{{ a.role }}</p> }
+          <p class="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px]">
+            <span class="text-yes">{{ a.runs_7d.succeeded }} ok</span>
+            <span [class]="a.runs_7d.failed ? 'text-no' : 'text-faint'">{{ a.runs_7d.failed }} falhas</span>
+            @if (a.runs_7d.active) { <span class="text-frost">{{ a.runs_7d.active }} agora</span> }
+            <span class="text-faint">US$ {{ a.cost_7d_usd }} · 7 dias</span>
+          </p>
+          <p class="mt-1 text-[11.5px] text-faint">{{ a.model }} · liberdade {{ a.freedom }}{{ a.last_run ? ' · última ' : '' }}{{ a.last_run ? (date(a.last_run) | ago) : '' }}</p>
+          @if (a.boards.length || a.routines.length) {
+            <div class="mt-2 flex flex-wrap gap-1">
+              @for (b of a.boards; track b) { <span class="rounded bg-[#C6A6FF]/10 px-1.5 text-[11px] text-[#C6A6FF]">{{ b }}</span> }
+              @for (r of a.routines; track r) { <span class="rounded bg-later/10 px-1.5 text-[11px] text-later">{{ r }}</span> }
+            </div>
+          }
+        </article>
+      } @empty { <p class="text-[13px] text-later">Nenhum agente trabalha neste projeto ainda.</p> }
+    </div>
+    @if (tm.boards?.length || tm.routines?.length) {
+      <div class="mt-4 grid gap-3 @3xl:grid-cols-2">
+        <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
+          <p class="text-[12px] font-semibold text-mute">Quadros (fluxos)</p>
+          @for (b of tm.boards; track b.name) { <p class="mt-1 text-[13px]"><b>{{ b.name }}</b>: <span class="text-mute">{{ b.stages.join(' → ') }}</span></p> }
+          @empty { <p class="mt-1 text-[13px] text-faint">nenhum</p> }
+        </div>
+        <div class="rounded-2xl border border-edge bg-panel px-4 py-3">
+          <p class="text-[12px] font-semibold text-mute">Rotinas</p>
+          @for (r of tm.routines; track r.name) { <p class="mt-1 text-[13px]" [class.opacity-50]="!r.enabled"><b>{{ r.name }}</b> <span class="text-mute">· {{ r.agent ?? (r.kind === 'command' ? 'comando' : '?') }} · {{ r.when }}</span></p> }
+          @empty { <p class="mt-1 text-[13px] text-faint">nenhuma</p> }
+        </div>
+      </div>
+    }
   }
 </ng-template>

@@ -250,7 +250,7 @@ export interface IdeaDto {
 /** Guiar projeto: um card de decisão (etapa 2) */
 export interface GuideCard {
   id: string;
-  kind: 'rumo' | 'direcao' | 'prioridade';
+  kind: 'rumo' | 'direcao' | 'prioridade' | 'time' | 'fluxo' | 'rotina';
   question: string;
   context?: string;
   options: { label: string; detail?: string }[];
@@ -264,7 +264,7 @@ export interface GuideCard {
 /** Guiar projeto: um item do plano (etapa 3); when = o que o Gustavo escolheu */
 export interface GuidePlanItem {
   id: string;
-  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente';
+  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente' | 'criar_agente' | 'ajustar_agente' | 'aposentar_agente' | 'quadro' | 'rotina' | 'dono_todo';
   title: string;
   detail?: string;
   agent?: string;
@@ -292,6 +292,8 @@ export interface GuideDto {
   minutes: string | null;
   /** o que o Gustavo disse que quer focar (antes das decisões) */
   focus: string | null;
+  /** rumo = Guiar; agencia = time de agentes */
+  kind: 'rumo' | 'agencia';
   created_at: string;
   approved_at: string | null;
   finished_at: string | null;
@@ -1114,7 +1116,12 @@ export interface Api {
   'ideas:update': (id: number, patch: IdeaPatch) => void;
   'direction:get': (projectSlug: string) => DirectionDto | null;
   'guides:list': () => GuideDto[];
-  'guides:start': (projectSlug: string, direct: boolean, focus: string | null) => GuideDto;
+  'guides:start': (projectSlug: string, direct: boolean, focus: string | null, kind: 'rumo' | 'agencia') => GuideDto;
+  'guides:talk': (id: number) => void;
+  /** retrato do time ao vivo (tela Agência, sem sessão) */
+  'agency:team': (projectSlug: string, direct: boolean) => Record<string, unknown>;
+  'agency:routines': (projectSlug: string) => { daily: boolean; weekly: boolean };
+  'agency:setRoutines': (projectSlug: string, on: { daily: boolean; weekly: boolean }) => { daily: boolean; weekly: boolean };
   'guides:focus': (id: number, text: string) => void;
   'guides:step': (id: number, step: number) => void;
   'guides:answer': (id: number, cardId: string, answer: GuideCard['answer']) => void;

@@ -35,6 +35,7 @@ import { SIZE_BUDGET, createRoutine, deleteRoutine, fireRoutine, listRoutines, u
 import { getUsage } from './usage';
 import { getDirection, planBacklog, setDirection } from './direction';
 import { finishGuide, updateGuide } from './guides';
+import { proposeAgency } from './agency';
 import { createMilestone, listMilestones, updateMilestone } from './roadmap';
 import { codeImpact, codeMap, codeNeighbors, codeSymbol, searchCode } from './context/context';
 import { createFact, recallFacts, supersedeFact } from './context/memory';
@@ -130,6 +131,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     color: z.string().optional(), description: z.string().optional(),
     icon_kind: z.enum(['letter', 'emoji', 'lucide']).optional(), icon_value: z.string().optional().describe('emoji ou nome de ícone Lucide em kebab-case'),
     folder: z.string().optional(), parent_slug: z.string().nullable().optional().describe('projeto de cima (frente); null = solta'),
+    todo_agent_id: z.number().int().nullable().optional().describe('agente que puxa o A fazer do projeto (dono do A fazer); null = ninguém'),
   }, ({ slug, ...patch }) => { updateProject(slug, patch); if (patch.folder) syncProjects(slug, h.projects); }, h.projects);
   tool('delete_project', 'Remove um projeto da Central (a pasta e os repositórios continuam no disco). Só use se o Gustavo pediu explicitamente.', {
     slug: z.string(), confirm: z.literal(true).describe('precisa ser true'),
@@ -257,15 +259,23 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('guide_update', 'Sessão de "Guiar projeto": entrega a leitura do momento (reading), os cards de decisão (cards) ou o plano (plan) para a tela do Gustavo. Use o guide_id que veio na instrução.', {
     guide_id: z.number().int(), reading: z.string().optional(),
     cards: z.array(z.object({
-      id: z.string(), kind: z.enum(['rumo', 'direcao', 'prioridade']), question: z.string(), context: z.string().optional(),
+      id: z.string(), kind: z.enum(['rumo', 'direcao', 'prioridade', 'time', 'fluxo', 'rotina']), question: z.string(), context: z.string().optional(),
       options: z.array(z.object({ label: z.string(), detail: z.string().optional() })).min(1).max(5),
       recommended: z.number().int().optional(), strategist: z.string().optional(), central: z.string().optional(),
     })).optional(),
     plan: z.array(z.object({
-      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente']), title: z.string(), detail: z.string().optional(),
+      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente', 'criar_agente', 'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'dono_todo']), title: z.string(), detail: z.string().optional(),
       agent: z.string().optional(), when: z.enum(['agora', 'backlog', 'depois']),
     })).optional(),
   }, a => updateGuide(a.guide_id, { reading: a.reading, cards: a.cards as never, plan: a.plan as never }), h.projects);
+  tool('agency_propose', 'Revisão da agência: deixa uma proposta de mudança no time (agentes, quadros, rotinas) esperando o Gustavo na tela Agência. cards no mesmo formato do guide_update (kinds time, fluxo, rotina). Não mude o time você mesmo.', {
+    project_slug: z.string(), reading: z.string(),
+    cards: z.array(z.object({
+      id: z.string(), kind: z.enum(['time', 'fluxo', 'rotina']), question: z.string(), context: z.string().optional(),
+      options: z.array(z.object({ label: z.string(), detail: z.string().optional() })).min(1).max(5),
+      recommended: z.number().int().optional(), strategist: z.string().optional(), central: z.string().optional(),
+    })).min(1).max(8),
+  }, a => proposeAgency(a.project_slug, a.reading, a.cards as never), h.projects);
   tool('guide_finish', 'Fecha a sessão de "Guiar projeto" com a ata (markdown curto: o que foi decidido, o plano e o porquê), depois de executar o plano aprovado.', {
     guide_id: z.number().int(), minutes: z.string(),
   }, a => finishGuide(a.guide_id, a.minutes), h.projects);

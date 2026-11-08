@@ -23,6 +23,23 @@ const STRATEGIST = 'Estrategista';
 let guidesChanged = () => {};
 export function onGuidesChanged(fn: () => void): void { guidesChanged = fn; }
 
+/**
+ * Tipo de sessão: o mesmo motor (debate, cards, plano, execução, ata) com outro especialista, retrato e prompts.
+ * 'rumo' = Guiar (aqui); 'agencia' = time de agentes (agency.ts registra).
+ */
+export interface GuideProfile {
+  label: string;
+  specialist: () => number;
+  snapshot: (slug: string, direct: boolean) => Promise<Record<string, unknown>>;
+  analysis: (g: GuideDto) => string;
+  reply: (g: GuideDto, said: string) => string;
+  plan: (g: GuideDto, cards: GuideCard[]) => string;
+  execute: (g: GuideDto, cards: GuideCard[], plan: GuidePlanItem[]) => string;
+}
+const profiles = new Map<string, GuideProfile>();
+export function registerProfile(kind: string, p: GuideProfile): void { profiles.set(kind, p); }
+const profileOf = (g: { kind?: string | null }) => profiles.get(g.kind || 'rumo') ?? profiles.get('rumo')!;
+
 export const getGuide = (id: number) => get<GuideDto>('select * from guides where id = ?', id) ?? null;
 export const listGuides = () => all<GuideDto>(`select * from guides where status != 'abandoned' order by id desc limit 200`);
 
@@ -45,7 +62,7 @@ tarefas, marcos e números), curto e direto. Nunca crie, edite nem mude nada: qu
 }
 
 /** escopo em texto, para os prompts */
-function scopeText(slug: string, direct: boolean): string {
+export function scopeText(slug: string, direct: boolean): string {
   const p = get<{ name: string }>('select name from projects where slug = ?', slug);
   const kids = all<{ slug: string; name: string }>('select slug, name from projects where parent_slug = ?', slug);
   if (!kids.length) return `"${p?.name ?? slug}" (slug ${slug})`;
@@ -120,7 +137,7 @@ Agora você:
      strategist (a posição dele em 1 linha) e central (a sua em 1 linha).
 Não mude nada no projeto ainda. Termine dizendo em 1 linha que os cards estão prontos.`;
 
-function cardsText(cards: GuideCard[]): string {
+export function cardsText(cards: GuideCard[]): string {
   return cards.map(c => {
     const a = c.answer;
     const pick = a?.choice != null ? c.options[a.choice]?.label : null;
@@ -165,21 +182,22 @@ function toCentral(g: GuideDto, text: string, d: GuideDeps): void {
   if (!g.central_chat) {
     const id = sendChat(null, central, text, d.notify, d.changed, null, MODEL, true);
     run('update guides set central_chat = ? where id = ?', id, g.id);
-    run('update chats set title = ? where id = ?', `Guiar: ${get<{ name: string }>('select name from projects where slug = ?', g.project_slug)?.name ?? g.project_slug}`, id);
+    run('update chats set title = ? where id = ?', `${profileOf(g).label}: ${get<{ name: string }>('select name from projects where slug = ?', g.project_slug)?.name ?? g.project_slug}`, id);
     return;
   }
   sendChat(g.central_chat, central, text, d.notify, d.changed, null, null, true);
 }
 
-export async function startGuide(slug: string, direct: boolean, focus: string | null, d: GuideDeps): Promise<GuideDto> {
-  const open = get<GuideDto>(`select * from guides where project_slug = ? and direct = ? and status = 'open'`, slug, direct ? 1 : 0);
+export async function startGuide(slug: string, direct: boolean, focus: string | null, d: GuideDeps, kind = 'rumo'): Promise<GuideDto> {
+  const open = get<GuideDto>(`select * from guides where project_slug = ? and direct = ? and kind = ? and status = 'open'`, slug, direct ? 1 : 0, kind);
   if (open) return open;
-  const snap = await snapshot(slug, direct);
-  const id = Number(run(`insert into guides (project_slug, direct, snapshot, phase, focus) values (?,?,?, 'analysis', ?)`, slug, direct ? 1 : 0, JSON.stringify(snap, null, 1), focus?.trim() || null).lastInsertRowid);
+  const prof = profileOf({ kind });
+  const snap = await prof.snapshot(slug, direct);
+  const id = Number(run(`insert into guides (project_slug, direct, snapshot, phase, focus, kind) values (?,?,?, 'analysis', ?, ?)`, slug, direct ? 1 : 0, JSON.stringify(snap, null, 1), focus?.trim() || null, kind).lastInsertRowid);
   const g = getGuide(id)!;
-  const sid = sendChat(null, strategist(), analysisPrompt(g), d.notify, d.changed, null, MODEL);
+  const sid = sendChat(null, prof.specialist(), prof.analysis(g), d.notify, d.changed, null, MODEL);
   run('update guides set strategist_chat = ? where id = ?', sid, id);
-  run('update chats set title = ? where id = ?', `Guiar (estrategista): ${String(snap.project)}`, sid);
+  run('update chats set title = ? where id = ?', `${prof.label} (especialista): ${String(snap.project)}`, sid);
   d.changed();
   return getGuide(id)!;
 }
@@ -191,10 +209,10 @@ export function guideIdle(chatId: number, d: GuideDeps): void {
   if (chatId === g.strategist_chat && (g.phase === 'analysis' || g.phase === 'consult')) {
     const last = get<{ text: string }>(`select text from chat_messages where chat_id = ? and role = 'assistant' order by id desc limit 1`, chatId)?.text;
     if (!last) return;
-    const peer = JSON.stringify({ agent_id: strategist(), text: last });
+    const peer = JSON.stringify({ agent_id: get<{ a: number }>('select agent_id a from chats where id = ?', chatId)?.a ?? profileOf(g).specialist(), text: last });
     if (g.phase === 'analysis') {
       run(`update guides set phase = 'reply' where id = ?`, g.id);
-      toCentral(g, replyPrompt(g, last), d);
+      toCentral(g, profileOf(g).reply(g, last), d);
       const fresh = getGuide(g.id)!;
       // a fala do estrategista entra antes da resposta da Central
       saveMessage(fresh.central_chat!, 'peer', peer, d.notify);
@@ -202,7 +220,7 @@ export function guideIdle(chatId: number, d: GuideDeps): void {
       run(`update guides set phase = 'reply' where id = ?`, g.id);
       if (g.central_chat) {
         saveMessage(g.central_chat, 'peer', peer, d.notify);
-        toCentral(g, `[Guia #${g.id}] O estrategista respondeu ao Gustavo:
+        toCentral(g, `[Sessão #${g.id}] O especialista (${profileOf(g).label}) respondeu ao Gustavo:
 
 ${last}
 
@@ -222,7 +240,7 @@ export function askStrategist(id: number, question: string, d: GuideDeps): void 
   if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
   const recent = g.central_chat ? all<{ role: string; text: string }>(`select role, text from chat_messages where chat_id = ? and role in ('user','assistant') order by id desc limit 6`, g.central_chat).reverse() : [];
   run(`update guides set phase = 'consult' where id = ?`, id);
-  sendChat(g.strategist_chat, strategist(), `[Guia #${id}] O Gustavo quer sua opinião${question.trim() ? `: ${question.trim()}` : ' sobre o ponto atual'}.
+  sendChat(g.strategist_chat, profileOf(g).specialist(), `[Sessão #${id}] O Gustavo quer sua opinião${question.trim() ? `: ${question.trim()}` : ' sobre o ponto atual'}.
 Conversa recente (Gustavo e Central):
 ${recent.map(m => `${m.role === 'user' ? 'Gustavo' : 'Central'}: ${m.text.slice(0, 1200)}`).join('\n\n') || '(nada ainda)'}
 
@@ -261,9 +279,9 @@ export function setFocus(id: number, text: string, d: GuideDeps): void {
   const t = text.trim();
   if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
   if (!t) throw new Error('Escreva o direcionamento.');
-  if (!g.central_chat) throw new Error('Espere o estrategista abrir o debate (o direcionamento vai para a Central).');
+  if (!g.central_chat) { toCentral(g, `[Sessão #${id}] Você está numa sessão de ${profileOf(g).label} do projeto ${g.project_slug}. Retrato:\n${g.snapshot}\n\nCards atuais:\n${cardsText(parse<GuideCard>(g.cards))}`, d); g.central_chat = getGuide(id)!.central_chat; }
   run(`update guides set focus = ?, phase = 'reply' where id = ?`, g.focus ? `${g.focus}\n${t}` : t, id);
-  saveMessage(g.central_chat, 'user', `🧭 Direcionamento: ${t}`, d.notify);
+  saveMessage(g.central_chat!, 'user', `🧭 Direcionamento: ${t}`, d.notify);
   toCentral(g, `[Guia #${id}] O Gustavo deu um direcionamento antes de decidir: "${t}".
 Refaça os cards com guide_update em torno disso (pode manter, mudar ou trocar cards; os que continuarem iguais mantêm o mesmo id).
 Se o foco dele deixar de fora algo urgente, diga. Responda aqui em 2 a 3 linhas o que mudou.`, d);
@@ -290,7 +308,7 @@ export function requestPlan(id: number, d: GuideDeps): void {
   const cards = parse<GuideCard>(g.cards);
   if (!cards.some(c => c.answer)) throw new Error('Responda pelo menos um card.');
   run(`update guides set phase = 'reply' where id = ?`, id);
-  toCentral(g, planPrompt(g, cards), d);
+  toCentral(g, profileOf(g).plan(g, cards), d);
   d.changed();
 }
 
@@ -305,10 +323,10 @@ export function approvePlan(id: number, d: GuideDeps): void {
     const pick = c.answer!.choice != null ? c.options[c.answer!.choice]?.label : null;
     run(`insert into proposals (project_slug, title, body, status, source, source_ref, summary) values (?,?,?, 'approved', 'guia', ?, ?)`,
       g.project_slug, c.question, `${c.context ?? ''}\n\nEscolha: ${pick ?? 'outra'}${c.answer!.note ? `\nNota: ${c.answer!.note}` : ''}`.trim(),
-      `guia-${id}-${c.id}`, pick ?? c.answer!.note ?? null);
+      `${g.kind === 'agencia' ? 'agencia' : 'guia'}-${id}-${c.id}`, pick ?? c.answer!.note ?? null);
   }
   run(`update guides set step = 4, phase = 'reply', approved_at = ? where id = ?`, now(), id);
-  toCentral(g, executePrompt(g, cards, plan), d);
+  toCentral(g, profileOf(g).execute(g, cards, plan), d);
   d.changed();
 }
 
@@ -322,3 +340,25 @@ export function finishGuide(id: number, minutes: string): string {
 }
 
 export function abandonGuide(id: number): void { run(`update guides set status = 'abandoned', finished_at = ? where id = ? and status = 'open'`, now(), id); }
+
+registerProfile('rumo', {
+  label: 'Guiar', specialist: strategist, snapshot, analysis: analysisPrompt, reply: replyPrompt, plan: planPrompt, execute: executePrompt,
+});
+
+/** sessão sem conversa ainda (proposta da revisão semanal): abre a conversa com a Central já com o contexto */
+export function talkGuide(id: number, d: GuideDeps): void {
+  const g = getGuide(id);
+  if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
+  if (g.central_chat) return;
+  run(`update guides set phase = 'reply' where id = ?`, id);
+  toCentral(g, `[Sessão #${id}] Sessão de ${profileOf(g).label} do projeto ${g.project_slug}, aberta pela revisão automática com esta proposta.
+Leitura: ${g.reading ?? '(sem leitura)'}
+Retrato:
+${g.snapshot}
+
+Cards:
+${cardsText(parse<GuideCard>(g.cards))}
+
+Apresente a proposta ao Gustavo em 3 a 5 linhas e fique à disposição para ajustar os cards (guide_update, guide_id ${id}).`, d);
+  d.changed();
+}

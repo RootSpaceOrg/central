@@ -36,6 +36,7 @@ export interface Guide {
   strategistChat: number | null;
   minutes: string | null;
   focus: string | null;
+  kind: 'rumo' | 'agencia';
   createdAt: Date;
   approvedAt: Date | null;
   finishedAt: Date | null;
@@ -45,7 +46,7 @@ const json = <T>(v: string | null, d: T): T => { try { return v ? JSON.parse(v) 
 const toGuide = (d: GuideDto): Guide => ({
   id: d.id, projectSlug: d.project_slug, direct: !!d.direct, status: d.status, step: d.step, phase: d.phase,
   snapshot: json(d.snapshot, {} as GuideSnapshot), reading: d.reading, cards: json(d.cards, []), plan: json(d.plan, []),
-  centralChat: d.central_chat, strategistChat: d.strategist_chat, minutes: d.minutes, focus: d.focus ?? null, createdAt: new Date(d.created_at),
+  centralChat: d.central_chat, strategistChat: d.strategist_chat, minutes: d.minutes, focus: d.focus ?? null, kind: d.kind ?? 'rumo', createdAt: new Date(d.created_at),
   approvedAt: d.approved_at ? new Date(d.approved_at) : null, finishedAt: d.finished_at ? new Date(d.finished_at) : null,
 });
 
@@ -65,14 +66,18 @@ export class GuidesService {
   load(): void { this.ipc.invoke('guides:list').then(l => this.guides.set(l.map(toGuide))); }
 
   /** sessão aberta deste escopo (projeto inteiro ou só o projeto direto) */
-  openFor(slug: string, direct: boolean): Guide | null { return this.open().find(g => g.projectSlug === slug && g.direct === direct) ?? null; }
+  openFor(slug: string, direct: boolean, kind: Guide['kind'] = 'rumo'): Guide | null { return this.open().find(g => g.projectSlug === slug && g.direct === direct && g.kind === kind) ?? null; }
 
   private async act<T>(p: Promise<T>): Promise<T | null> {
     this.error.set(null);
     try { const r = await p; this.load(); return r; } catch (e) { this.error.set(errorMessage(e)); return null; }
   }
 
-  start(slug: string, direct: boolean, focus: string | null) { return this.act(this.ipc.invoke('guides:start', slug, direct, focus)); }
+  start(slug: string, direct: boolean, focus: string | null, kind: Guide['kind'] = 'rumo') { return this.act(this.ipc.invoke('guides:start', slug, direct, focus, kind)); }
+  talk(id: number) { return this.act(this.ipc.invoke('guides:talk', id)); }
+  team(slug: string, direct: boolean) { return this.ipc.invoke('agency:team', slug, direct); }
+  routines(slug: string) { return this.ipc.invoke('agency:routines', slug); }
+  setRoutines(slug: string, on: { daily: boolean; weekly: boolean }) { return this.act(this.ipc.invoke('agency:setRoutines', slug, on)); }
   focus(id: number, text: string) { return this.act(this.ipc.invoke('guides:focus', id, text)); }
   step(id: number, step: number) { this.guides.update(l => l.map(g => (g.id === id ? { ...g, step } : g))); return this.act(this.ipc.invoke('guides:step', id, step)); }
   answer(id: number, cardId: string, answer: GuideCard['answer']) {

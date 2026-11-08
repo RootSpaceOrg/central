@@ -15,7 +15,8 @@ export const routes: Routes = [
   { path: 'execucoes', title: 'Execuções', loadComponent: () => import('./modules/runs/pages/runs-page/runs-page').then(m => m.RunsPage) },
   { path: 'extensoes', title: 'Extensões', loadComponent: () => import('./modules/extensions/pages/extensions-page/extensions-page').then(m => m.ExtensionsPage) },
   { path: 'extensoes/:id', title: 'Extensão', loadComponent: () => import('./modules/extensions/pages/extension-page/extension-page').then(m => m.ExtensionPage) },
-  { path: 'guiar', title: 'Guiar', loadComponent: () => import('./modules/guide/pages/guide-page/guide-page').then(m => m.GuidePage) },
+  { path: 'guiar', title: 'Guiar', data: { kind: 'rumo' }, loadComponent: () => import('./modules/guide/pages/guide-page/guide-page').then(m => m.GuidePage) },
+  { path: 'agencia', title: 'Agência', data: { kind: 'agencia' }, loadComponent: () => import('./modules/guide/pages/guide-page/guide-page').then(m => m.GuidePage) },
   { path: 'revisao', title: 'Revisão', loadComponent: () => import('./modules/review/pages/review-page/review-page').then(m => m.ReviewPage) },
   { path: 'rotinas', title: 'Rotinas', loadComponent: () => import('./modules/routines/pages/routines-page/routines-page').then(m => m.RoutinesPage) },
   {

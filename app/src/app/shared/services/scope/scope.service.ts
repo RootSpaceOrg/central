@@ -6,7 +6,7 @@ import { filter, map } from 'rxjs';
 import { ProjectsService } from '../projects/projects.service';
 
 /** telas que respeitam o projeto escolhido na barra lateral (as outras abrem a página do projeto) */
-export const SCOPED = new Set(['/triagem', '/ideias', '/revisao', '/backlog', '/quadros', '/escritorio', '/agentes', '/execucoes', '/rotinas', '/guiar']);
+export const SCOPED = new Set(['/triagem', '/ideias', '/revisao', '/backlog', '/quadros', '/escritorio', '/agentes', '/execucoes', '/rotinas', '/guiar', '/agencia']);
 
 /**
  * Escopo de projeto: o projeto escolhido na barra lateral filtra a tela atual. A URL manda (?projeto=), então

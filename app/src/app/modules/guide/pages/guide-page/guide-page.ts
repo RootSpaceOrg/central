@@ -1,6 +1,6 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { ChatView } from '../../../../shared/components/chat-view/chat-view';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -21,8 +21,36 @@ const STEPS = [
   { n: 3, label: 'Plano' },
   { n: 4, label: 'Em andamento' },
 ];
-const KIND: Record<string, string> = { rumo: 'Rumo e roadmap', direcao: 'Direção', prioridade: 'Priorizar e cortar' };
-const ITEM_KIND: Record<string, string> = { rumo: 'rumo', marco: 'marco', tarefa: 'tarefa', ideia: 'ideia', cortar: 'cortar', agente: 'agente' };
+const KIND: Record<string, string> = {
+  rumo: 'Rumo e roadmap', direcao: 'Direção', prioridade: 'Priorizar e cortar', time: 'Time', fluxo: 'Fluxo (quadros)', rotina: 'Rotinas',
+};
+/** textos de cada tipo de sessão (mesma tela, mesmo motor) */
+const TEXT = {
+  rumo: {
+    title: 'Guiar', icon: 'compass' as const, subtitle: 'Retrato do projeto, debate entre o estrategista e a Central, suas decisões e o plano que os agentes executam.',
+    specialist: 'estrategista', Specialist: 'Estrategista', startTitle: 'Para onde vamos agora?', startButton: 'Guiar este projeto', step1: 'Retrato', reading: 'Leitura do momento',
+    startBody: 'O estrategista lê o projeto inteiro (rumo, roadmap, backlog, ideias, decisões, o que andou e o que espera produção) e abre o debate. A Central responde e monta as decisões para você. Usa Opus nos dois.',
+    analysing: 'O estrategista está lendo o projeto e vai abrir o debate na conversa ao lado…',
+    hints: { agora: 'agente começa já', backlog: 'tarefa em A fazer', depois: 'marco ou ideia' },
+    planHelp: 'Agora: um agente começa já. Backlog: tarefa em A fazer com o agente. Depois: vira marco ou ideia.',
+  },
+  agencia: {
+    title: 'Agência', icon: 'users' as const, subtitle: 'O time de agentes do projeto: quem faz o quê, os fluxos e as rotinas, revisados pelo diretor de agência e a Central.',
+    specialist: 'diretor de agência', Specialist: 'Diretor', startTitle: 'O time dá conta desse rumo?', startButton: 'Revisar a agência', step1: 'Retrato do time', reading: 'Leitura do time',
+    startBody: 'O diretor de agência lê o rumo, o roadmap, o backlog e como cada agente tem trabalhado, e propõe o time (papéis, quadros e rotinas). A Central responde e monta as decisões. Usa Opus nos dois.',
+    analysing: 'O diretor de agência está lendo o time e vai abrir o debate na conversa ao lado…',
+    hints: { agora: 'aplica já', backlog: 'vira tarefa', depois: 'vira ideia' },
+    planHelp: 'Agora: a Central cria ou muda já. Backlog: vira tarefa para depois. Depois: fica anotado como ideia.',
+  },
+};
+type TeamAgent = { id: number; name: string; role: string | null; model: string; freedom: string; central: boolean; runs_7d: { succeeded: number; failed: number; active: number };
+  cost_7d_usd: number; last_run: string | null; todo_owner: boolean; boards: string[]; routines: string[] };
+export interface Team { agents: TeamAgent[]; boards: { name: string; stages: string[] }[]; routines: { name: string; agent: string | null; enabled: boolean; when: string; kind: string }[];
+  todo_owner: string | null; backlog: { backlog: number; todo: number; doing: number; stale_14d: number; waiting_you: number } }
+const ITEM_KIND: Record<string, string> = {
+  rumo: 'rumo', marco: 'marco', tarefa: 'tarefa', ideia: 'ideia', cortar: 'cortar', agente: 'agente',
+  criar_agente: 'novo agente', ajustar_agente: 'ajustar agente', aposentar_agente: 'aposentar', quadro: 'quadro', rotina: 'rotina', dono_todo: 'dono do A fazer',
+};
 const WHEN: { id: GuidePlanItem['when']; label: string }[] = [{ id: 'agora', label: 'Agora' }, { id: 'backlog', label: 'Backlog' }, { id: 'depois', label: 'Depois' }];
 
 /**
@@ -37,6 +65,9 @@ const WHEN: { id: GuidePlanItem['when']; label: string }[] = [{ id: 'agora', lab
 })
 export class GuidePage {
   protected readonly guides = inject(GuidesService);
+  /** tipo da sessão: vem da rota (/guiar = rumo, /agencia = agencia) */
+  protected readonly kind: 'rumo' | 'agencia' = inject(ActivatedRoute).snapshot.data['kind'] ?? 'rumo';
+  protected readonly t = TEXT[this.kind];
   protected readonly scope = inject(ScopeService);
   protected readonly projects = inject(ProjectsService);
   private readonly agents = inject(AgentsService);
@@ -58,10 +89,10 @@ export class GuidePage {
   /** o que está escolhido na barra lateral */
   protected readonly slug = computed(() => this.scope.slug());
   protected readonly project = computed(() => this.scope.project());
-  protected readonly guide = computed(() => (this.slug() ? this.guides.openFor(this.slug()!, this.scope.direct()) : null));
-  protected readonly history = computed(() => this.guides.guides().filter(g => g.status === 'done' && (!this.slug() || this.scope.matches(g.projectSlug))));
+  protected readonly guide = computed(() => (this.slug() ? this.guides.openFor(this.slug()!, this.scope.direct(), this.kind) : null));
+  protected readonly history = computed(() => this.guides.guides().filter(g => g.kind === this.kind && g.status === 'done' && (!this.slug() || this.scope.matches(g.projectSlug))));
   /** sem projeto escolhido: projetos vivos de cima, com a sessão aberta (se houver) */
-  protected readonly choices = computed(() => this.projects.living().filter(p => !p.parentSlug).map(p => ({ p, open: this.guides.open().find(g => g.projectSlug === p.slug) ?? null })));
+  protected readonly choices = computed(() => this.projects.living().filter(p => !p.parentSlug).map(p => ({ p, open: this.guides.open().find(g => g.projectSlug === p.slug && g.kind === this.kind) ?? null })));
 
   /** a conversa do debate (a da Central) */
   protected readonly session = this.chat.spawn(null);
@@ -82,6 +113,7 @@ export class GuidePage {
   }
 
   protected date(v: string): Date { return new Date(v); }
+  protected agentById(id: number) { return this.agents.byId().get(id) ?? null; }
   protected projectOf(slug: string) { return this.projects.bySlug().get(slug) ?? null; }
   protected nameOf(g: Guide): string { const p = this.projectOf(g.projectSlug); return `${p?.name ?? g.projectSlug}${g.direct ? ' (sem frente)' : ''}`; }
 
@@ -89,7 +121,7 @@ export class GuidePage {
     const s = this.slug();
     if (!s) return;
     this.starting.set(true);
-    await this.guides.start(s, this.scope.direct(), this.focusText().trim() || null);
+    await this.guides.start(s, this.scope.direct(), this.focusText().trim() || null, this.kind);
     this.focusText.set('');
     this.starting.set(false);
   }
@@ -124,9 +156,9 @@ export class GuidePage {
   protected columns(g: Guide) {
     const inc = g.plan.filter(p => p.include);
     return [
-      { id: 'agora', label: 'Agora', hint: 'agente começa já', tone: 'text-yes', items: inc.filter(p => p.when === 'agora') },
-      { id: 'backlog', label: 'Backlog', hint: 'tarefa em A fazer', tone: 'text-frost', items: inc.filter(p => p.when === 'backlog') },
-      { id: 'depois', label: 'Depois', hint: 'marco ou ideia', tone: 'text-mute', items: inc.filter(p => p.when === 'depois') },
+      { id: 'agora', label: 'Agora', hint: this.t.hints.agora, tone: 'text-yes', items: inc.filter(p => p.when === 'agora') },
+      { id: 'backlog', label: 'Backlog', hint: this.t.hints.backlog, tone: 'text-frost', items: inc.filter(p => p.when === 'backlog') },
+      { id: 'depois', label: 'Depois', hint: this.t.hints.depois, tone: 'text-mute', items: inc.filter(p => p.when === 'depois') },
     ];
   }
   /** tarefas do escopo que andaram desde a aprovação */
@@ -140,9 +172,28 @@ export class GuidePage {
   protected readonly kindTone: Record<string, string> = {
     rumo: 'bg-[#C8A2FF]/15 text-[#C8A2FF]', marco: 'bg-later/15 text-later', tarefa: 'bg-frost/15 text-frost',
     ideia: 'bg-yes/15 text-yes', cortar: 'bg-no/15 text-no', agente: 'bg-frost/15 text-frost',
+    criar_agente: 'bg-yes/15 text-yes', ajustar_agente: 'bg-frost/15 text-frost', aposentar_agente: 'bg-no/15 text-no', quadro: 'bg-[#C6A6FF]/15 text-[#C6A6FF]',
+    rotina: 'bg-later/15 text-later', dono_todo: 'bg-frost/15 text-frost',
   };
 
-  protected abandon(g: Guide): void { if (confirm('Descartar esta sessão de guia? A conversa fica no histórico do agente.')) this.guides.abandon(g.id); }
+  protected abandon(g: Guide): void { if (confirm('Descartar esta sessão? A conversa fica no histórico do agente.')) this.guides.abandon(g.id); }
+
+  // ---------- agência: o time ao vivo (sem sessão) e as revisões automáticas ----------
+  protected readonly liveTeam = signal<Team | null>(null);
+  protected readonly auto = signal<{ daily: boolean; weekly: boolean } | null>(null);
+  private readonly loadTeam = effect(() => {
+    const s = this.slug(), direct = this.scope.direct();
+    if (this.kind !== 'agencia' || !s) { this.liveTeam.set(null); this.auto.set(null); return; }
+    this.guides.team(s, direct).then(t => this.liveTeam.set(t as unknown as Team), () => this.liveTeam.set(null));
+    this.guides.routines(s).then(r => this.auto.set(r));
+  });
+  protected async setAuto(patch: Partial<{ daily: boolean; weekly: boolean }>): Promise<void> {
+    const s = this.slug(), cur = this.auto();
+    if (!s || !cur) return;
+    const r = await this.guides.setRoutines(s, { ...cur, ...patch });
+    if (r) this.auto.set(r);
+  }
+  protected team(g: Guide): Team { return g.snapshot as unknown as Team; }
 
   /** etapa 4: o que nasceu depois de aprovar (execuções do projeto desde então) */
   protected readonly since = computed(() => {

@@ -34,7 +34,8 @@ import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reor
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
-import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide } from './guides';
+import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, talkGuide } from './guides';
+import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -271,7 +272,11 @@ function registerIpc(): void {
   const guideDeps = { notify: chatNotify, changed: () => { send('guides:changed', null); changed(); } };
   onGuidesChanged(() => send('guides:changed', null));
   handle('guides:list', () => listGuides());
-  handle('guides:start', (slug, direct, focus) => startGuide(slug, direct, focus, guideDeps));
+  handle('guides:start', (slug, direct, focus, kind) => startGuide(slug, direct, focus, guideDeps, kind ?? 'rumo'));
+  handle('guides:talk', id => talkGuide(id, guideDeps));
+  handle('agency:team', (slug, direct) => teamSnapshot(slug, direct));
+  handle('agency:routines', slug => agencyRoutines(slug));
+  handle('agency:setRoutines', (slug, on) => { const r = setAgencyRoutines(slug, on); routinesChanged(); return r; });
   handle('guides:focus', (id, text) => setFocus(id, text, guideDeps));
   handle('guides:step', (id, step) => { setStep(id, step); send('guides:changed', null); });
   handle('guides:answer', (id, cardId, answer) => { answerCard(id, cardId, answer); send('guides:changed', null); });
