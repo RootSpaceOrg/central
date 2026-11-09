@@ -4,6 +4,7 @@
  * %APPDATA%/Central/extensions/<id>/ e rodado num processo próprio (utilityProcess): se ela travar ou cair, a Central
  * segue; ela volta sozinha. O hash de cada arquivo vem fixo no app (ext-catalog.json): arquivo diferente não roda.
  */
+import { downloadAsset } from './github';
 import { UtilityProcess, app, utilityProcess } from 'electron';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -50,11 +51,11 @@ export async function installExtension(id: string): Promise<void> {
   if (!app.isPackaged && existsSync(local)) copyFileSync(local, fileOf(id));
   else {
     // o release desta versão; se ele não trouxer o arquivo, o mais recente (o hash garante que é o mesmo arquivo)
-    const get = (tag: string[]) => execFileP('gh', ['release', 'download', ...tag, '-R', REPO, '-p', e.file, '-D', dirOf(id), '--clobber'], { windowsHide: true });
-    try { await get([`v${app.getVersion()}`]); }
+    const get = (tag: string | null) => downloadAsset(tag, n => n === e.file, dirOf(id), e.file);
+    try { await get(`v${app.getVersion()}`); }
     catch {
-      try { await get([]); }
-      catch { throw new Error('Não deu para baixar a extensão do GitHub (o gh está logado e com acesso ao repositório?).'); }
+      try { await get(null); }
+      catch { throw new Error('Não deu para baixar a extensão do GitHub (sem internet?).'); }
     }
   }
   if (!existsSync(fileOf(id)) || sha(fileOf(id)) !== e.sha256) {

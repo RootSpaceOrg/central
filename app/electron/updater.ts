@@ -1,7 +1,7 @@
 /**
  * Atualização dentro do app. Duas fontes de versão nova:
  * - local: <código da Central>/app/release (o que `npm run dist` gera nesta máquina);
- * - github: releases de RootSpaceOrg/central, lidas e baixadas pelo `gh` (o repo é privado, então usa o login do gh).
+ * - github: releases de RootSpaceOrg/central (público), lidas e baixadas por HTTPS sem login (o gh logado fica de reserva).
  * Instala em silêncio e reabre. Também gera (e publica) uma versão nova a partir do código.
  */
 import { app, shell } from 'electron';
@@ -14,9 +14,9 @@ import type { UpdateInfoDto } from '../src/app/shared/contract';
 import { getSetting } from './backlog';
 import { DEV_ROOT } from './db';
 import { childEnv } from './workspace';
+import { REPO, downloadAsset, listReleases } from './github';
 
 const execFileP = promisify(execFile);
-const REPO = 'RootSpaceOrg/central';
 const INSTALLER = process.platform === 'darwin' ? /^Central-(\d+\.\d+\.\d+)-\w+\.dmg$/ : /^Central Setup (\d+\.\d+\.\d+)\.exe$/;
 const REMOTE_TTL = 10 * 60_000;
 let building = false;
@@ -48,13 +48,12 @@ function localLatest(): { version: string; path: string; builtAt: string } | nul
 async function remoteLatest(force: boolean) {
   if (!force && remote && Date.now() - remote.at < REMOTE_TTL) return remote;
   try {
-    const { stdout } = await execFileP('gh', ['release', 'list', '-R', REPO, '--limit', '20', '--json', 'tagName,publishedAt'], { windowsHide: true });
-    const tags = (JSON.parse(stdout) as { tagName: string; publishedAt: string }[])
-      .map(r => ({ v: r.tagName.replace(/^v/, ''), at: r.publishedAt })).filter(r => /^\d+\.\d+\.\d+$/.test(r.v))
+    const tags = (await listReleases())
+      .map(r => ({ v: r.tag.replace(/^v/, ''), at: r.publishedAt })).filter(r => /^\d+\.\d+\.\d+$/.test(r.v))
       .sort((a, b) => compareVersions(b.v, a.v));
     remote = { at: Date.now(), version: tags[0]?.v ?? null, publishedAt: tags[0]?.at ?? null, error: null };
   } catch (e) {
-    remote = { at: Date.now(), version: null, publishedAt: null, error: 'Não deu para consultar o GitHub (gh logado e com acesso ao repositório?).' };
+    remote = { at: Date.now(), version: null, publishedAt: null, error: 'Não deu para consultar o GitHub (sem internet?).' };
     void e;
   }
   return remote;
@@ -91,18 +90,17 @@ export async function installUpdate(beforeInstall: () => void = () => {}): Promi
     const dir = join(app.getPath('temp'), 'central-update', info.latest);
     mkdirSync(dir, { recursive: true });
     const dmg = `Central-${info.latest}-${process.arch}.dmg`;
-    await execFileP('gh', ['release', 'download', `v${info.latest}`, '-R', REPO, '-p', dmg, '-D', dir, '--clobber'])
+    const file = await downloadAsset(`v${info.latest}`, n => n === dmg, dir, dmg)
       .catch(() => { throw new Error(`A versão ${info.latest} ainda não tem o pacote para Mac (${dmg}).`); });
-    await shell.openPath(join(dir, dmg));
+    await shell.openPath(file);
     return;
   }
   let installer = info.installer_path;
   if (!installer) {
     const dir = join(app.getPath('temp'), 'central-update', info.latest);
     mkdirSync(dir, { recursive: true });
-    await execFileP('gh', ['release', 'download', `v${info.latest}`, '-R', REPO, '-p', '*.exe', '-D', dir, '--clobber'], { windowsHide: true });
-    installer = join(dir, `Central Setup ${info.latest}.exe`);
-    if (!existsSync(installer)) throw new Error('O download não trouxe o instalador.');
+    // o GitHub guarda o instalador com pontos no lugar dos espaços (Central.Setup.X.exe): acha pela extensão
+    installer = await downloadAsset(`v${info.latest}`, n => /\.exe$/i.test(n) && n.includes(info.latest!), dir, '*.exe');
   }
   // antes de o instalador fechar a Central: pausa as execuções (voltam na mesma sessão) e guarda as conversas para retomar
   beforeInstall();

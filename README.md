@@ -5,9 +5,8 @@ App desktop para tocar todos os projetos de um lugar: visão geral, decisões, a
 
 ## Instalar
 
-Baixe a última versão em **[Releases](https://github.com/RootSpaceOrg/central/releases/latest)** (o repositório é privado:
-precisa estar logado no GitHub com acesso à RootSpaceOrg). Depois de instalada, a Central se atualiza pelo botão de
-atualização dela.
+Baixe a última versão em **[Releases](https://github.com/RootSpaceOrg/central/releases/latest)** (não precisa de conta
+no GitHub). Depois de instalada, a Central se atualiza pelo botão de atualização dela.
 
 ### Requisitos (Windows e Mac)
 
@@ -36,7 +35,7 @@ atualização dela.
    - Apple Silicon (M1, M2, M3, M4…): **`Central-<versão>-arm64.dmg`**
    - Intel: **`Central-<versão>-x64.dmg`**
 
-   Pelo terminal, sem navegador: `gh release download --repo RootSpaceOrg/central --pattern '*arm64.dmg'`
+   Pelo terminal: `curl -LO https://github.com/RootSpaceOrg/central/releases/latest/download/Central-<versão>-arm64.dmg`
 3. Abra o `.dmg` e arraste a **Central** para **Aplicativos**.
 4. Primeira abertura: o pacote não tem assinatura da Apple, então clique com o **botão direito** na Central → **Abrir** →
    **Abrir**. Se o macOS disser que o app está danificado: `xattr -dr com.apple.quarantine /Applications/Central.app`.
@@ -64,6 +63,8 @@ npm run dist:mac      # Mac (num Mac): app/release/Central-<versão>-<arm64|x64>
 Cada release publicado no GitHub gera os `.dmg` sozinho (workflow **Build Mac**, num Mac do GitHub Actions) e anexa ao release.
 
 ## Desenvolver
+
+A `main` é protegida: mudanças entram por pull request (sem push direto nem reescrita do histórico).
 
 ```bash
 cd app
