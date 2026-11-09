@@ -16,6 +16,10 @@ const toModel = (d: ProposalDto): Proposal => ({
   status: d.status,
   source: d.source,
   createdAt: new Date(d.created_at),
+  taskId: d.task_id ?? null,
+  agentId: d.agent_id ?? null,
+  summary: d.summary ?? null,
+  options: d.options ? JSON.parse(d.options) : [],
 });
 
 @Injectable({ providedIn: 'root' })
@@ -42,11 +46,21 @@ export class ProposalsService {
       .catch(e => this.error.set(errorMessage(e)));
   }
 
-  decide(p: Proposal, verdict: Verdict): void {
+  decide(p: Proposal, verdict: Verdict, reason: string | null = null): void {
     this.inbox.update(list => list.filter(x => x.id !== p.id));
     if (verdict === 'approve') this.approved.update(list => [{ ...p, status: 'approved' }, ...list]);
-    this.api.decide(p.id, verdict, null).catch(e => {
+    this.api.decide(p.id, verdict, reason).catch(e => {
       this.error.set(`A decisão não foi salva: ${errorMessage(e)}`);
+      this.load();
+    });
+  }
+
+  /** apaga de vez (sai da Triagem e do histórico) */
+  remove(p: Proposal): void {
+    this.inbox.update(list => list.filter(x => x.id !== p.id));
+    this.approved.update(list => list.filter(x => x.id !== p.id));
+    this.api.remove(p.id).catch(e => {
+      this.error.set(`A decisão não foi apagada: ${errorMessage(e)}`);
       this.load();
     });
   }

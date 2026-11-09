@@ -7,12 +7,15 @@ import { basename, join, relative } from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
-  IdeaDto, IdeaPatch, ImportResultDto, NewIdeaInput, NewTaskInput, TaskColumn, TaskDto, TaskPatch,
+  IdeaDto, IdeaPatch, ImportResultDto, NewIdeaInput, NewProposalInput, NewTaskInput, ProposalDto, ProposalStatus, TaskColumn, TaskDto,
+  TaskPatch, Verdict,
 } from '../src/app/shared/contract';
+import { resolveBoard, resolveStage, setStage } from './board';
 import { all, get, now, run } from './db';
+import { pool } from './git';
 
 const execFileP = promisify(execFile);
-const COLUMNS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'done'];
+const COLUMNS: TaskColumn[] = ['backlog', 'todo', 'doing', 'review', 'dev', 'done'];
 
 // ---------- configurações ----------
 
@@ -20,25 +23,115 @@ export const getSetting = (key: string) => get<{ value: string }>('select value 
 export const setSetting = (key: string, value: string) =>
   run('insert into settings (key, value) values (?, ?) on conflict (key) do update set value = excluded.value', key, value);
 
+// ---------- decisões ----------
+
+const VERDICT: Record<Verdict, ProposalStatus> = { approve: 'approved', defer: 'deferred', reject: 'rejected' };
+
+export function listProposals(statuses: ProposalStatus[]): ProposalDto[] {
+  return all<ProposalDto>(`select id, project_slug, title, body, tier, est_attention_min, next_action, status, source, created_at, updated_at, task_id, summary, options, agent_id
+    from proposals where status in (${statuses.map(() => '?').join(',') || "''"})
+    order by coalesce(tier, 9), created_at desc`, ...statuses);
+}
+
+export function createProposal(input: NewProposalInput & { next_action?: string | null; tier?: number | null; source?: string; task_id?: number | null; summary?: string | null; options?: string[] | null; agent_id?: number | null; origin?: { kind: 'chat' | 'run'; id: number } | null }): ProposalDto {
+  const title = input.title?.trim();
+  if (!title) throw new Error('Escreva o que precisa acontecer.');
+  const tier = input.tier === 0 || input.tier === 1 || input.tier === 2 ? input.tier : null;
+  const { lastInsertRowid } = run(`insert into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,?,?)`,
+    input.project_slug || null, title, input.body?.trim() || null, input.next_action?.trim() || null, tier,
+    input.source ?? 'manual', `${Date.now()}-${Math.random()}`);
+  const options = (input.options ?? []).map(o => o.trim()).filter(Boolean).slice(0, 4);
+  run('update proposals set summary = ?, options = ? where id = ?', input.summary?.trim().split('\n')[0] || null, options.length ? JSON.stringify(options) : null, Number(lastInsertRowid));
+  if (input.agent_id) run('update proposals set agent_id = ? where id = ?', input.agent_id, Number(lastInsertRowid));
+  if (input.origin) run(`update proposals set ${input.origin.kind === 'chat' ? 'origin_chat' : 'origin_run'} = ? where id = ?`, input.origin.id, Number(lastInsertRowid));
+  if (input.task_id && get('select 1 from tasks where id = ?', input.task_id)) run('update proposals set task_id = ? where id = ?', input.task_id, Number(lastInsertRowid));
+  return get<ProposalDto>('select * from proposals where id = ?', Number(lastInsertRowid))!;
+}
+
+/** Apaga uma decisão (e a mensagem de WhatsApp que esperava por ela). Tarefas e execuções ligadas só perdem o vínculo. */
+export function deleteProposal(id: number): void {
+  run(`delete from wa_outbox where proposal_id = ? and status = 'pending'`, id);
+  if (!run('delete from proposals where id = ?', id).changes) throw new Error('Decisão não encontrada.');
+}
+
+/** Quem reage a uma decisão (ex.: WhatsApp manda a mensagem aprovada). true = tratou, o resto não roda. */
+const decidedHooks: ((p: ProposalDto, verdict: Verdict) => boolean)[] = [];
+export const onDecided = (fn: (p: ProposalDto, verdict: Verdict) => boolean) => { decidedHooks.push(fn); };
+
+/** Aprovar vira tarefa em "A fazer", pronta para um agente. */
+export function decide(id: number, verdict: Verdict, reason: string | null): void {
+  if (!VERDICT[verdict]) throw new Error('Decisão inválida.');
+  if (!run('update proposals set status = ?, updated_at = ? where id = ?', VERDICT[verdict], now(), id).changes) {
+    throw new Error('Decisão não encontrada.');
+  }
+  run('insert into decisions (proposal_id, verdict, reason) values (?,?,?)', id, verdict, reason);
+  const p = get<ProposalDto>('select * from proposals where id = ?', id)!;
+  for (const h of decidedHooks) if (h(p, verdict)) return;
+  // escolha sobre uma tarefa que já existe: a resposta volta para ela (vai para A fazer, o responsável segue) em vez de
+  // virar uma tarefa nova que repete a pergunta
+  const task = p.task_id ? get<{ id: number; body: string | null; column: string }>('select id, body, "column" from tasks where id = ?', p.task_id) : null;
+  if (task && verdict !== 'defer') {
+    const when = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const answer = `Decisão #${p.id} (${when}): ${verdict === 'approve' ? 'APROVADA' : 'RECUSADA'}: ${p.title}${p.next_action && verdict === 'approve' ? `\nSe aprovada: ${p.next_action}` : ''}${reason ? `\nGustavo: ${reason}` : ''}`;
+    run(`update tasks set body = ?, "column" = case when "column" = 'done' then 'done' else 'todo' end, updated_at = ? where id = ?`,
+      [task.body?.trim(), answer].filter(Boolean).join('\n\n'), now(), task.id);
+    return;
+  }
+  if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {
+    // decisões do piloto e dos agentes dizem o repositório no texto: a tarefa já nasce sabendo onde trabalhar
+    const text = `${p.title}
+${p.body ?? ''}
+${p.next_action ?? ''}`.toLowerCase();
+    const repo = all<{ path: string; name: string }>('select path, name from repos where project_slug = ?', p.project_slug)
+      .find(r => text.includes(r.path.toLowerCase()) || text.includes(`repo ${r.name.toLowerCase()}`));
+    createTask({
+      project_slug: p.project_slug, repo_path: repo?.path ?? null, title: p.title,
+      body: [p.body, p.next_action && `Próximo passo esperado: ${p.next_action}`, reason && `Gustavo: ${reason}`].filter(Boolean).join('\n\n') || null,
+      column: 'todo', priority: p.tier === 2 ? 0 : 1, proposal_id: id,
+    });
+  }
+}
+
 // ---------- ideias ----------
 
-export const listIdeas = () => all<IdeaDto>(`select id, project_slug, title, body, status, source, source_ref, task_id, created_at
-  from ideas order by case status when 'new' then 0 when 'promoted' then 1 else 2 end, created_at desc, id desc`);
+export const listIdeas = () => all<IdeaDto>(`select i.id, i.project_slug, i.title, i.body, i.status, i.source, i.source_ref, i.task_id, i.created_at,
+    i.author, i.approved_at, i.milestone_id, i.triaged_at, i.triage, i.seen_at,
+    (select count(*) from tasks t where t.idea_id = i.id) tasks,
+    (select count(*) from tasks t where t.idea_id = i.id and t."column" = 'done') tasks_done
+  from ideas i order by case i.status when 'new' then 0 when 'approved' then 1 when 'doing' then 2 when 'done' then 3 else 4 end,
+    i.created_at desc, i.id desc`);
 
-export function createIdea(input: NewIdeaInput): IdeaDto {
+const IDEA_STATUS = ['new', 'approved', 'doing', 'done', 'archived'];
+
+/** Ideia nova vai para a triagem. author = 'gustavo' ou o nome do agente que sugeriu. */
+export function createIdea(input: NewIdeaInput & { source?: string; author?: string; milestone_id?: number | null }): IdeaDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Escreva a ideia.');
-  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref) values (?,?,?,'manual',?)`,
-    input.project_slug || null, title, input.body?.trim() || null, `${Date.now()}-${Math.random()}`);
-  return get<IdeaDto>('select * from ideas where id = ?', Number(lastInsertRowid))!;
+  const { lastInsertRowid } = run(`insert into ideas (project_slug, title, body, source, source_ref, author) values (?,?,?,?,?,?)`,
+    input.project_slug || null, title, input.body?.trim() || null, input.source ?? 'manual', `${Date.now()}-${Math.random()}`, input.author ?? 'gustavo');
+  if (input.milestone_id) run('update ideas set milestone_id = ? where id = ?', input.milestone_id, Number(lastInsertRowid));
+  return listIdeas().find(i => i.id === Number(lastInsertRowid))!;
 }
 
 export function updateIdea(id: number, patch: IdeaPatch): void {
-  const allowed = ['title', 'body', 'project_slug', 'status'] as const;
-  const fields = allowed.filter(k => k in patch);
-  if (patch.status && !['new', 'promoted', 'archived'].includes(patch.status)) throw new Error('Status inválido.');
+  const allowed = ['title', 'body', 'project_slug', 'status', 'milestone_id', 'triage'] as const;
+  const fields = allowed.filter(k => k in patch && patch[k] !== undefined);
+  if (patch.status && !IDEA_STATUS.includes(patch.status)) throw new Error('Status inválido.');
+  if (patch.status === 'approved') {
+    const slug = patch.project_slug ?? get<{ p: string | null }>('select project_slug p from ideas where id = ?', id)?.p;
+    if (!slug) throw new Error('Diga de qual projeto é a ideia antes de aprovar.');
+  }
   if (!fields.length) return;
   run(`update ideas set ${fields.map(k => `${k} = ?`).join(', ')} where id = ?`, ...fields.map(k => (patch[k] ?? null) as string | null), id);
+  if (patch.status === 'approved') run('update ideas set approved_at = coalesce(approved_at, ?) where id = ?', now(), id);
+}
+
+/** Ideia em andamento termina sozinha quando todas as tarefas ligadas a ela chegam em Feito. */
+export function syncIdeaProgress(ideaId: number | null): void {
+  if (!ideaId) return;
+  const c = get<{ n: number; done: number }>(`select count(*) n, sum("column" = 'done') done from tasks where idea_id = ?`, ideaId)!;
+  if (c.n && c.n === c.done) run(`update ideas set status = 'done' where id = ? and status in ('approved','doing')`, ideaId);
+  else if (c.n) run(`update ideas set status = 'doing' where id = ? and status in ('approved','done')`, ideaId);
 }
 
 export function promoteIdea(id: number, projectSlug: string): TaskDto {
@@ -47,15 +140,15 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
   if (idea.task_id) throw new Error('Essa ideia já virou tarefa.');
   const task = createTask({ project_slug: projectSlug, repo_path: null, title: idea.title, body: idea.body, column: 'backlog', priority: 2 });
   run('update tasks set idea_id = ? where id = ?', id, task.id);
-  run(`update ideas set status = 'promoted', task_id = ?, project_slug = ? where id = ?`, task.id, projectSlug, id);
+  run(`update ideas set status = 'doing', task_id = ?, project_slug = ?, approved_at = coalesce(approved_at, ?) where id = ?`, task.id, projectSlug, now(), id);
   return getTask(task.id);
 }
 
 // ---------- tarefas ----------
 
 const TASK_SELECT = `
-  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.priority, t.position, t.pr_url,
-         t.proposal_id, t.idea_id, t.created_at, t.updated_at,
+  select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.color, t.priority, t.position, t.pr_url, t.depends_on,
+         t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at,
          r.id run_id, r.status run_status
   from tasks t
   left join runs r on r.id = (select max(id) from runs where task_id = t.id)`;
@@ -63,30 +156,70 @@ const TASK_SELECT = `
 export const getTask = (id: number) => get<TaskDto>(`${TASK_SELECT} where t.id = ?`, id)!;
 
 export const listTasks = (slug: string | null) => all<TaskDto>(`${TASK_SELECT}
-  join projects p on p.slug = t.project_slug
-  where (? is null and p.status <> 'dead' or t.project_slug = ?)
+  left join projects p on p.slug = t.project_slug
+  where (? is null and coalesce(p.status, '') <> 'dead' or t.project_slug = ?)
   order by t.position, t.priority, t.created_at desc`, slug, slug);
 
-export function createTask(input: NewTaskInput & { proposal_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
+const samePath = (a: string, b: string) => a.replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase() === b.replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase();
+/**
+ * Onde um agente trabalha nesta tarefa: um repositório do projeto, ou null (o projeto inteiro). A pasta do projeto vira
+ * null; outro caminho que não é do projeto é recusado (senão a tarefa nunca começaria).
+ */
+export function taskRepo(slug: string | null, path: string | null | undefined): string | null {
+  if (!path?.trim() || !slug) return null;
+  if (get('select 1 from repos where path = ? and project_slug = ?', path, slug)) return path;
+  const folder = get<{ folder: string }>('select folder from projects where slug = ?', slug)?.folder;
+  if (folder && samePath(folder, path)) return null;
+  const repo = all<{ path: string }>('select path from repos where project_slug = ?', slug).find(r => samePath(r.path, path));
+  if (repo) return repo.path;
+  throw new Error(`Esse repositório não é do projeto: ${path}. Use um dos repositórios do projeto (list_projects) ou deixe vazio para o projeto inteiro.`);
+}
+
+/** dependências: ids de tarefas que precisam ser entregues antes (em Revisão, Em dev ou Feito) */
+function dependsOn(id: number | null, deps: number[] | null | undefined): string | null {
+  const list = [...new Set((deps ?? []).map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== id))];
+  for (const d of list) if (!get('select 1 from tasks where id = ?', d)) throw new Error(`Tarefa #${d} não existe.`);
+  return list.length ? JSON.stringify(list) : null;
+}
+
+export function createTask(input: NewTaskInput & { board_id?: number | null; stage?: string | null; proposal_id?: number | null; idea_id?: number | null; milestone_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Dê um título à tarefa.');
-  if (!get('select 1 from projects where slug = ?', input.project_slug)) throw new Error('Escolha um projeto.');
+  if (input.project_slug ? !get('select 1 from projects where slug = ?', input.project_slug) : !input.board_id) throw new Error('Escolha um projeto (ou crie a tarefa num quadro).');
+  if (input.board_id && !resolveBoard(input.board_id)) throw new Error('Quadro não encontrado.');
   const column = COLUMNS.includes(input.column) ? input.column : 'backlog';
   const top = get<{ p: number | null }>('select min(position) p from tasks where "column" = ?', column)!.p ?? 1;
   const { lastInsertRowid } = run(`insert into tasks (project_slug, repo_path, title, body, "column", priority, position, proposal_id, pr_url, source, source_ref)
     values (?,?,?,?,?,?,?,?,?,?,?)`,
-    input.project_slug, input.repo_path || null, title, input.body?.trim() || null, column,
+    input.project_slug || null, taskRepo(input.project_slug, input.repo_path), title, input.body?.trim() || null, column,
     Math.min(Math.max(Number(input.priority) || 0, 0), 3), top - 1,
     input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
-  return getTask(Number(lastInsertRowid));
+  const id = Number(lastInsertRowid);
+  if (input.depends_on?.length) run('update tasks set depends_on = ? where id = ?', dependsOn(id, input.depends_on), id);
+  // pedido feito num quadro: já entra na coluna dele (a primeira, ou a pedida)
+  if (input.board_id) {
+    const stage = (input.stage && resolveStage(input.board_id, input.stage)) || get<{ k: string }>('select key k from board_cols where board_id = ? order by position limit 1', input.board_id)?.k;
+    if (stage) setStage(id, input.board_id, stage);
+  }
+  if (input.milestone_id && get('select 1 from milestones where id = ?', input.milestone_id)) run('update tasks set milestone_id = ? where id = ?', input.milestone_id, id);
+  if (input.idea_id) {
+    if (!get('select 1 from ideas where id = ?', input.idea_id)) throw new Error('Ideia não encontrada.');
+    run('update tasks set idea_id = ? where id = ?', input.idea_id, id);
+    syncIdeaProgress(input.idea_id);
+  }
+  return getTask(id);
 }
 
-export function updateTask(id: number, patch: TaskPatch): void {
+export function updateTask(id: number, input: TaskPatch): void {
+  const patch = input;
   const task = get<TaskDto>('select * from tasks where id = ?', id);
   if (!task) throw new Error('Tarefa não encontrada.');
   if (patch.column && !COLUMNS.includes(patch.column)) throw new Error('Coluna inválida.');
 
-  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority'] as const).filter(k => k in patch);
+  if (patch.color !== undefined && patch.color !== null && !/^#[0-9a-fA-F]{6}$/.test(patch.color)) throw new Error('Cor inválida.');
+  if (patch.repo_path !== undefined) patch.repo_path = taskRepo(patch.project_slug ?? task.project_slug, patch.repo_path);
+  if (patch.depends_on !== undefined) run('update tasks set depends_on = ?, updated_at = ? where id = ?', dependsOn(id, patch.depends_on), now(), id);
+  const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id', 'color'] as const).filter(k => k in patch && patch[k] !== undefined);
   if (simple.length) {
     run(`update tasks set ${simple.map(k => `${k} = ?`).join(', ')}, updated_at = ? where id = ?`,
       ...simple.map(k => (patch[k] ?? null) as string | number | null), now(), id);
@@ -104,16 +237,94 @@ export function updateTask(id: number, patch: TaskPatch): void {
       run('commit');
     } catch (e) { run('rollback'); throw e; }
   }
+  syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', id)?.i ?? null);
 }
 
 export function deleteTask(id: number): void {
-  run(`update ideas set status = 'new', task_id = null where task_id = ?`, id);
+  // a ideia continua aprovada: a tarefa apagada não era a ideia
+  run(`update ideas set status = 'approved', task_id = null where task_id = ?`, id);
   run('delete from tasks where id = ?', id);
 }
 
 /** Chamado pelos agentes: a tarefa anda no quadro conforme a execução. */
 export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string | null = null): void {
   run(`update tasks set "column" = ?, pr_url = coalesce(?, pr_url), updated_at = ? where id = ?`, column, prUrl, now(), taskId);
+  syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', taskId)?.i ?? null);
+}
+
+/**
+ * Tarefas com PR andam sozinhas. Projeto "pronto = merge": PR mergeado vai para Feito. Projeto "pronto = produção":
+ * mergeado em develop vai para Em dev; quando o merge chega em main (ou foi direto em main), Feito. Devolve quantas andaram.
+ */
+export async function syncPullRequests(): Promise<number> {
+  const tasks = all<{ id: number; pr_url: string; col: string; prod: number; slug: string }>(`
+    select t.id, t.pr_url, t."column" col, p.done_when = 'prod' prod, t.project_slug slug from tasks t join projects p on p.slug = t.project_slug
+    where t.pr_url is not null and (t."column" = 'review' or (t."column" = 'dev' and p.done_when = 'prod'))`);
+  const fetched = new Map<string, Promise<unknown>>();
+  let moved = 0;
+  const move = (t: { id: number; col: string }, to: TaskColumn) => { if (t.col !== to) { moveTaskForRun(t.id, to); moved++; } };
+  await pool(tasks, 4, async t => {
+    try {
+      const { stdout } = await execFileP('gh', ['pr', 'view', t.pr_url, '--json', 'state,baseRefName,mergeCommit'], { windowsHide: true });
+      const pr = JSON.parse(stdout) as { state: string; baseRefName: string; mergeCommit: { oid: string } | null };
+      if (pr.state !== 'MERGED') return;
+      if (!t.prod || /^(main|master)$/.test(pr.baseRefName)) return move(t, 'done');
+      // mergeado em develop: chegou em main?
+      const name = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(t.pr_url)?.[1]?.toLowerCase();
+      const repo = all<{ path: string; remote: string | null }>('select path, remote from repos where project_slug = ?', t.slug)
+        .find(r => githubName(r.remote)?.toLowerCase() === name);
+      if (!repo || !pr.mergeCommit) return move(t, 'dev');
+      if (!fetched.has(repo.path)) fetched.set(repo.path, execFileP('git', ['-C', repo.path, 'fetch', 'origin', '--quiet'], { windowsHide: true, timeout: 45_000 }).catch(() => null));
+      await fetched.get(repo.path);
+      const prodRef = await execFileP('git', ['-C', repo.path, 'rev-parse', '--verify', '--quiet', 'origin/main'], { windowsHide: true }).then(() => 'origin/main', () => 'origin/master');
+      const inProd = await execFileP('git', ['-C', repo.path, 'merge-base', '--is-ancestor', pr.mergeCommit.oid, prodRef], { windowsHide: true }).then(() => true, () => false);
+      move(t, inProd ? 'done' : 'dev');
+    } catch { /* PR apagado, sem acesso ou offline: deixa como está */ }
+  });
+  return moved;
+}
+
+/** owner/repo a partir do remote do GitHub */
+export function githubName(remote: string | null): string | null {
+  const m = remote?.match(/github\.com[:/]([^/]+)\/(.+?)(\.git)?\/?$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+/**
+ * Sentinela de CI: em cada repositório com commits nos últimos 14 dias, se a última execução do GitHub Actions
+ * na branch padrão falhou, abre uma decisão (uma por repositório enquanto ela estiver esperando).
+ * Devolve quantas decisões novas criou.
+ */
+export async function syncCiFailures(): Promise<number> {
+  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const repos = all<{ path: string; name: string; project_slug: string; remote: string | null; default_branch: string | null }>(`
+    select r.path, r.name, r.project_slug, r.remote, r.default_branch from repos r
+    join projects p on p.slug = r.project_slug
+    where p.status in ('active','maintenance') and r.remote like '%github.com%'
+      and exists (select 1 from commits c where c.repo_path = r.path and c.committed_at >= ?)
+    limit 60`, since);
+  let created = 0;
+  await pool(repos, 4, async r => {
+    const full = githubName(r.remote);
+    if (!full) return;
+    // develop = deploy em dev, main = produção (e a padrão do repo, se for outra)
+    for (const branch of [...new Set(['main', 'develop', r.default_branch].filter(Boolean) as string[])]) {
+      try {
+        const { stdout } = await execFileP('gh', ['run', 'list', '-R', full, '--branch', branch, '--limit', '1',
+          '--json', 'databaseId,conclusion,status,url,displayTitle,workflowName,createdAt'], { windowsHide: true });
+        const last = (JSON.parse(stdout) as { databaseId: number; conclusion: string; status: string; url: string; displayTitle: string; workflowName: string; createdAt: string }[])[0];
+        if (!last || last.status !== 'completed' || last.conclusion !== 'failure') continue;
+        if (get(`select 1 from proposals where source = 'ci' and status = 'proposed' and source_ref like ?`, `${full}@${branch}#%`)) continue;
+        const res = run(`insert or ignore into proposals (project_slug, title, body, next_action, tier, source, source_ref) values (?,?,?,?,?,'ci',?)`,
+          r.project_slug, `CI falhando em ${r.name} (${branch})`,
+          `O workflow "${last.workflowName}" falhou em ${new Date(last.createdAt).toLocaleString('pt-BR')}, no commit "${last.displayTitle}".
+${last.url}`,
+          'Um agente abre o log da falha, encontra a causa e propõe a correção num PR draft.', branch === 'main' ? 2 : 1, `${full}@${branch}#${last.databaseId}`);
+        created += Number(res.changes);
+      } catch { /* branch sem Actions, sem acesso ou offline */ }
+    }
+  });
+  return created;
 }
 
 // ---------- importação de pendências (M2) ----------

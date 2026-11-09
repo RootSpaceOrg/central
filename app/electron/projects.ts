@@ -19,7 +19,7 @@ export function listProjects(): ProjectDto[] {
       (select count(*) from proposals x where x.project_slug = p.slug and x.status = 'proposed') open_proposals,
       (select count(*) from runs x where x.project_slug = p.slug and x.status in ('queued','preparing','running')) active_runs
     from projects p
-    order by case p.status when 'active' then 0 when 'maintenance' then 1 when 'frozen' then 2 else 3 end, p.name`);
+    order by case p.status when 'active' then 0 when 'maintenance' then 1 when 'frozen' then 2 else 3 end, p.position, p.name`);
 
   const since14 = new Date(Date.now() - 13 * DAY).toISOString().slice(0, 10);
   const daily = all<{ slug: string; day: string; n: number }>(`
@@ -63,7 +63,7 @@ export function createProject(input: NewProjectInput): ProjectDto {
   const name = input.name?.trim();
   if (!name) throw new Error('Dê um nome ao projeto.');
   if (!input.folder?.trim()) throw new Error('Escolha a pasta do projeto.');
-  if (!isAbsolute(input.folder.trim())) throw new Error('Use o caminho completo da pasta, por exemplo C:\Users\voce\Development\Projeto.');
+  if (!isAbsolute(input.folder.trim())) throw new Error('Use o caminho completo da pasta, por exemplo C:\\Users\\voce\\Development\\Projeto.');
   if (!STATUSES.includes(input.status)) throw new Error('Status inválido.');
   const folder = resolve(input.folder.trim());
   if (get('select 1 from projects where folder = ?', folder)) throw new Error('Essa pasta já é de outro projeto.');
@@ -71,18 +71,71 @@ export function createProject(input: NewProjectInput): ProjectDto {
   let slug = slugify(name) || 'projeto';
   for (let i = 2; get('select 1 from projects where slug = ?', slug); i++) slug = `${slugify(name)}-${i}`;
 
+  const parent = input.parent_slug ? checkParent(slug, input.parent_slug) : null;
   mkdirSync(folder, { recursive: true });
-  run('insert into projects (slug, name, folder, status, color, description) values (?,?,?,?,?,?)',
-    slug, name, folder, input.status, input.color, input.description?.trim() || null);
+  const position = (get<{ p: number | null }>('select max(position) p from projects')?.p ?? 0) + 1;
+  run('insert into projects (slug, name, folder, status, color, description, parent_slug, position) values (?,?,?,?,?,?,?,?)',
+    slug, name, folder, input.status, input.color, input.description?.trim() || null, parent, position);
   return listProjects().find(p => p.slug === slug)!;
 }
 
+/** Um nível só: o grupo não pode ser subprojeto, e um projeto com frentes não vira frente de outro. */
+function checkParent(slug: string, parent: string): string {
+  if (parent === slug) throw new Error('Um projeto não pode ser subprojeto dele mesmo.');
+  const p = get<{ parent_slug: string | null }>('select parent_slug from projects where slug = ?', parent);
+  if (!p) throw new Error('Projeto-grupo não encontrado.');
+  if (p.parent_slug) throw new Error('Esse projeto já é um subprojeto: escolha o projeto de cima.');
+  if (get('select 1 from projects where parent_slug = ?', slug)) throw new Error('Este projeto tem subprojetos: ele é um grupo e não pode ficar dentro de outro.');
+  return parent;
+}
+
+/** Nova ordem de irmãos na barra lateral. */
+export function reorderProjects(slugs: string[]): void {
+  run('begin');
+  try { slugs.forEach((s, i) => run('update projects set position = ? where slug = ?', i, s)); run('commit'); }
+  catch (e) { run('rollback'); throw e; }
+}
+
+const ICON_KINDS = ['letter', 'emoji', 'lucide', 'image'];
+const MAX_IMAGE = 400 * 1024;
+
 export function updateProject(slug: string, patch: ProjectPatch): void {
+  if (!get('select 1 from projects where slug = ?', slug)) throw new Error('Projeto não encontrado.');
   if (patch.status && !STATUSES.includes(patch.status)) throw new Error('Status inválido.');
-  const fields = Object.entries(patch).filter(([k]) => ['name', 'status', 'color', 'description'].includes(k));
+  if (patch.name !== undefined && !patch.name.trim()) throw new Error('O nome não pode ficar vazio.');
+  if (patch.icon_kind && !ICON_KINDS.includes(patch.icon_kind)) throw new Error('Tipo de ícone inválido.');
+  if (patch.icon_kind === 'image' && !/^data:image\/(png|jpeg|webp|svg\+xml|gif);base64,/.test(patch.icon_value ?? '')) {
+    throw new Error('Imagem inválida.');
+  }
+  if ((patch.icon_value?.length ?? 0) > MAX_IMAGE * 1.4) throw new Error('Imagem grande demais (máximo 400 KB).');
+  if (patch.folder !== undefined) {
+    if (!isAbsolute(patch.folder.trim())) throw new Error('Use o caminho completo da pasta.');
+    patch.folder = resolve(patch.folder.trim());
+    if (get('select 1 from projects where folder = ? and slug <> ?', patch.folder, slug)) throw new Error('Essa pasta já é de outro projeto.');
+  }
+  if (patch.parent_slug) checkParent(slug, patch.parent_slug);
+  if (patch.todo_agent_id && !get('select 1 from agents where id = ?', patch.todo_agent_id)) throw new Error('Agente não encontrado.');
+  if (patch.todo_parallel !== undefined && !(patch.todo_parallel >= 1 && patch.todo_parallel <= 4)) throw new Error('Entre 1 e 4 por vez.');
+  if (patch.done_when && !['merge', 'prod'].includes(patch.done_when)) throw new Error('Quando fica pronto: merge ou prod.');
+  if (patch.todo_hours && !/^\d{1,2}-\d{1,2}$/.test(patch.todo_hours.trim())) throw new Error('Horário no formato 08-22.');
+  const fields = Object.entries(patch)
+    // campo ausente chega como undefined pelo IPC: não mexe nele (senão vira null e quebra colunas NOT NULL, ex.: folder)
+    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'parent_slug', 'todo_agent_id', 'todo_parallel', 'todo_hours', 'done_when'].includes(k))
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,
-    ...fields.map(([, v]) => (v ?? null) as string | null), slug);
+    ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | number | null), slug);
+}
+
+/** Tira o projeto da Central. Pasta, repositórios e worktrees continuam no disco. */
+export function deleteProject(slug: string): void {
+  if (get<{ n: number }>(`select count(*) n from runs where project_slug = ? and status in ('queued','preparing','running')`, slug)!.n) {
+    throw new Error('Há agentes trabalhando neste projeto. Interrompa antes de excluir.');
+  }
+  run('update ideas set project_slug = null where project_slug = ?', slug);
+  run('update proposals set project_slug = null where project_slug = ?', slug);
+  // subprojetos ficam soltos (viram projetos de primeiro nível)
+  run('update projects set parent_slug = null where parent_slug = ?', slug);
+  run('delete from projects where slug = ?', slug);
 }
 
 export function listRepos(slug: string): RepoDto[] {
@@ -121,8 +174,12 @@ async function syncNow(slug: string | null): Promise<void> {
     ...(slug ? [slug] : []));
 
   const work: { slug: string; path: string }[] = [];
+  // pasta dentro da pasta de outro projeto (subprojeto numa subpasta): o repositório é do projeto mais específico
+  const folders = all<{ slug: string; folder: string }>('select slug, folder from projects');
+  const under = (path: string, folder: string) => path.toLowerCase().startsWith(`${folder.toLowerCase().replace(/[\\/]+$/, '')}\\`);
   for (const p of projects) {
-    const paths = findRepos(p.folder);
+    const inner = folders.filter(o => o.slug !== p.slug && o.folder.length > p.folder.length && under(o.folder, p.folder));
+    const paths = findRepos(p.folder).filter(path => !inner.some(o => path === o.folder || under(path, o.folder)));
     run(`delete from repos where project_slug = ? and path not in (${paths.map(() => '?').join(',') || "''"})`, p.slug, ...paths);
     work.push(...paths.map(path => ({ slug: p.slug, path })));
   }

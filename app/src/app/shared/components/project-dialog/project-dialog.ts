@@ -45,8 +45,16 @@ export class ProjectDialog {
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly autoFolder = computed(() =>
-    this.projects.devRoot() && this.name().trim() ? `${this.projects.devRoot()}\\${folderName(this.name())}` : '');
+  /** criar como frente (subprojeto) deste projeto */
+  protected readonly parent = computed(() => {
+    const s = this.state();
+    return s?.mode === 'create' && s.parentSlug ? this.projects.bySlug().get(s.parentSlug) ?? null : null;
+  });
+  /** frente nasce numa subpasta do grupo */
+  protected readonly autoFolder = computed(() => {
+    const base = this.parent()?.folder ?? this.projects.devRoot();
+    return base && this.name().trim() ? `${base}\\${folderName(this.name())}` : '';
+  });
   protected readonly effectiveFolder = computed(() => (this.folderEdited() ? this.folder() : this.autoFolder()));
   protected readonly matches = computed(() => {
     const q = this.query().trim().toLowerCase();
@@ -92,6 +100,7 @@ export class ProjectDialog {
       } else {
         const p = await this.projects.create({
           name: this.name(), folder: this.effectiveFolder(), status: this.status(), color: this.color(), description: this.description(),
+          parentSlug: this.parent()?.slug ?? null,
         });
         ({ slug, folder } = p);
       }

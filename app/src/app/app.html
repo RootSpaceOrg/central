@@ -1,37 +1,66 @@
-<div class="grid h-screen grid-rows-[40px_1fr_26px]">
-  <!-- barra de título (os botões da janela ficam à direita, desenhados pelo sistema) -->
-  <header class="drag flex items-center gap-3 border-b border-edge bg-night pl-4 pr-[150px]">
-    <span class="grid size-6 place-items-center rounded-lg bg-frost text-[13px] font-extrabold text-night font-display">C</span>
+<div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[minmax(0,1fr)]' : 'grid-rows-[40px_minmax(0,1fr)_26px]'">
+  <!-- barra de título (os botões da janela são do sistema: à direita no Windows, à esquerda no Mac) -->
+  <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night" [class]="isWin ? 'pl-4 pr-[150px]' : 'pl-[84px] pr-4'">
+    <img src="logo.png" alt="" class="size-6 rounded-lg" />
     <span class="font-display text-[15px] font-bold tracking-tight">Central</span>
+    <span class="flex-1"></span>
+    <button type="button" class="no-drag flex w-[min(380px,40vw)] items-center gap-2 rounded-lg border border-edge bg-panel px-3 py-1 text-[12.5px] text-faint transition hover:border-faint hover:text-mute"
+            (click)="openPalette()" aria-label="Buscar ou executar um comando">
+      <app-icon name="spark" [size]="13" />Buscar ou fazer algo…<span class="flex-1"></span><kbd class="font-mono text-[11px]">{{ isWin ? 'Ctrl K' : '⌘K' }}</kbd>
+    </button>
+    <span class="flex-1"></span>
+    <!-- comandos rápidos (rodar com um clique) -->
+    <app-quick-bar class="max-w-[38vw] overflow-x-auto" />
   </header>
 
-  <div class="grid min-h-0 grid-cols-[56px_252px_1fr]">
+  <!-- modo foco: só o conteúdo (a Grade) na tela cheia -->
+  <div class="grid min-h-0" [class]="layout.focus() ? 'grid-cols-[1fr]' : 'grid-cols-[56px_252px_1fr]'">
     <!-- barra de atividades -->
-    <nav class="flex flex-col items-center gap-1 border-r border-edge bg-night py-3" aria-label="Seções">
+    <nav [hidden]="layout.focus()" class="flex min-h-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-edge bg-night py-3 [scrollbar-width:none]" aria-label="Seções">
+      <!-- agente Central: sempre à mão, destacado -->
+      <button type="button" (click)="chat.toggle()" [attr.aria-pressed]="chat.open()" aria-label="Agente Central (Ctrl+J)"
+              class="nav-item group mb-2 !bg-frost/12 !text-frost hover:!bg-frost/20" [class.!bg-frost]="chat.open()" [class.!text-night]="chat.open()">
+        <app-icon name="spark" [size]="21" [fill]="chat.open()" />
+        @if (chat.busy().size) { <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-frost ring-2 ring-night"></span> }
+        <span class="nav-tip">Agente Central <kbd>Ctrl J</kbd></span>
+      </button>
+
       @for (n of nav; track n.path) {
-        <a [routerLink]="n.path" routerLinkActive #rla="routerLinkActive" [routerLinkActiveOptions]="{ exact: !!n.exact }"
-           class="relative grid size-11 place-items-center rounded-xl text-mute hover:text-text"
-           [class.!text-text]="rla.isActive" [class.!bg-raise]="rla.isActive" [title]="n.label" [attr.aria-label]="n.label">
-          @if (rla.isActive) { <span class="absolute -left-[7px] h-5 w-[3px] rounded-full bg-frost"></span> }
-          <app-icon [name]="n.icon" [size]="23" [fill]="rla.isActive" />
+        @let on = isOn(n);
+        <a [routerLink]="target(n)" [queryParams]="scope.queryFor(target(n))" class="nav-item group" [class.nav-active]="on" [attr.aria-label]="n.label" [attr.aria-current]="on ? 'page' : null">
+          <span class="nav-bar" aria-hidden="true"></span>
+          <app-icon [name]="n.icon" [size]="21" [fill]="on" class="transition-transform duration-150 group-hover:scale-110" />
           @if (badge(n.path); as b) {
-            <span class="absolute -right-0.5 -top-0.5 grid min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-night {{ b.tone }}">{{ b.n }}</span>
+            <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold ring-2 ring-night {{ b.tone }}">{{ b.n }}</span>
+          }
+          @if (n.path === '/escritorio' && working()) {
+            <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-yes px-1 text-[10.5px] font-bold text-night ring-2 ring-night">{{ working() }}</span>
           }
           @if (n.path === '/agentes' && runs.active().length) {
-            <span class="pulse absolute right-1.5 top-1.5 size-2.5 rounded-full bg-yes ring-2 ring-night"></span>
+            <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-yes ring-2 ring-night"></span>
           }
+          <span class="nav-tip">{{ n.label }}</span>
         </a>
       }
 
-      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()"
-              class="mt-auto grid size-10 place-items-center rounded-xl text-mute hover:text-text disabled:opacity-60"
-              title="Sincronizar repositórios" aria-label="Sincronizar repositórios">
+      <a routerLink="/extensoes" routerLinkActive #rx="routerLinkActive" class="nav-item group mt-auto" [class.nav-active]="rx.isActive" aria-label="Extensões">
+        <span class="nav-bar" aria-hidden="true"></span>
+        <app-icon name="puzzle" [size]="19" [fill]="rx.isActive" />
+        <span class="nav-tip">Extensões (WhatsApp e outras integrações)</span>
+      </a>
+      <button type="button" (click)="dialogs.settings.set(true)" class="nav-item group" aria-label="Preferências">
+        <app-icon name="settings" [size]="19" />
+        <span class="nav-tip">Preferências</span>
+      </button>
+      <button type="button" (click)="projects.sync()" [disabled]="projects.syncing()" class="nav-item group disabled:opacity-60"
+              aria-label="Sincronizar repositórios">
         <app-icon name="sync" [size]="19" [class.animate-spin]="projects.syncing()" />
+        <span class="nav-tip">Sincronizar repositórios</span>
       </button>
     </nav>
 
     <!-- projetos -->
-    <aside class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
+    <aside [hidden]="layout.focus()" class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-label="Projetos">
       <div class="flex items-center justify-between px-4 pt-4 pb-2">
         <h2 class="font-display text-[15px] font-semibold">Projetos</h2>
         <button type="button" class="btn btn-sm" (click)="dialogs.newProject()">
@@ -40,11 +69,47 @@
       </div>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <!-- nas telas com escopo: "Todos" tira o filtro de projeto -->
+        @if (scope.scopable()) {
+          <button type="button" (click)="scope.set(null)" [attr.aria-pressed]="!scope.slug()"
+                  class="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] text-left transition-colors hover:bg-raise/60 hover:text-text"
+                  [class]="!scope.slug() ? 'bg-frost/15 text-text' : 'text-mute'">
+            <span class="grid size-5 place-items-center rounded-md bg-edge text-faint"><app-icon name="overview" [size]="13" /></span>
+            <span class="flex-1">Todos os projetos</span>
+          </button>
+        }
         @for (g of groups(); track g.status) {
           <h3 class="px-2 pt-4 pb-1 text-[12px] font-semibold text-faint">{{ g.label }}</h3>
-          @for (p of g.items; track p.slug) {
-            <ng-container *ngTemplateOutlet="item; context: { $implicit: p }" />
-          }
+          <!-- arraste para reordenar; subprojetos ficam dentro do grupo e reordenam entre si -->
+          <div cdkDropList [cdkDropListData]="g.items" (cdkDropListDropped)="drop($event)" cdkDropListLockAxis="y">
+            @for (p of g.items; track p.slug) {
+              @let kids = projects.children(p.slug);
+              <div cdkDrag [cdkDragData]="p" class="rounded-lg">
+                <ng-container *ngTemplateOutlet="item; context: { $implicit: p, kids: kids.length }" />
+                @if (kids.length && !collapsed().has(p.slug)) {
+                  <div cdkDropList [cdkDropListData]="kids" (cdkDropListDropped)="drop($event)" cdkDropListLockAxis="y" class="ml-[19px] border-l border-edge pl-1.5">
+                    <!-- grupo escolhido: ver só o que é do projeto, sem frente -->
+                    @if (scope.scopable() && scope.slug() === p.slug) {
+                      <button type="button" (click)="scope.set(scope.direct() ? null : p.slug, !scope.direct())" [attr.aria-pressed]="scope.direct()"
+                              class="flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] text-left text-[13px] transition-colors hover:bg-raise/60 hover:text-text"
+                              [class]="scope.direct() ? 'bg-frost/15 text-text' : 'text-mute'" [title]="'Só o que é de ' + p.name + ' direto, sem as frentes'">
+                        <span class="grid size-5 place-items-center rounded-md border border-dashed border-faint text-[10px] text-faint">∅</span>
+                        <span class="min-w-0 flex-1 truncate">Sem frente</span>
+                        @if (scope.marks(); as m) { @if (m.counts.get(p.slug); as n) { <span class="rounded-full px-1.5 text-[11px] font-bold tabular-nums {{ m.tone }}">{{ n }}</span> } }
+                      </button>
+                    }
+                    @for (c of kids; track c.slug) {
+                      <div cdkDrag [cdkDragData]="c" class="rounded-lg">
+                        <ng-container *ngTemplateOutlet="item; context: { $implicit: c, kids: 0 }" />
+                        <div *cdkDragPlaceholder class="h-[30px] rounded-lg border border-dashed border-frost/40 bg-frost/5"></div>
+                      </div>
+                    }
+                  </div>
+                }
+                <div *cdkDragPlaceholder class="h-[30px] rounded-lg border border-dashed border-frost/40 bg-frost/5"></div>
+              </div>
+            }
+          </div>
         }
 
         @if (projects.dead().length) {
@@ -62,25 +127,40 @@
       </div>
     </aside>
 
-    <main class="min-h-0 min-w-0 overflow-hidden bg-night">
-      <router-outlet />
+    <main class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-night">
+      <!-- telas irmãs (mesmo ícone): abas -->
+      @if (tabs(); as ts) {
+        <nav class="flex shrink-0 gap-1 border-b border-edge bg-panel px-4 pt-2" aria-label="Telas desta seção">
+          @for (t of ts; track t.path) {
+            @let here = isHere(t.path);
+            <a [routerLink]="t.path" [queryParams]="scope.queryFor(t.path)" [attr.aria-current]="here ? 'page' : null"
+               class="-mb-px flex items-center gap-1.5 border-b-2 px-3 pb-2 pt-1 text-[13.5px] font-semibold transition-colors"
+               [class]="here ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+              {{ t.label }}
+              @if (badge(t.path); as b) { <span class="rounded-full px-1.5 text-[11px] font-bold {{ b.tone }}">{{ b.n }}</span> }
+              @if (t.path === '/execucoes' && runs.active().length) { <span class="pulse size-1.5 rounded-full bg-yes"></span> }
+            </a>
+          }
+        </nav>
+      }
+      <div class="min-h-0 flex-1 overflow-hidden"><router-outlet /></div>
     </main>
   </div>
 
   <!-- barra de status -->
-  <footer class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
+  <footer [hidden]="layout.focus()" class="flex items-center gap-5 border-t border-edge bg-panel px-4 text-[12px] text-mute" aria-live="polite">
     <span class="flex items-center gap-1.5">
       @if (projects.syncing()) { <span class="pulse size-1.5 rounded-full bg-frost"></span> Sincronizando repositórios… }
       @else if (projects.lastSync(); as at) { {{ tick() >= 0 ? 'Sincronizado ' + (at | ago) : '' }} }
     </span>
     @if (runs.active().length) {
-      <a routerLink="/agentes" class="flex items-center gap-1.5 text-yes hover:underline">
+      <a routerLink="/execucoes" class="flex items-center gap-1.5 text-yes hover:underline">
         <span class="pulse size-1.5 rounded-full bg-yes"></span>
         {{ runs.active().length }} {{ runs.active().length === 1 ? 'agente trabalhando' : 'agentes trabalhando' }}
       </a>
     }
     @if (proposals.inbox().length) {
-      <a routerLink="/decisoes" class="text-later hover:underline">
+      <a routerLink="/triagem" class="text-later hover:underline">
         {{ proposals.inbox().length }} {{ proposals.inbox().length === 1 ? 'decisão esperando' : 'decisões esperando' }}
       </a>
     }
@@ -96,14 +176,25 @@
   </footer>
 </div>
 
-<ng-template #item let-p>
-  <a [routerLink]="['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text"
-     class="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-mute hover:bg-raise/60 hover:text-text"
+<ng-template #item let-p let-kids="kids">
+  <a [routerLink]="scope.scopable() ? null : ['/projetos', p.slug]" routerLinkActive="!bg-raise !text-text" (click)="pickProject($event, p)" (dblclick)="openProject($event, p.slug)" (contextmenu)="projectMenu($event, p)"
+     class="group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-[5px] text-mute transition-colors hover:bg-raise/60 hover:text-text"
+     [class.!bg-frost/15]="scope.is(p.slug)" [class.!text-text]="scope.slug() === p.slug"
+     [attr.aria-current]="scope.is(p.slug) ? 'true' : null"
+     [title]="scope.scopable() ? 'Filtrar esta tela por ' + p.name + ' (duplo clique abre a página do projeto)' : 'Abrir ' + p.name"
      [class.opacity-60]="p.status === 'dead'">
-    <span class="size-2.5 shrink-0 rounded-[4px]" [style.background]="p.color"></span>
+    <app-project-avatar [project]="p" [size]="20" class="transition-transform duration-150 group-hover:scale-110" />
     <span class="min-w-0 flex-1 truncate">{{ p.name }}</span>
+    @if (kids) {
+      <button type="button" (click)="toggleGroup($event, p.slug)" [attr.aria-expanded]="!collapsed().has(p.slug)"
+              [attr.aria-label]="(collapsed().has(p.slug) ? 'Mostrar' : 'Esconder') + ' subprojetos de ' + p.name"
+              class="grid size-5 place-items-center rounded text-faint hover:bg-edge hover:text-text">
+        <app-icon name="chevron" [size]="12" class="transition-transform" [class.rotate-90]="!collapsed().has(p.slug)" /></button>
+    }
     @if (runningIn(p)) { <span class="pulse size-1.5 rounded-full bg-yes" title="Agente trabalhando"></span> }
-    @if (p.openProposals) {
+    @if (scope.marks(); as m) {
+      @if (markOf(p); as n) { <span class="rounded-full px-1.5 text-[11px] font-bold tabular-nums {{ m.tone }}" [title]="n + ' ' + m.label">{{ n }}</span> }
+    } @else if (p.openProposals) {
       <span class="rounded-full bg-later/15 px-1.5 text-[11px] font-semibold text-later" title="Decisões esperando">{{ p.openProposals }}</span>
     }
   </a>
@@ -114,3 +205,11 @@
 <app-task-dialog />
 <app-turn-dialog />
 <app-update-dialog />
+<app-project-edit-dialog />
+<app-central-chat />
+<app-context-menu />
+<app-settings-dialog />
+<app-command-palette />
+<app-import-session-dialog />
+<app-ask-dialog />
+<app-find-bar />

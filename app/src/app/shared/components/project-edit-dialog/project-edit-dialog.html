@@ -1,0 +1,102 @@
+<dialog #dlg (close)="close()" aria-labelledby="pe-title"
+        class="m-auto w-[min(720px,92vw)] max-h-[90vh] rounded-3xl border border-edge bg-panel p-0 text-text shadow-2xl">
+  @if (project(); as p) {
+    <form (submit)="save($event)" class="flex h-[min(640px,90vh)] flex-col">
+      <header class="flex items-center gap-4 px-8 pt-7 pb-4">
+        <app-project-avatar [project]="preview()" [size]="52" />
+        <div class="min-w-0 flex-1">
+          <h2 id="pe-title" class="truncate font-display text-2xl font-semibold">{{ name() || 'Sem nome' }}</h2>
+          <p class="text-[13px] text-mute">Editar projeto</p>
+        </div>
+        <button type="button" class="btn btn-ghost !p-2" (click)="close()" aria-label="Fechar"><app-icon name="close" /></button>
+      </header>
+
+      <!-- abas -->
+      <nav class="flex gap-1 border-b border-edge px-8" role="tablist" aria-label="Partes do projeto">
+        @for (t of tabs; track t.id) {
+          <button type="button" role="tab" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)"
+                  class="-mb-px border-b-2 px-3 pb-2.5 text-[14px] font-semibold transition-colors"
+                  [class]="tab() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">{{ t.label }}</button>
+        }
+      </nav>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+        @switch (tab()) {
+          @case ('geral') {
+            <div class="space-y-6">
+                <label class="block">
+                  <span class="mb-1.5 block font-semibold">Nome</span>
+                  <input class="field" [value]="name()" (input)="name.set($any($event.target).value)" required>
+                  <span class="mt-1 block text-[12.5px] text-faint">Só o nome exibido: a pasta, os repositórios e as referências (tarefas, rumo, sessões, agentes) não mudam.</span>
+                </label>
+                <div>
+                  <span class="mb-2 block font-semibold">Status</span>
+                  <div class="flex w-fit gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Status">
+                    @for (s of statuses; track s) {
+                      <button type="button" role="radio" [attr.aria-checked]="status() === s" (click)="status.set(s)"
+                              class="rounded-full px-4 py-1.5 text-[13px] font-semibold transition-colors"
+                              [class]="status() === s ? (s === 'dead' ? 'bg-no/20 text-no' : 'bg-raise text-text') : 'text-mute hover:text-text'">{{ statusLabel[s] }}</button>
+                    }
+                  </div>
+                </div>
+                <div>
+                  <span class="mb-2 block font-semibold">Tarefa pronta quando</span>
+                  <div class="flex w-fit gap-1 rounded-full border border-edge bg-night p-1" role="radiogroup" aria-label="Tarefa pronta quando">
+                    <button type="button" role="radio" [attr.aria-checked]="doneWhen() === 'merge'" (click)="doneWhen.set('merge')"
+                            class="rounded-full px-4 py-1.5 text-[13px] font-semibold" [class]="doneWhen() === 'merge' ? 'bg-raise text-text' : 'text-mute hover:text-text'">O PR é mergeado</button>
+                    <button type="button" role="radio" [attr.aria-checked]="doneWhen() === 'prod'" (click)="doneWhen.set('prod')"
+                            class="rounded-full px-4 py-1.5 text-[13px] font-semibold" [class]="doneWhen() === 'prod' ? 'bg-raise text-text' : 'text-mute hover:text-text'">Chega em produção</button>
+                  </div>
+                  <span class="mt-1 block text-[12.5px] text-mute">{{ doneWhen() === 'prod' ? 'Merge em develop leva a tarefa para "Em dev"; ela vai para Feito sozinha quando o merge chega em main.' : 'PR mergeado leva a tarefa para Feito.' }}</span>
+                </div>
+                <label class="block">
+                  <span class="mb-1.5 block font-semibold">Descrição</span>
+                  <textarea class="field min-h-24 resize-y leading-relaxed" placeholder="O que é, para quem, o que importa agora. Agentes leem isto."
+                            [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+                </label>
+                @if (!projects.children(p.slug).length) {
+                  <div>
+                    <span class="mb-1.5 block font-semibold">Faz parte de</span>
+                    <app-project-select [value]="parentSlug()" (valueChange)="parentSlug.set($event)" [exclude]="p.slug" [onlyTop]="true" noneLabel="Nenhum (projeto de primeiro nível)" />
+                    <p class="mt-1.5 text-[12.5px] text-mute">Subprojeto (frente) de um grupo: tem rumo, backlog e repositórios próprios e segue também o rumo do grupo.</p>
+                  </div>
+                } @else {
+                  <p class="text-[13px] text-mute">Grupo com {{ projects.children(p.slug).length }} frente(s): {{ childNames() }}.</p>
+                }
+            </div>
+          }
+          @case ('aparencia') {
+                <app-icon-picker [(kind)]="iconKind" [(value)]="iconValue" [(color)]="color" />
+          }
+          @case ('pasta') {
+            <div class="space-y-4">
+              <div>
+                <span class="mb-1.5 block font-semibold">Pasta</span>
+                <div class="flex gap-2">
+                  <input class="field min-w-0 font-mono text-[12px]" [value]="folder()" (input)="folder.set($any($event.target).value)" aria-label="Pasta do projeto">
+                  <button type="button" class="btn" (click)="pickFolder()"><app-icon name="folder" [size]="16" />Escolher</button>
+                </div>
+                @if (folder() !== p.folder) { <p class="mt-1.5 text-[13px] text-later">Os repositórios serão procurados na pasta nova ao salvar.</p> }
+              </div>
+              <p class="text-[13px] text-mute">Excluir da Central (lixeira, embaixo) tira o projeto, suas tarefas e rotinas; a pasta e os repositórios continuam no disco.</p>
+            </div>
+          }
+        }
+      </div>
+
+      <footer class="flex items-center gap-3 border-t border-edge px-8 py-4">
+        @if (!confirmDelete()) {
+          <button type="button" class="btn btn-ghost !px-2.5 !text-no" (click)="confirmDelete.set(true)" title="Excluir da Central" aria-label="Excluir da Central"><app-icon name="delete" [size]="17" /></button>
+        } @else {
+          <span class="text-[13px] text-no">Excluir "{{ p.name }}" da Central? A pasta fica.</span>
+          <button type="button" class="btn btn-ghost" (click)="confirmDelete.set(false)">Não</button>
+          <button type="button" class="btn !border-no !bg-no !text-night" (click)="remove()" [disabled]="busy()">Excluir</button>
+        }
+        @if (error()) { <p role="alert" class="text-no">{{ error() }}</p> }
+        <span class="flex-1"></span>
+        <button type="button" class="btn btn-ghost" (click)="close()">Cancelar</button>
+        <button class="btn btn-primary" [disabled]="busy() || !name().trim()">Salvar</button>
+      </footer>
+    </form>
+  }
+</dialog>

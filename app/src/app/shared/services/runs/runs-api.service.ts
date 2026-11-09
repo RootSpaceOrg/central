@@ -10,6 +10,12 @@ export class RunsApiService {
   list(slug: string | null) { return this.ipc.invoke('runs:list', slug); }
   start(input: NewRunInput) { return this.ipc.invoke('runs:start', input); }
   kill(id: number) { return this.ipc.invoke('runs:kill', id); }
+  unpause(id: number) { return this.ipc.invoke('runs:unpause', id); }
+  continue(id: number, note: string | null) { return this.ipc.invoke('runs:continue', id, note); }
+  grant(id: number) { return this.ipc.invoke('runs:grant', id); }
+  dismissWaiting(id: number) { return this.ipc.invoke('runs:dismissWaiting', id); }
+  handoff(id: number, agentId: number | null, note: string | null) { return this.ipc.invoke('runs:handoff', id, agentId, note); }
+  resume(id: number, note: string | null) { return this.ipc.invoke('runs:resume', id, note); }
   events(id: number) { return this.ipc.invoke('runs:events', id); }
   onEvent(cb: (e: RunEventDto) => void) { return this.ipc.on('run:event', cb); }
   onUpdate(cb: (r: RunDto) => void) { return this.ipc.on('run:update', cb); }

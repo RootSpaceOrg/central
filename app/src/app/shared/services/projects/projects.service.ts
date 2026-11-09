@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { CloneProgressDto, GithubRepoDto, ProjectDto, RepoDto } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
 import { ProjectsApiService } from './projects-api.service';
-import { NewProject, Project, ProjectStatus, Repo } from './projects.model';
+import { NewProject, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
 
 const toProject = (d: ProjectDto): Project => ({
   slug: d.slug,
@@ -12,6 +12,8 @@ const toProject = (d: ProjectDto): Project => ({
   status: d.status,
   color: d.color,
   description: d.description,
+  iconKind: d.icon_kind ?? 'letter',
+  iconValue: d.icon_value,
   folderExists: d.folder_exists,
   repoCount: d.repo_count,
   dirtyRepos: d.dirty_repos,
@@ -23,6 +25,12 @@ const toProject = (d: ProjectDto): Project => ({
   lastCommitRepo: d.last_commit_repo,
   openProposals: d.open_proposals,
   activeRuns: d.active_runs,
+  parentSlug: d.parent_slug ?? null,
+  position: d.position ?? 0,
+  todoAgentId: d.todo_agent_id ?? null,
+  todoParallel: d.todo_parallel ?? 1,
+  todoHours: d.todo_hours ?? '',
+  doneWhen: d.done_when === 'prod' ? 'prod' : 'merge',
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -65,6 +73,9 @@ export class ProjectsService {
   readonly living = computed(() => this.projects().filter(p => p.status !== 'dead'));
   readonly dead = computed(() => this.projects().filter(p => p.status === 'dead'));
   readonly bySlug = computed(() => new Map(this.projects().map(p => [p.slug, p])));
+  /** projeto que aparece escolhido por padrão: o mais movimentado da semana */
+  readonly defaultSlug = computed(() => [...this.living()].sort((a, b) =>
+    b.commits7d - a.commits7d || (b.lastCommitAt?.getTime() ?? 0) - (a.lastCommitAt?.getTime() ?? 0))[0]?.slug ?? '');
 
   constructor() {
     this.api.onChanged(() => { this.syncing.set(false); this.lastSync.set(new Date()); this.load(); });
@@ -86,10 +97,26 @@ export class ProjectsService {
 
   async create(p: NewProject): Promise<Project> {
     const dto = await this.api.create({
-      name: p.name, folder: p.folder, status: p.status, color: p.color, description: p.description || null,
+      name: p.name, folder: p.folder, status: p.status, color: p.color, description: p.description || null, parent_slug: p.parentSlug ?? null,
     });
     this.load();
     return toProject(dto);
+  }
+
+  /** subprojetos (frentes) de um projeto-grupo, na ordem da barra lateral */
+  children(slug: string): Project[] { return this.projects().filter(p => p.parentSlug === slug).sort((a, b) => a.position - b.position); }
+
+  /** "MatrizTech › Livros" para subprojetos */
+  fullName(p: Project): string {
+    const parent = p.parentSlug ? this.bySlug().get(p.parentSlug) : null;
+    return parent ? `${parent.name} › ${p.name}` : p.name;
+  }
+
+  /** Nova ordem de irmãos (barra lateral): aplica na hora e salva. */
+  reorder(slugs: string[]): void {
+    const pos = new Map(slugs.map((s, i) => [s, i]));
+    this.projects.update(list => list.map(p => (pos.has(p.slug) ? { ...p, position: pos.get(p.slug)! } : p)));
+    this.api.reorder(slugs).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
   setStatus(slug: string, status: ProjectStatus): void {
@@ -97,9 +124,52 @@ export class ProjectsService {
     this.api.update(slug, { status }).catch(e => { this.error.set(errorMessage(e)); this.load(); });
   }
 
+  /** Responsável pelo "A fazer": agente, quantas por vez, horário. Lança o erro para a tela mostrar. */
+  async setTodoOwner(slug: string, patch: { agentId?: number | null; parallel?: number; hours?: string }): Promise<void> {
+    const p = this.bySlug().get(slug);
+    if (p) this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, todoAgentId: patch.agentId === undefined ? x.todoAgentId : patch.agentId,
+      todoParallel: patch.parallel ?? x.todoParallel, todoHours: patch.hours ?? x.todoHours } : x)));
+    try {
+      await this.api.update(slug, { todo_agent_id: patch.agentId, todo_parallel: patch.parallel, todo_hours: patch.hours });
+    } catch (e) {
+      this.load();
+      throw new Error(errorMessage(e));
+    }
+  }
+
   setDescription(slug: string, description: string): void {
     this.patchLocal(slug, { description: description || null });
     this.api.update(slug, { description: description || null }).catch(e => this.error.set(errorMessage(e)));
+  }
+
+  /** Edição completa (nome, ícone, cor, pasta…). Lança o erro para o formulário mostrar. */
+  async edit(slug: string, e: ProjectEdit): Promise<void> {
+    try {
+      await this.api.update(slug, {
+        name: e.name, status: e.status, color: e.color, description: e.description,
+        icon_kind: e.iconKind, icon_value: e.iconValue, folder: e.folder, parent_slug: e.parentSlug, done_when: e.doneWhen,
+      });
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+    this.load();
+  }
+
+  async remove(slug: string): Promise<void> {
+    try {
+      await this.api.remove(slug);
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
+    this.load();
+  }
+
+  async pickImage(): Promise<string | null> {
+    try {
+      return await this.api.pickImage();
+    } catch (err) {
+      throw new Error(errorMessage(err));
+    }
   }
 
   async repos(slug: string): Promise<Repo[]> {

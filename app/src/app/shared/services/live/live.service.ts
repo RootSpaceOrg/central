@@ -1,0 +1,105 @@
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+
+import { LiveActivityDto, Phase } from '../../contract';
+
+export type { Phase };
+import { IpcService } from '../ipc/ipc.service';
+import { TerminalsService } from '../terminals/terminals.service';
+
+export interface Subagent { id: string; type: string; description: string; startedAt: number; finishedAt: number | null; step: string | null; steps: number }
+export interface PlanItem { id: string; title: string; active: string | null; status: 'pending' | 'in_progress' | 'completed' }
+/** o que o agente disse que está fazendo (set_status) */
+export interface AgentStatus { phase: Phase; doing: string; taskId: number | null; taskTitle: string | null; at: number }
+export interface LiveActivity {
+  scope: 'chat' | 'run'; ref: number; startedAt: number; step: string | null; subagents: Subagent[]; plan: PlanItem[];
+  /** etapa: declarada ou deduzida da ferramenta */
+  phase: Phase | null;
+  status: AgentStatus | null;
+}
+
+/** Etapas no quadro: verbo e cor. */
+export const PHASES: Record<Phase, { label: string; color: string }> = {
+  planejando: { label: 'Planejando', color: '#E8C46A' },
+  investigando: { label: 'Investigando', color: '#7FA2FF' },
+  construindo: { label: 'Construindo', color: '#7ED69A' },
+  testando: { label: 'Testando', color: '#5FD3B5' },
+  revisando: { label: 'Revisando', color: '#C6A6FF' },
+  entregando: { label: 'Entregando', color: '#FF9F6E' },
+  escrevendo: { label: 'Escrevendo', color: '#D9D4C7' },
+  esperando: { label: 'Esperando', color: '#9aa3b5' },
+  delegando: { label: 'Delegando', color: '#B48CFF' },
+};
+
+const toModel = (d: LiveActivityDto): LiveActivity => ({
+  scope: d.scope, ref: d.ref, startedAt: Date.parse(d.started_at), step: d.step,
+  subagents: d.subagents.map(s => ({ id: s.id, type: s.type, description: s.description, startedAt: Date.parse(s.started_at),
+    finishedAt: s.finished_at ? Date.parse(s.finished_at) : null, step: s.step, steps: s.steps })),
+  plan: (d.plan ?? []).map(p => ({ ...p })),
+  phase: d.phase ?? null,
+  status: d.status ? { phase: d.status.phase, doing: d.status.doing, taskId: d.status.task_id, taskTitle: d.status.task_title, at: Date.parse(d.status.at) } : null,
+});
+
+/** O que está fazendo agora: o passo do plano em andamento (o agente declarou) ou o último passo visto. */
+export function doing(a: LiveActivity): string | null {
+  if (a.status) return a.status.doing;
+  const cur = a.plan.find(p => p.status === 'in_progress');
+  return cur ? cur.active ?? cur.title : a.step;
+}
+
+/** "42s", "3:07", "1h12" */
+export function elapsed(from: number, to: number): string {
+  const s = Math.max(0, Math.floor((to - from) / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+}
+
+/**
+ * O que está trabalhando agora: conversas e execuções (com subagentes), como no Orca. O relógio anda a cada segundo
+ * só enquanto há algo rodando.
+ */
+@Injectable({ providedIn: 'root' })
+export class LiveService {
+  private readonly ipc = inject(IpcService);
+
+  readonly items = signal<ReadonlyMap<string, LiveActivity>>(new Map());
+  /** relógio para os contadores (ms) */
+  readonly now = signal(Date.now());
+  /** outros "trabalhando" (terminais do Claude Code) pedem o relógio também */
+  readonly extra = signal(0);
+  private tick: ReturnType<typeof setInterval> | null = null;
+
+  readonly chats = computed(() => [...this.items().values()].filter(a => a.scope === 'chat'));
+  readonly runs = computed(() => [...this.items().values()].filter(a => a.scope === 'run'));
+
+  private readonly terminals = inject(TerminalsService);
+  /** terminais do Claude Code trabalhando (sessão → desde) */
+  readonly terminalsBusy = computed(() => this.terminals.busy());
+
+  constructor() {
+    effect(() => { const n = this.terminals.busy().size; untracked(() => { this.extra.set(n); this.clock(); }); });
+    this.ipc.invoke('activity:list').then(list => { this.items.set(new Map(list.map(d => [`${d.scope}:${d.ref}`, toModel(d)]))); this.clock(); });
+    this.ipc.on('activity', ({ scope, ref, activity }) => {
+      const m = new Map(this.items());
+      if (activity) m.set(`${scope}:${ref}`, toModel(activity)); else m.delete(`${scope}:${ref}`);
+      this.items.set(m);
+      this.clock();
+    });
+  }
+
+  chat(chatId: number | null): LiveActivity | null { return chatId ? this.items().get(`chat:${chatId}`) ?? null : null; }
+  run(runId: number): LiveActivity | null { return this.items().get(`run:${runId}`) ?? null; }
+
+  /** subagentes ainda rodando */
+  running(a: LiveActivity | null): number { return a ? a.subagents.filter(s => !s.finishedAt).length : 0; }
+
+  /** Liga/desliga o relógio conforme há algo rodando. */
+  clock(): void {
+    const busy = this.items().size > 0 || this.extra() > 0;
+    if (busy && !this.tick) this.tick = setInterval(() => this.now.set(Date.now()), 1000);
+    if (!busy && this.tick) { clearInterval(this.tick); this.tick = null; }
+    this.now.set(Date.now());
+  }
+
+  since(from: number): string { return elapsed(from, this.now()); }
+}

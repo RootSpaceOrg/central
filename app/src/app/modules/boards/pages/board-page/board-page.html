@@ -1,0 +1,125 @@
+@if (board(); as b) {
+  <header class="flex flex-wrap items-center gap-x-4 gap-y-2 px-8 pt-6 pb-4">
+    <a routerLink="/quadros" class="text-mute hover:text-text" aria-label="Voltar aos quadros"><app-icon name="chevron" [size]="18" class="rotate-180" /></a>
+    <span class="size-3 rounded-[4px]" [style.background]="b.color"></span>
+    <div class="min-w-0">
+      <h1 class="truncate font-display text-[26px] font-bold leading-tight tracking-tight">{{ b.name }}</h1>
+      <p class="truncate text-[13px] text-mute">
+        @if (project(); as p) { <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="hover:underline" [style.color]="p.color">{{ p.name }}</a> · }
+        @else { quadro solto · }
+        {{ b.description ?? 'As tarefas daqui também estão no backlog principal do projeto delas.' }}
+      </p>
+    </div>
+    <span class="flex-1"></span>
+    <app-select class="w-64" [compact]="true" [action]="true" [options]="outsideOptions()" (picked)="bring($event)"
+                placeholder="Trazer tarefa existente…" label="Trazer uma tarefa existente para este quadro" [minWidth]="360" />
+    <button type="button" class="btn btn-sm" (click)="overview.set(true)" title="Todas as colunas numa tabela"><app-icon name="settings" [size]="15" />Visão geral</button>
+  </header>
+  @if (error()) { <p role="alert" class="mx-8 mb-2 text-[13px] text-no">{{ error() }}</p> }
+
+  <!-- colunas: arrastam pela alça; os cartões só passam entre as listas de cartões -->
+  <div cdkDropList cdkDropListOrientation="horizontal" (cdkDropListDropped)="moveColumn($event)" class="flex min-h-0 flex-1 gap-3 overflow-x-auto px-8 pb-6">
+    @for (c of b.columns; track c.key; let i = $index) {
+      @let items = byColumn()[c.key] ?? [];
+      <section cdkDrag [cdkDragData]="c" cdkDragLockAxis="x" class="flex w-[280px] shrink-0 flex-col rounded-2xl bg-panel/70" [attr.aria-label]="c.label"
+               [style.background]="c.color ? 'color-mix(in srgb, ' + c.color + ' 7%, var(--color-panel))' : null" [style.box-shadow]="c.color ? 'inset 0 3px 0 ' + c.color : null">
+        <div *cdkDragPlaceholder class="w-[280px] shrink-0 rounded-2xl border-2 border-dashed border-frost/40"></div>
+        <header class="px-3.5 pt-3 pb-2">
+          <div class="group flex items-center gap-2">
+            <span cdkDragHandle class="-ml-1 cursor-grab text-faint opacity-40 hover:opacity-100 group-hover:opacity-100" title="Arraste para mudar a coluna de lugar" aria-label="Mover coluna"><app-icon name="grip" [size]="14" /></span>
+            <h2 class="min-w-0 truncate font-display text-[15px] font-semibold" (dblclick)="rename(c)" [title]="c.description ?? 'Duplo clique renomeia'">{{ c.label }}</h2>
+            <span class="rounded-full bg-raise px-2 text-[12px] tabular-nums text-mute">{{ items.length }}</span>
+            <span class="flex-1"></span>
+            <button type="button" class="grid size-5 place-items-center rounded opacity-0 group-hover:opacity-100" [class.!opacity-100]="!!c.color" (click)="colorPanel.set(colorPanel() === c.key ? null : c.key)" title="Cor da coluna" aria-label="Cor da coluna">
+              <span class="size-3 rounded-full border border-faint" [style.background]="c.color"></span></button>
+            <button type="button" class="rounded p-1 text-faint opacity-0 hover:text-text group-hover:opacity-100" (click)="describe(c)" title="Descrição" aria-label="Descrição"><app-icon name="edit" [size]="13" /></button>
+            <button type="button" class="rounded p-1 text-faint opacity-0 hover:text-no group-hover:opacity-100" (click)="removeColumn(c)" title="Remover coluna" aria-label="Remover coluna"><app-icon name="delete" [size]="13" /></button>
+          </div>
+          @if (colorPanel() === c.key) {
+            <div class="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-edge bg-night p-2" role="radiogroup" aria-label="Cor da coluna">
+              <button type="button" role="radio" [attr.aria-checked]="!c.color" class="h-5 rounded-full border border-edge px-1.5 text-[11px] text-mute" (click)="patchColumn(c.key, { color: null }); colorPanel.set(null)">padrão</button>
+              @for (k of colors; track k.value) {
+                <button type="button" role="radio" [attr.aria-checked]="c.color === k.value" [attr.aria-label]="k.label" [title]="k.label" class="size-5 rounded-full ring-offset-1 ring-offset-night"
+                        [style.background]="k.value" [class.ring-2]="c.color === k.value" [class.ring-text]="c.color === k.value" (click)="patchColumn(c.key, { color: k.value }); colorPanel.set(null)"></button>
+              }
+            </div>
+          }
+          <button type="button" (click)="kindMenu($event, c)" title="Entrar nesta coluna põe a tarefa neste estado no backlog principal do projeto. Clique para mudar."
+                  class="mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11.5px] transition-colors"
+                  [class]="c.kind ? 'border-frost/30 bg-frost/10 text-frost hover:border-frost/60' : 'border-dashed border-edge text-faint hover:border-faint hover:text-mute'">
+            <app-icon name="kanban" [size]="11" />{{ c.kind ? 'Backlog: ' + kindLabel[c.kind] : 'Não muda o backlog' }}
+            <app-icon name="chevron" [size]="10" class="rotate-90 opacity-60" /></button>
+          <!-- agente da coluna -->
+          <button type="button" class="mt-2 flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[12.5px] transition-colors"
+                  [class]="c.agentId ? 'bg-frost/10 text-frost hover:bg-frost/15' : 'border border-dashed border-edge text-mute hover:border-faint hover:text-text'"
+                  (click)="agentPanel.set(agentPanel() === c.key ? null : c.key)" [attr.aria-expanded]="agentPanel() === c.key">
+            @if (agentOf(c.agentId); as a) { <app-project-avatar [project]="a" [size]="18" /> } @else { <app-icon name="agent" [size]="13" /> }
+            <span class="min-w-0 flex-1 truncate">{{ agentName(c.agentId) ?? 'Agente nesta coluna' }}</span>
+            @if (c.agentId) { <span class="shrink-0 text-[11px] opacity-70">→ {{ nextLabel(c, i) }}</span> }
+          </button>
+          @if (agentPanel() === c.key) {
+            <div class="mt-2 space-y-2 rounded-xl border border-edge bg-night p-2.5 text-[12.5px]">
+              <app-agent-select [compact]="true" [hideCentral]="true" [value]="c.agentId ? '' + c.agentId : ''" noneLabel="Ninguém (você move)"
+                                (valueChange)="patchColumn(c.key, { agentId: $event ? +$event : null })" />
+              @if (c.agentId) {
+                <textarea class="field h-20 resize-y !py-1 text-[12.5px]" placeholder="O que ele faz nesta etapa" aria-label="Instrução"
+                          [value]="c.instruction ?? ''" (change)="patchColumn(c.key, { instruction: $any($event.target).value.trim() || null })"></textarea>
+                <div class="flex items-center gap-2"><span class="shrink-0 text-mute">Depois vai para</span>
+                  <app-select class="min-w-0 flex-1" [compact]="true" [options]="nextOptions().get(c.key) ?? []" [value]="c.nextKey ?? ''"
+                              (valueChange)="patchColumn(c.key, { nextKey: $event || null })" label="Depois vai para" /></div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-mute">
+                  <span class="flex items-center gap-1.5 whitespace-nowrap">até
+                    <app-select class="w-16" [compact]="true" [options]="parallels" [value]="'' + c.parallel" (valueChange)="patchColumn(c.key, { parallel: +$event })"
+                                label="Quantas por vez" [minWidth]="80" /> por vez</span>
+                  <span class="flex items-center gap-1.5 whitespace-nowrap">horário
+                    <input class="field !w-[88px] !py-1 text-center text-[12.5px]" placeholder="sempre" [value]="c.hours" aria-label="Horário (08-22)"
+                           (change)="patchColumn(c.key, { hours: $any($event.target).value.trim() })" title="Ex.: 08-22. Vazio = qualquer hora." /></span>
+                </div>
+              }
+            </div>
+          }
+        </header>
+
+        <div cdkDropList [id]="'cards-' + c.key" [cdkDropListConnectedTo]="cardLists()" [cdkDropListData]="c.key" (cdkDropListDropped)="drop($event)" class="min-h-16 flex-1 space-y-2 overflow-y-auto px-2.5 pb-2">
+          @for (t of items; track t.id) {
+            <article cdkDrag [cdkDragData]="t" (click)="dialogs.editTask(t.id)" tabindex="0" (keydown.enter)="dialogs.editTask(t.id)" (contextmenu)="cardMenu($event, t)"
+                     class="cursor-grab rounded-xl border border-edge bg-raise p-3 hover:border-faint active:cursor-grabbing" [class.opacity-60]="t.column === 'done'"
+                     [style.background]="t.color ? 'color-mix(in srgb, ' + t.color + ' 12%, var(--color-raise))' : null" [style.box-shadow]="t.color ? 'inset 3px 0 0 ' + t.color : null">
+              <div *cdkDragPlaceholder class="h-14 rounded-xl border-2 border-dashed border-frost/50 bg-frost/5"></div>
+              <p class="text-[13.5px] leading-snug">{{ t.title }}</p>
+              <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px]">
+                @if (projectOf(t.projectSlug); as p) {
+                  <span class="flex items-center gap-1 font-semibold" [style.color]="p.color"><span class="size-1.5 rounded-full" [style.background]="p.color"></span>{{ p.name }}</span>
+                } @else { <span class="text-faint">sem projeto</span> }
+                <span class="text-faint" title="Estado no backlog principal">· {{ kindLabel[t.column] }}</span>
+                @if (t.runStatus === 'running' || t.runStatus === 'preparing' || t.runStatus === 'queued') {
+                  <span class="flex items-center gap-1 text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>agente</span>
+                }
+                @if (asking().get(t.id); as d) { <a routerLink="/triagem" (click)="$event.stopPropagation()" class="text-later hover:underline">decisão #{{ d.id }}</a> }
+              </p>
+            </article>
+          }
+          @if (i === 0) {
+            <input class="w-full rounded-lg bg-transparent px-2 py-1.5 text-[13px] outline-none placeholder:text-faint hover:bg-night/60 focus:bg-night"
+                   placeholder="+ pedido (Enter)" aria-label="Novo pedido neste quadro" (keydown.enter)="request($any($event.target), c.key)" />
+          }
+        </div>
+      </section>
+    }
+
+    <!-- + coluna -->
+    <div class="w-[220px] shrink-0">
+      @if (addingColumn()) {
+        <input class="field" placeholder="Nome da coluna" aria-label="Nome da nova coluna" autofocus
+               (keydown.enter)="addColumn($any($event.target).value)" (keydown.escape)="addingColumn.set(false)" (blur)="addColumn($any($event.target).value)" />
+      } @else {
+        <button type="button" class="flex w-full items-center gap-1.5 rounded-2xl border-2 border-dashed border-edge px-4 py-3 text-[13.5px] text-mute hover:border-faint hover:text-text" (click)="addingColumn.set(true)">
+          <app-icon name="plus" [size]="15" />Coluna</button>
+      }
+    </div>
+  </div>
+
+  @if (overview()) { <app-board-overview [board]="b" (closed)="overview.set(false)" /> }
+} @else if (boards.loaded()) {
+  <div class="grid flex-1 place-items-center text-mute">Quadro não encontrado. <a routerLink="/quadros" class="text-frost hover:underline">Ver quadros</a></div>
+}

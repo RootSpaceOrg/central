@@ -2,7 +2,7 @@
   <div class="flex items-end justify-between gap-6">
     <div>
       <h1 class="font-display text-[34px] font-bold leading-tight tracking-tight">Ideias</h1>
-      <p class="mt-1 max-w-2xl text-mute">Tudo que passou pela cabeça, sem compromisso. Quando uma ideia amadurece, ela vira tarefa no quadro.</p>
+      <p class="mt-1 max-w-2xl text-mute">Ideias são o insumo: você aprova as que entram no rumo, o gestor do projeto quebra as aprovadas em tarefas, e elas terminam quando as tarefas terminam.</p>
     </div>
     <div class="text-right">
       <button type="button" class="btn" (click)="importPending()" [disabled]="importing()">
@@ -13,21 +13,34 @@
     </div>
   </div>
 
-  <form class="mt-7 rounded-3xl border border-edge bg-panel p-4" (submit)="capture($event)" aria-label="Anotar ideia">
-    <input class="w-full bg-transparent px-2 py-1 font-display text-xl outline-none placeholder:text-faint" placeholder="Anote uma ideia…"
-           aria-label="Ideia" [value]="title()" (input)="title.set($any($event.target).value)">
-    @if (title().trim()) {
-      <textarea class="field mt-3 min-h-20 resize-y" placeholder="Por que, para quem, de onde veio" aria-label="Detalhes"
-                [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
-      <div class="mt-3 flex gap-2">
-        <select class="field !w-64" aria-label="Projeto" [value]="projectSlug()" (change)="projectSlug.set($any($event.target).value)">
-          <option value="" [selected]="!(projectSlug())">Sem projeto</option>
-          @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectSlug())">{{ p.name }}</option> }
-        </select>
-        <span class="flex-1"></span>
-        <button class="btn btn-primary">Guardar ideia</button>
-      </div>
+  <!-- caixa de anotar: primeira linha é o título, o resto é markdown -->
+  <form (submit)="capture($event)" aria-label="Anotar ideia"
+        class="mt-7 rounded-3xl border bg-panel transition focus-within:border-frost/50" [class]="dragging() ? 'border-frost' : 'border-edge'"
+        (dragover)="$event.preventDefault(); dragging.set(true)" (dragleave)="dragging.set(false)" (drop)="onDrop($event)">
+    @if (preview() && draft().trim()) {
+      <div class="md max-h-[50vh] min-h-28 overflow-y-auto px-6 py-5 selectable" [innerHTML]="draft() | markdown"></div>
+    } @else {
+      <textarea id="compose" aria-label="Ideia" class="block max-h-[55vh] min-h-28 w-full resize-none bg-transparent [field-sizing:content] px-6 py-5 text-[15.5px] leading-relaxed outline-none placeholder:text-faint"
+                placeholder="Anote uma ideia. A primeira linha vira o título, o resto aceita markdown. Dá para arrastar um .md para cá."
+                [value]="draft()" (input)="draft.set($any($event.target).value)" (keydown.control.enter)="capture($event)"></textarea>
     }
+    <div class="flex flex-wrap items-center gap-2 border-t border-edge px-3 py-2.5">
+      <label class="btn btn-sm btn-ghost cursor-pointer" title="Subir um arquivo .md ou .txt">
+        <app-icon name="file" [size]="14" />Subir .md
+        <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" class="sr-only" (change)="onFile($event)">
+      </label>
+      @if (draft().trim()) {
+        <button type="button" class="btn btn-sm btn-ghost" (click)="preview.set(!preview())" [attr.aria-pressed]="preview()">
+          <app-icon [name]="preview() ? 'edit' : 'summary'" [size]="14" />{{ preview() ? 'Editar' : 'Ver formatado' }}</button>
+        <span class="min-w-0 flex-1 truncate px-1 text-[12.5px] text-faint">Título: <span class="text-mute">{{ parsed().title }}</span></span>
+        <app-project-select class="w-60 shrink-0" [value]="projectSlug()" (valueChange)="projectSlug.set($event)"
+                            [noneLabel]="triageOn() ? 'Sem projeto (triagem decide)' : 'Sem projeto'" />
+        <button class="btn btn-primary shrink-0 whitespace-nowrap">Anotar <kbd class="ml-1 text-xs opacity-70">Ctrl+Enter</kbd></button>
+      } @else {
+        <span class="flex-1 px-1 text-[12.5px] text-faint">
+          {{ triageOn() ? 'Vai para a Triagem; o agente de triagem lê antes de você.' : 'Vai para a Triagem para você aprovar.' }}</span>
+      }
+    </div>
   </form>
 
   <div class="mt-7 flex flex-wrap items-center gap-3">
@@ -38,48 +51,52 @@
           {{ f.label }} <span class="text-faint">{{ counts()[f.id] }}</span></button>
       }
     </div>
-    <select class="field !w-56 !py-2" aria-label="Filtrar por projeto" [value]="projectFilter()" (change)="projectFilter.set($any($event.target).value)">
-      <option value="" [selected]="!(projectFilter())">Todos os projetos</option>
-      <option value="-" [selected]="(projectFilter()) === '-'">Sem projeto</option>
-      @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (projectFilter())">{{ p.name }}</option> }
-    </select>
     <input class="field !w-64 !py-2" placeholder="Buscar" aria-label="Buscar ideias" [value]="query()" (input)="query.set($any($event.target).value)">
   </div>
 
-  @if (ideas.error()) { <p role="alert" class="mt-4 text-no">{{ ideas.error() }}</p> }
+  <p class="mt-3 text-[13px] text-faint">{{ hint() }}</p>
+  @if (ideas.error() || error()) { <p role="alert" class="mt-4 text-no">{{ error() ?? ideas.error() }}</p> }
 
-  <div class="mt-5 grid grid-cols-3 gap-3">
+  <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
     @for (i of list(); track i.id) {
       <article class="flex flex-col rounded-2xl border border-edge bg-panel p-4">
-        <select class="w-fit max-w-full truncate rounded-full bg-raise px-2.5 py-0.5 text-[12px] font-semibold outline-none"
-                [style.color]="project(i.projectSlug)?.color ?? 'var(--color-mute)'" aria-label="Projeto da ideia"
-                [value]="i.projectSlug ?? ''" (change)="ideas.setProject(i.id, $any($event.target).value || null)" [disabled]="i.status === 'promoted'">
-          <option value="" [selected]="!(i.projectSlug ?? '')">Sem projeto</option>
-          @for (p of projects.living(); track p.slug) { <option [value]="p.slug" [selected]="(p.slug) === (i.projectSlug ?? '')">{{ p.name }}</option> }
-        </select>
+        @if (i.status !== 'new' && i.status !== 'archived') {
+          @if (project(i.projectSlug); as p) { <span class="flex items-center gap-1.5 text-[12.5px] font-semibold" [style.color]="p.color"><app-project-avatar [project]="p" [size]="16" />{{ p.name }}</span> }
+        } @else {
+          <app-project-select class="w-56" [compact]="true" [value]="i.projectSlug ?? ''" (valueChange)="ideas.setProject(i.id, $event || null)" noneLabel="Sem projeto" />
+        }
         <h3 class="mt-2 font-display text-[16.5px] font-semibold leading-snug selectable">{{ i.title }}</h3>
         @if (i.body) { <p class="mt-1.5 line-clamp-4 whitespace-pre-line text-[13.5px] leading-relaxed text-mute selectable">{{ i.body }}</p> }
-        <p class="mt-auto pt-3 text-[12px] text-faint">{{ sourceLabel(i.source) }}, {{ i.createdAt | ago }}</p>
+        @if (i.tasks) {
+          <div class="mt-3 flex items-center gap-2 text-[12px] text-mute">
+            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-night"><div class="h-full rounded-full bg-yes" [style.width.%]="i.tasksDone / i.tasks * 100"></div></div>
+            {{ i.tasksDone }}/{{ i.tasks }} tarefas</div>
+        }
+        <p class="mt-auto pt-3 text-[12px] text-faint">{{ i.author === 'gustavo' ? sourceLabel(i.source) : 'sugerida por um agente' }}, {{ i.createdAt | ago }}</p>
         <div class="mt-3 flex gap-2">
           @switch (i.status) {
             @case ('new') {
-              <button type="button" class="btn btn-sm" (click)="promote(i)" [disabled]="!i.projectSlug"
-                      [title]="i.projectSlug ? 'Vira tarefa no Backlog do projeto' : 'Escolha o projeto antes'">
-                <app-icon name="promote" [size]="15" />Virar tarefa</button>
-              <button type="button" class="btn btn-sm btn-ghost" (click)="ideas.archive(i.id, true)"><app-icon name="archive" [size]="15" />Arquivar</button>
+              <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="approve(i)" [disabled]="!i.projectSlug"
+                      [title]="i.projectSlug ? 'Entra no rumo: vira insumo do backlog' : 'Escolha o projeto antes'"><app-icon name="check" [size]="15" />Aprovar</button>
+              <button type="button" class="btn btn-sm btn-ghost" (click)="ideas.setStatus(i.id, 'archived')"><app-icon name="archive" [size]="15" />Descartar</button>
             }
-            @case ('promoted') {
-              <a [routerLink]="['/backlog']" [queryParams]="{ projeto: i.projectSlug }" class="btn btn-sm btn-ghost !text-yes"><app-icon name="kanban" [size]="15" />No quadro</a>
+            @case ('approved') {
+              <a [routerLink]="['/projetos', i.projectSlug]" [queryParams]="{ aba: 'rumo' }" class="btn btn-sm"><app-icon name="kanban" [size]="15" />Planejar no projeto</a>
+              <button type="button" class="btn btn-sm btn-ghost" (click)="promote(i)" title="Vira uma tarefa só, sem passar pelo gestor"><app-icon name="promote" [size]="15" />Virar tarefa</button>
+            }
+            @case ('doing') {
+              <a [routerLink]="['/projetos', i.projectSlug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm btn-ghost !text-yes"><app-icon name="kanban" [size]="15" />No quadro</a>
             }
             @case ('archived') {
-              <button type="button" class="btn btn-sm btn-ghost" (click)="ideas.archive(i.id, false)"><app-icon name="unarchive" [size]="15" />Restaurar</button>
+              <button type="button" class="btn btn-sm btn-ghost" (click)="ideas.setStatus(i.id, 'new')"><app-icon name="unarchive" [size]="15" />Voltar para a triagem</button>
             }
           }
         </div>
       </article>
     } @empty {
       <p class="col-span-3 rounded-3xl border border-dashed border-edge p-10 text-center text-mute">
-        @if (status() === 'new') { Nenhuma ideia aqui. Anote acima ou importe as pendências espalhadas. }
+        @if (status() === 'new') { Nada para triar. Anote acima ou importe as pendências espalhadas. }
+        @else if (status() === 'approved') { Nenhuma ideia aprovada esperando. Aprove na triagem. }
         @else { Nada nesta lista. }
       </p>
     }

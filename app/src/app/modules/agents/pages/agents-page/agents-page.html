@@ -1,123 +1,125 @@
-<!-- lista -->
-<section class="flex min-h-0 flex-col border-r border-edge bg-panel" aria-labelledby="ag-title">
-  <div class="flex items-center justify-between gap-3 px-5 pt-6 pb-3">
-    <h1 id="ag-title" class="font-display text-2xl font-bold tracking-tight">Agentes</h1>
-    <button type="button" class="btn btn-primary btn-sm" (click)="dialogs.newRun({ projectSlug: filter() })">
-      <app-icon name="plus" [size]="14" />Nova tarefa
-    </button>
+<!-- agentes numa coluna ao lado dos projetos; à direita, o agente escolhido -->
+<div class="flex min-h-0 flex-1">
+<app-agent-list [items]="listItems()" [selected]="selected()?.id ?? null" (picked)="pickId($event)" (menu)="agentMenu($event.event, $event.agent)" />
+<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+<!-- topo -->
+<header class="border-b border-edge bg-panel">
+  <div class="flex items-center gap-3 px-6 py-3">
+    <h1 class="font-display text-[20px] font-bold tracking-tight">Agentes</h1>
+    <span class="flex-1"></span>
+    <button type="button" class="btn btn-primary btn-sm shrink-0" (click)="dialog.set({ agent: null, projectSlug: filter() !== 'all' && filter() !== '-' ? filter() : undefined })"><app-icon name="plus" [size]="14" />Novo agente</button>
   </div>
-  @if (filter(); as f) {
-    <div class="mx-5 mb-2 flex items-center gap-2 rounded-full bg-raise px-3 py-1.5 text-[13px]">
-      <span class="size-2 rounded-[3px]" [style.background]="project(f)?.color"></span>
-      <span class="flex-1 truncate">Só {{ project(f)?.name }}</span>
-      <a routerLink="/agentes" class="text-mute hover:text-text" aria-label="Ver todos"><app-icon name="close" [size]="13" /></a>
-    </div>
-  }
+</header>
 
-  <ul class="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-    @for (r of list(); track r.id) {
-      <li>
-        <button type="button" (click)="select(r)"
-                class="flex w-full gap-3 rounded-xl px-3 py-3 text-left hover:bg-raise/60"
-                [class.bg-raise]="selected()?.id === r.id" [attr.aria-current]="selected()?.id === r.id">
-          <span class="mt-1.5 size-2 shrink-0 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>
-          <span class="min-w-0 flex-1">
-            <span class="line-clamp-2 leading-snug">{{ r.title }}</span>
-            <span class="mt-1 block truncate text-[12.5px] text-mute">
-              {{ statusLabel[r.status] }}, {{ r.repoName }}, {{ r.createdAt | ago }}
-            </span>
-          </span>
-        </button>
-      </li>
-    } @empty {
-      <li class="px-4 py-10 text-center text-mute">
-        Nenhuma tarefa ainda. Os agentes trabalham em cópias isoladas dos repositórios e terminam com um PR draft.
-      </li>
-    }
-  </ul>
-</section>
-
-<!-- detalhe -->
-@if (selected(); as r) {
-  <section class="flex min-h-0 flex-col" aria-label="Execução">
-    <header class="border-b border-edge px-8 pt-6 pb-5">
-      <div class="flex items-start gap-4">
-        <div class="min-w-0 flex-1">
-          <p class="flex items-center gap-2 text-[13px]">
-            <span class="flex items-center gap-1.5 rounded-full bg-raise px-2.5 py-0.5 font-semibold">
-              <span class="size-1.5 rounded-full {{ dot[r.status] }}" [class.pulse]="isActive(r.status)"></span>{{ statusLabel[r.status] }}
-            </span>
-            @if (project(r.projectSlug); as p) {
-              <a [routerLink]="['/projetos', p.slug]" class="font-semibold hover:underline" [style.color]="p.color">{{ p.name }}</a>
-            }
-          </p>
-          <h2 class="mt-2 font-display text-[22px] font-semibold leading-snug [overflow-wrap:anywhere] selectable">{{ r.title }}</h2>
+<!-- agente escolhido -->
+@if (selected(); as a) {
+  <section class="flex min-h-0 flex-1 flex-col bg-night" [attr.aria-label]="a.name">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-edge px-6 py-3">
+      <app-project-avatar [project]="a" [size]="40" />
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 class="truncate font-display text-[19px] font-bold leading-tight">{{ a.name }}</h2>
+          @if (project(a.projectSlug); as p) {
+            <a [routerLink]="['/projetos', p.slug]" class="flex items-center gap-1.5 rounded-full border border-edge px-2 py-0.5 text-[12px] hover:border-faint" [style.color]="p.color">
+              <app-project-avatar [project]="p" [size]="13" />{{ p.name }}</a>
+          }
+          <span class="rounded-full border border-edge px-2 py-0.5 text-[12px] text-mute">{{ a.restricted ? 'Atuação restrita' : a.permission === 'full' ? 'Liberdade total' : 'Segura' }}</span>
+          @if (a.model) { <span class="rounded-full border border-edge px-2 py-0.5 text-[12px] text-mute">{{ modelLabel(a.model) }}</span> }
         </div>
-        <div class="flex shrink-0 gap-2">
-          @if (r.prUrl) { <button type="button" class="btn btn-primary btn-sm" (click)="openPr(r)"><app-icon name="pr" [size]="14" />Ver PR</button> }
-          @if (r.worktreePath) { <button type="button" class="btn btn-sm" (click)="openWorktree(r)"><app-icon name="code" [size]="14" />Abrir no VS Code</button> }
-          @if (isActive(r.status)) { <button type="button" class="btn btn-sm !text-no" (click)="runs.kill(r.id)"><app-icon name="stop" [size]="13" />Interromper</button> }
-        </div>
+        @if (a.description) { <p class="mt-0.5 truncate text-[13px] text-mute">{{ a.description }}</p> }
       </div>
+      <div class="flex shrink-0 gap-2">
+        <button type="button" class="btn btn-sm" (click)="newRun(a)"><app-icon name="play" [size]="14" />Tarefa</button>
+        <button type="button" class="btn btn-sm" (click)="newRoutine(a)"><app-icon name="routine" [size]="14" />Rotina</button>
+        <button type="button" class="btn btn-sm" (click)="dialog.set({ agent: a })"><app-icon name="edit" [size]="14" />Editar</button>
+      </div>
+    </div>
 
-      <dl class="mt-4 flex flex-wrap gap-x-7 gap-y-2 text-[13px]">
-        <div><dt class="text-faint">Repositório</dt><dd>{{ r.repoName }}</dd></div>
-        @if (r.branch) { <div class="min-w-0 max-w-full"><dt class="text-faint">Branch</dt><dd class="font-mono text-[12px] [overflow-wrap:anywhere] selectable">{{ r.branch }} → {{ r.baseBranch }}</dd></div> }
-        <div><dt class="text-faint">Liberdade</dt><dd>{{ r.permission === 'full' ? 'Total' : 'Segura' }}</dd></div>
-        <div><dt class="text-faint">Gasto</dt><dd class="tabular-nums">US$ {{ (r.costUsd ?? 0).toFixed(2) }} de {{ r.budgetUsd.toFixed(2) }}</dd></div>
-        @if (elapsed()) { <div><dt class="text-faint">Duração</dt><dd>{{ elapsed() }}</dd></div> }
-      </dl>
+    <!-- abas do agente -->
+    <div class="flex items-center gap-1 border-b border-edge px-5" role="tablist" aria-label="O que ver">
+      @for (t of [{ id: 'conversas', label: 'Conversa', n: null }, { id: 'execucoes', label: 'Execuções', n: agentRuns().length }, { id: 'memoria', label: 'Memória', n: memories.of(a.id).length }]; track t.id) {
+        <button type="button" role="tab" [attr.aria-selected]="pane() === t.id" (click)="pane.set($any(t.id))"
+                class="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13.5px] font-semibold transition-colors"
+                [class]="pane() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+          {{ t.label }}@if (t.n) { <span class="rounded-full bg-raise px-1.5 text-[11.5px] font-normal tabular-nums text-faint">{{ t.n }}</span> }
+        </button>
+      }
+      <span class="flex-1"></span>
+      @if (pane() === 'conversas') {
+        <span class="hidden min-w-0 truncate px-2 text-[12.5px] text-faint lg:block">{{ chat.current() ? (chat.chats().find(c => c.id === chat.current())?.title ?? '') : 'Conversa nova' }}</span>
+        <button type="button" class="btn btn-sm btn-ghost" (click)="chat.newChat(a.id)"><app-icon name="plus" [size]="14" />Nova conversa</button>
+        <button type="button" class="btn btn-sm btn-ghost" (click)="toggleHistory()" [attr.aria-pressed]="history()" [class.!bg-raise]="history()">
+          <app-icon name="summary" [size]="14" />Histórico <span class="tabular-nums text-faint">{{ chat.agentChats().length }}</span></button>
+      }
+    </div>
 
-      @if (r.prompt !== r.title) {
-        <details class="mt-4">
-          <summary class="cursor-pointer text-[13px] text-mute hover:text-text">Tarefa completa</summary>
-          <p class="mt-2 whitespace-pre-line rounded-2xl bg-panel p-4 text-[13.5px] leading-relaxed selectable">{{ r.prompt }}</p>
-        </details>
+    @switch (pane()) {
+      @case ('conversas') {
+        <div class="flex min-h-0 flex-1">
+          <app-chat-view class="min-h-0 min-w-0 flex-1" />
+          @if (history()) {
+            <aside class="flex w-80 shrink-0 flex-col border-l border-edge bg-panel" aria-label="Histórico de conversas">
+              <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+                @for (c of chat.agentChats(); track c.id) {
+                  <li class="group flex items-center gap-1 rounded-lg transition-colors hover:bg-raise/70" [class.bg-raise]="c.id === chat.current()">
+                    <button type="button" class="min-w-0 flex-1 px-3 py-2 text-left" (click)="chat.select(c.id)" (dblclick)="rename(c.id, c.title)" title="Duplo clique renomeia">
+                      <span class="flex items-center gap-1.5">
+                        @if (chat.busy().has(c.id)) { <span class="pulse size-1.5 shrink-0 rounded-full bg-frost"></span> }
+                        <span class="truncate text-[13.5px]">{{ c.title }}</span>
+                      </span>
+                      <span class="text-[11.5px] text-faint">{{ c.updatedAt | ago }}</span>
+                    </button>
+                    <button type="button" class="mr-1 rounded p-1 text-faint opacity-0 hover:text-no group-hover:opacity-100" (click)="chat.remove(c.id)" aria-label="Apagar conversa">
+                      <app-icon name="delete" [size]="14" /></button>
+                  </li>
+                } @empty {
+                  <li class="px-3 py-4 text-[13px] text-mute">Nenhuma conversa com {{ a.name }} ainda.</li>
+                }
+              </ul>
+            </aside>
+          }
+        </div>
       }
-    </header>
-
-    <ol #log class="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-8 py-6" aria-live="polite" aria-label="Log do agente">
-      @for (e of events(); track $index) {
-        @switch (e.kind) {
-          @case ('system') {
-            <li class="flex gap-3 text-[12.5px] text-faint"><time class="w-16 shrink-0 tabular-nums">{{ time(e.at) }}</time><span class="min-w-0 [overflow-wrap:anywhere] selectable">{{ e.text }}</span></li>
-          }
-          @case ('tool') {
-            <li class="flex gap-3 text-[12.5px] text-mute">
-              <time class="w-16 shrink-0 tabular-nums text-faint">{{ time(e.at) }}</time>
-              <span class="min-w-0 truncate font-mono selectable">{{ e.text }}</span>
-            </li>
-          }
-          @case ('text') {
-            <li class="flex gap-3"><time class="w-16 shrink-0 pt-0.5 text-[12.5px] tabular-nums text-faint">{{ time(e.at) }}</time>
-              <p class="min-w-0 max-w-3xl whitespace-pre-line leading-relaxed [overflow-wrap:anywhere] selectable" [innerHTML]="e.text | mdLite"></p></li>
-          }
-          @case ('result') {
-            <li class="ml-[76px] max-w-3xl rounded-2xl border border-yes/40 bg-yes/10 p-5">
-              <p class="mb-2 font-semibold text-yes">Resultado</p>
-              <p class="whitespace-pre-line leading-relaxed [overflow-wrap:anywhere] selectable" [innerHTML]="e.text | mdLite"></p>
-            </li>
-          }
-          @case ('error') {
-            <li class="ml-[76px] max-w-3xl rounded-2xl border border-no/40 bg-no/10 p-5">
-              <p class="mb-2 font-semibold text-no">Erro</p>
-              <p class="whitespace-pre-line font-mono text-[12.5px] leading-relaxed [overflow-wrap:anywhere] selectable">{{ e.text }}</p>
-            </li>
-          }
-        }
-      } @empty {
-        <li class="text-mute">{{ isActive(r.status) ? 'Esperando o agente começar…' : 'Sem registro desta execução.' }}</li>
+      @case ('execucoes') {
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <ul class="mx-auto max-w-3xl space-y-2 px-6 py-6">
+            @for (r of agentRuns(); track r.id) {
+              <li>
+                <a routerLink="/execucoes" [queryParams]="{ run: r.id }" class="flex gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 transition-colors hover:border-faint">
+                  <span class="mt-1.5 size-2 shrink-0 rounded-full" [class.pulse]="isActive(r.status)"
+                        [class]="r.status === 'succeeded' ? 'bg-yes' : r.status === 'failed' ? 'bg-no' : isActive(r.status) ? 'bg-later' : 'bg-faint'"></span>
+                  <span class="min-w-0 flex-1">
+                    <span class="line-clamp-2 text-[14px]">{{ r.title }}</span>
+                    <span class="text-[12px] text-faint">{{ runLabel[r.status] }}{{ r.routineId ? ', rotina' : '' }}, {{ r.createdAt | ago }}</span>
+                  </span>
+                </a>
+              </li>
+            } @empty {
+              <li class="rounded-3xl border-2 border-dashed border-edge p-10 text-center text-mute">{{ a.name }} ainda não executou tarefas.</li>
+            }
+          </ul>
+        </div>
       }
-      @if (r.status === 'running') {
-        <li class="ml-[76px] flex items-center gap-2 text-[13px] text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>trabalhando</li>
+      @case ('memoria') {
+        <div class="flex min-h-0 flex-1 flex-col">
+          <div class="mx-auto mt-5 flex w-full max-w-3xl gap-1 px-8" role="radiogroup" aria-label="Qual memória">
+            @for (v of [{ id: 'dele', label: 'Dele', n: memories.of(a.id).length }, { id: 'todos', label: 'De todos os agentes', n: memories.of(null).length }, { id: 'esquecidas', label: 'Esquecidas', n: memories.retiredFor(a.id).length }]; track v.id) {
+              <button type="button" role="radio" [attr.aria-checked]="memView() === v.id" (click)="memView.set($any(v.id))"
+                      class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px]" [class]="memView() === v.id ? 'border-frost/60 bg-frost/15 font-semibold' : 'border-edge text-mute hover:text-text'">
+                {{ v.label }}<span class="tabular-nums text-faint">{{ v.n }}</span></button>
+            }
+          </div>
+          <app-memory-panel class="min-h-0 flex-1" [agent]="a" [view]="memView()" />
+        </div>
       }
-    </ol>
+    }
   </section>
 } @else {
-  <div class="grid place-items-center p-10 text-center text-mute">
-    <div>
-      <p class="font-display text-xl text-text">Nenhuma tarefa selecionada</p>
-      <p class="mt-2">Crie uma tarefa ou aprove uma decisão para mandar a um agente.</p>
-    </div>
-  </div>
+  <div class="grid flex-1 place-items-center text-mute">Carregando agentes…</div>
 }
+
+</div>
+</div>
+
+<!-- fixed: fora do fluxo da página -->
+<app-agent-dialog class="fixed" [state]="dialog()" (closed)="closed($event)" />

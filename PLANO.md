@@ -4,11 +4,22 @@ Pesquisa de base: `reports/Central orquestradora para dev solo.md`.
 
 ## Princípio
 
-**A Central trabalha, você julga.** Dois modos na mesma máquina:
-- **Piloto** (motivado): abre o projeto, código + terminal + Claude Code na mesma tela, despacha agentes.
-- **Sugestão** (sem energia): abre Decisões, uma por vez, A/D/N. O que aprova vira tarefa de agente.
+**Você é o gestor: aponta o caminho e aprova. Os agentes fazem quando você pede.**
 
-Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), não rotina.
+```
+Você (gestor) ── aponta o rumo, faz a triagem, pede
+├─ Agente Central ── braço direito: conversa, mantém rumos, triagem junto, delega
+└─ Projeto
+   ├─ Rumo ........ para onde vamos (objetivo, foco agora, não fazer); você escreve, agentes propõem ajuste; com histórico
+   ├─ Ideias ...... insumo (suas ou de agentes) → triagem → aprovadas = issues
+   ├─ Tarefas ..... pedaços executáveis, nascem das ideias aprovadas (o gestor do projeto quebra)
+   ├─ Conhecimento  memória + índice de código: como as coisas são
+   └─ Agentes ..... gestor do projeto (planeja a pedido), executores (tarefa → PR), suporte/Sentry (rotinas)
+```
+
+- **Com gás**: abre o projeto e cria sessões; ou a Grade com várias sessões de projetos diferentes.
+- **Gestão**: Triagem (decisões + ideias novas, A/D/N) → rumo de cada projeto → "Planejar backlog" (gestor) → turno ou agentes.
+- Nada roda sozinho sem pedido além das rotinas que você ligou (Sentry, radar…) e dos turnos que você marcou.
 
 ## Arquitetura
 
@@ -51,11 +62,269 @@ Turno noturno é decisão pontual ("deixa X evoluindo esta noite, teto US$N"), n
   parados no horário, resumo no Início. Testado: 2 tarefas, 2 commits, US$ 0,40.
 - Ícones Material Symbols; rodapé com uso do Claude (sessão, semana, por modelo) como no Orca.
 
+## Feito (v0.5)
+
+- **Agente Central** (Ctrl+J ou o primeiro ícone da barra): chat que conhece e altera tudo pela Central,
+  com projetos, backlog, ideias, decisões, agentes, turnos, rotinas e cota. Cada conversa é uma sessão do Claude Code (`--resume`).
+- **MCP da Central** (HTTP local, token por execução): 30 ferramentas. Ligado no agente Central, nos agentes,
+  nas rotinas e no terminal "Claude Code": as sessões registram follow-ups, ideias e decisões no backlog.
+- **Agentes sem repositório**: escopo "projeto inteiro" (pasta, sem worktree; seguro = só lê e organiza).
+  Tamanho (Pequeno/Médio/Grande) no lugar de US$; consumo medido em % da sessão do plano.
+- **Rotinas**: agentes com agenda (dias + horário ou a cada N h), pulam se a sessão passar do limite.
+- **PR mergeado → Feito** automático (gh, a cada sincronização e a cada 15 min).
+- **Projeto editável**: nome, ícone (letra, emoji, ícone, imagem), cor, status, descrição, pasta; excluir da Central.
+- Ícones Lucide com hover e tooltip; atualização pela release no GitHub (RootSpaceOrg/central).
+
+## Feito (v0.6)
+
+- **Agentes como papéis** (tela Agentes): nome, ícone, instruções, projeto opcional, ferramentas extras (ex.: `mcp__sentry`),
+  liberdade e modelo. Exemplos: Suporte KultivAi (conversa), Sentinela de erros KultivAi e Radar de tendências (rotinas),
+  Marketing (sem projeto, pasta própria em `Development/.central-agents/`).
+- **Conversas** com qualquer agente: sessões salvas, renomear, apagar, markdown completo, passos recolhíveis; painel Ctrl+J
+  troca de agente. **Continuar conversa** retoma a sessão de uma execução terminada.
+- Execuções e rotinas sem projeto (agente com pasta própria); rotinas e tarefas com agente.
+- Seletor de projeto/agente com ícone; menu de botão direito em projetos, agentes e cards do Kanban.
+- **M5 (ingestão)**: sentinela de CI abre decisão quando `main` ou `develop` de um repo ativo falha no GitHub Actions.
+- **M6 (scouts)**: agente Radar de tendências com rotina semanal (desligada até você ligar).
+- Uso do Claude com proteção contra limite de consultas (429) e último valor salvo.
+
+## Feito (v0.7)
+
+- **Bandeja do Windows**: fechar a janela esconde a Central; rotinas, turnos e agentes seguem rodando. Menu na bandeja.
+- **Abrir com o Windows** (minimizada na bandeja) e **notificações** (agente/rotina terminou, CI quebrou) que levam à tela certa.
+- **Paleta de comandos (Ctrl+K)**: ações, telas, projetos, agentes, tarefas e ideias; sem resultado, Enter pergunta à Central.
+- **Conversar sobre esta tarefa** (menu do card e diálogo da tarefa): abre o agente do projeto com o contexto escrito.
+- **Preferências** (engrenagem na barra lateral).
+
+## Feito (v0.8)
+
+- **Sessões no projeto** (como no Orca): aba fixa de código + abas de Claude (conversa na pasta do projeto, edita código),
+  Claude Code, PowerShell, CMD e Git Bash. Ficam salvas: reabrir o app volta as abas; conversas antigas do projeto retomam pelo "+".
+- **Piloto automático** por projeto (botão no cabeçalho ou no Início): passada de madrugada (01h–06h) com as travas acima.
+  Sem tarefa em "A fazer", abre uma decisão só (e fecha sozinha quando houver tarefa).
+- **Início novo**: sem a pergunta de energia. Esperando você (revisar → decidir → falhas), piloto automático (o que fez em cada
+  projeto), projetos Evoluindo e Em suporte com atalho para abrir sessão, automações (rotinas e saúde).
+
+## Feito (v0.9)
+
+- **Grade** (ícone na barra lateral): sessões de qualquer projeto lado a lado. Cada painel divide à direita ou para baixo,
+  as divisórias redimensionam (duplo clique iguala) e o cabeçalho arrasta o painel: solte na borda de outro para encaixar
+  ao lado, no centro para trocar. Um terminal é o mesmo processo na aba do projeto e na Grade.
+- **Presets de janela**: cada grade tem nome e salva sozinha (modelos: um painel, duas colunas, principal + 2, 2 × 2,
+  três colunas; duplicar, renomear, excluir). "Levar para a Grade" no botão direito de uma aba do projeto.
+- **Modo foco** (F11 ou botão Foco): tela cheia só com a grade.
+- Ícones originais das ferramentas (Claude, PowerShell, CMD, Git Bash) nas abas, menus, painéis e no Início.
+
+## Feito (v0.10)
+
+- **Contexto do projeto** (aba Contexto; pesquisa em `reports/contexto-de-codigo.md`):
+  - **Índice de código local**: tree-sitter (WASM) lê TypeScript/Angular, Python e Terraform num processo à parte; símbolos,
+    imports, chamadas, inject, e as ligações do stack (Angular `http.get` → rota → API Gateway → Lambda → handler Python).
+    Incremental (tamanho/data/hash) e acompanha mudanças sozinho. KultivAi: 2 mil arquivos em ~14 s.
+  - **Mapa do código** ranqueado (PageRank personalizado pela tarefa, estilo Aider) dentro de um orçamento de tokens, injetado no
+    prompt de execuções, agentes de projeto e sessões; prévia exata na aba ("Prompt").
+  - **Ferramentas MCP**: `code_map`, `code_search`, `code_symbol`, `code_neighbors`, `code_impact`, `memory_recall`,
+    `memory_remember`, `memory_supersede`.
+  - **Memória do projeto**: fatos (decisão, convenção, armadilha…) com autor, fonte e histórico (retirar ≠ apagar), ligados a
+    arquivos/símbolos; importa a auto memory do Claude Code.
+  - **Grafo** (sigma.js/WebGL): arquivos ou pastas, cor por repositório ou comunidade, camadas de memória e do que os agentes
+    leram/editaram, busca, foco nos vizinhos, painel do nó (ligações, símbolos, código, memória, "Perguntar ao Claude").
+- **Importar sessões do Claude Code** (Orca, terminal) para um projeto, com o histórico; sessões passam a conhecer a Central.
+- **Grade**: várias sessões de uma vez, "+" no painel, minimapa com prévia ao arrastar, animação e fundo quadriculado.
+- **Piloto automático com direção**: para onde levar o projeto + autonomia (só aprovadas, propor, planejar e fazer).
+- Ícone novo; correção ao editar projeto com imagem.
+
+## Feito (v0.11)
+
+- **Rumo do projeto** (aba Rumo, no lugar do Resumo): texto curto com objetivo/foco/não fazer, histórico de quem mudou e por quê;
+  vai em todo prompt de agente do projeto; aparece nos cartões do Início.
+- **Gestor do projeto sob demanda** ("Planejar backlog", no Início, no projeto e na triagem; ou pelo chat via `plan_backlog`): lê rumo,
+  ideias aprovadas, backlog, memória e código; quebra ideias em tarefas ligadas a elas e reordena pelo rumo. Não executa.
+- **Ideias com ciclo de vida**: para triar → aprovadas → em andamento (com progresso das tarefas) → feitas; ou descartadas.
+- **Triagem** (no lugar de Decisões): decisões e ideias novas numa fila só, uma de cada vez.
+- **Piloto automático removido**: agentes agem quando você pede (botão, chat, turno, rotina).
+- **Mapa do código** (aba Contexto) com Cytoscape e navegação por pastas: cada nível mostra só o conteúdo de uma pasta, áreas de fora
+  só quando se ligam; grade de cartões nos níveis só de pastas.
+- MCP: `get_direction`, `update_direction`, `plan_backlog`; ideias com status e `create_task` com `idea_id`.
+
+## Feito (v0.12)
+
+- **Subprojetos (frentes)**: um projeto vira grupo (ex.: MatrizTech › Livros e Plataforma; frontend/backend). Cada frente tem pasta,
+  repositórios, rumo, backlog e sessões próprios e recebe também o rumo do grupo; repositório numa subpasta fica com a frente.
+  "Criar subprojeto" no botão direito, "+ frente" no cabeçalho, "Faz parte de" ao editar.
+- **Barra lateral reordenável** (arrastar), grupos recolhíveis com as frentes aninhadas.
+- **Conversas leves**: só as últimas 60 mensagens são desenhadas (mais ao rolar para cima, sem pular), itens fora da tela não são
+  pintados, mensagens ficam em cache por conversa (trocar de aba não recarrega), rascunho por conversa.
+- **Preferências → Chat das sessões**: tamanho do texto (11–18 px, Ctrl +/−/0) e largura (estreita → toda a área).
+
+## Feito (v0.13)
+
+- **Atividade ao vivo** (como no Orca): cada conversa e execução mostra há quanto tempo está trabalhando, o passo atual e os
+  **subagentes** (tipo, descrição, o que fazem agora, tempo); nas abas, na Grade, no Início ("Trabalhando agora") e na barra lateral.
+  Claude Code no terminal também ("esc to interrupt" na saída). No histórico, passos de subagente ficam recuados e cada um registra
+  quanto durou. Sessões e agentes agora podem usar subagentes (antes a ferramenta não era liberada).
+- **Modelo e raciocínio por conversa** na caixa de mensagem (Opus/Sonnet/Haiku/Fable; Baixo → Máximo, `--effort`), salvos na
+  conversa; a última escolha vira o padrão das novas. Botão de parar no mesmo lugar.
+
+## Feito (v0.14)
+
+- **Roadmap por projeto** (aba Rumo): marcos em Agora / Próximo / Depois, arrastáveis, com progresso pelas tarefas ligadas
+  (direto ou via ideia). Hierarquia: rumo → marcos → ideias aprovadas → tarefas. O gestor liga tarefas a marcos ao planejar;
+  agentes veem o roadmap no contexto e têm `list_milestones`/`create_milestone`/`update_milestone` no MCP. No Início, cada
+  projeto mostra seus marcos de Agora.
+- **Plano declarado**: agentes e sessões declaram para onde vão (TaskCreate/TodoWrite, 3–6 passos) e marcam o progresso;
+  a Central acompanha ao vivo.
+- **Escritório**: o time trabalhando como um andar. Uma sala por projeto com o marco de Agora na parede; cada sessão/execução
+  é uma mesa com o que está fazendo (balão), o plano com progresso, os subagentes ("estagiários") e há quanto tempo. Corredor
+  (projetos parados e seu marco), Copa (agentes parados) e "Saíram há pouco" (execuções das últimas 3 h). Tudo do que já chega
+  ao vivo, sem polling novo.
+
+## Feito (v0.15)
+
+- **Escritório em isométrico** (estilo hotel de pixel, arte própria em SVG, sem engine): salas por tipo de trabalho
+  (Gestão, Engenharia, Monitoração, Estúdio criativo, Negócios), copa e corredor. Cada sessão/execução senta numa mesa
+  (monitor aceso) com balão do que está fazendo e o progresso do plano; subagentes ficam em pé ao lado (estagiários).
+  Agentes parados ficam na copa e **andam pelo corredor** até a sala quando começam. Cabelo = cor do agente, camisa = cor
+  do projeto. Post-its no quadro da gestão = marcos em Agora. Abaixo: mesas com o detalhe, mural do corredor e saídas.
+- **Sala do agente**: escolhida no editor ou deduzida pelo papel (sentinela → monitoração, marketing → criativo, suporte →
+  negócios); a Central e o gestor ficam na gestão; sessões de projeto na engenharia.
+- fix: conversas abertas fora da tela (MCP, triagem) agora aparecem na lista enquanto rodam.
+
+## Feito (v0.16)
+
+- **Roadmap é uma aba do projeto** (Sessões · Rumo · Roadmap · Backlog…): colunas Agora/Próximo/Depois; cada marco mostra
+  quem criou (✦ agente), de onde veio (nota) e as ideias ligadas; "Ideias sem marco" para ligar ideias aprovadas/em triagem.
+- **Alimentar o roadmap**: colar (ou carregar .txt/.md/.vtt/.srt) a transcrição de uma reunião, notas ou um direcionamento;
+  a Central lê, cria/move/conclui marcos com a origem na nota e sugere ideias ligadas aos marcos (vão para a triagem). Não
+  cria tarefas nem mexe no rumo. Testado com uma reunião: 3 marcos nos horizontes certos e 2 ideias ligadas.
+- **Histórico do roadmap**: quem mexeu (você ou agente), o quê e por quê. MCP: `create_milestone`/`update_milestone` exigem
+  `note`; `create_idea`/`update_idea` aceitam `milestone_id`.
+- **Escritório em 3D** (three.js, carregado só nessa tela): bonecos voxel que sentam, digitam, andam pelo corredor e viram;
+  nicks estilo jogo na cabeça e balão do que estão fazendo; estagiários em volta da mesa. Arrastar gira (Q/E giram 90°),
+  roda aproxima; as paredes do lado da câmera somem.
+- v0.16.1: fluidez do 3D. Câmera mexendo ou gente andando desenha em todo quadro (240 fps num monitor de 240 Hz);
+  só digitando, 60; só a copa, 30. Mobília parada juntada por material (620 → ~200 chamadas de desenho, ~0,5 ms por quadro).
+
+## Feito (v0.17)
+
+- **Quadro de status** no topo do Escritório: uma caixa por quem está trabalhando com a etapa ("Construindo…",
+  "Investigando…", "Testando…"), o que está fazendo, a tarefa ("#15 Exportar roadmap em PDF"), agente, projeto, tempo, plano e
+  estagiários. Clique destaca no 3D; duplo clique entra. O balão no 3D também começa pelo verbo.
+- **Agentes declaram o status** pelo MCP (`set_status`: fase, o que, task_id). Cada conversa/execução recebe um MCP com quem ela
+  é na URL (/mcp/run/12), então o status cai na caixa certa. Prompts das sessões, agentes e execuções pedem isso a cada etapa.
+- Sem declaração, a etapa é **deduzida das ferramentas**: editar = construindo, ler/buscar = investigando, testes/tsc/build =
+  testando, git diff = revisando, commit/PR = entregando, plano = planejando, subagente = delegando.
+
+## Feito (v0.18)
+
+- **Memória dos agentes** (além dos fatos de projeto): cada agente lembra entre conversas (dele) e há a memória de todos
+  (sobre o Gustavo, clientes, decisões entre projetos). Entra sozinha no prompt de agentes, sessões e execuções; os agentes
+  guardam pelo MCP (`remember` com para: mim/todos, `recall`, `forget`), sabendo quem são pela URL do MCP. Aba Memória em
+  Agentes: dele / de todos / esquecidas; editar, fixar, mudar de escopo, esquecer com motivo. Testado: o Marketing guardou
+  "posts do KultivAi fecham com pergunta" e, numa conversa nova, o post saiu fechando com pergunta.
+- **Escritório**: filtro por projeto (chips com quantos trabalhando; frente conta no projeto-pai; fica salvo) no quadro, no
+  3D e nas mesas, sem ninguém sair andando. Nome de cada sala pintado no chão e legenda "Salas" (o que é cada sala e quem
+  senta nela; passar o mouse acende o piso).
+- **Visão geral = saúde dos projetos**: "Precisa de você" (de todos os projetos, risco primeiro: urgentes, execuções que
+  falharam, decisões, PRs em revisão, tarefas paradas, triagem…) e um cartão por projeto com saúde (em risco / atenção /
+  parado / saudável) e os porquês, última atualização, ritmo, backlog, marco de Agora, rumo e triagem. Manutenção cobra
+  menos; congelado só risco.
+
+## Feito (v0.19)
+
+- **Nota de entrega**: toda execução termina contando o que mudou, por quê, como testar e o que ficou de risco
+  (`report_delivery` no MCP). A Central completa com o diff (arquivos, +/−) e o PR; sem nota, monta do resultado e marca
+  "sem explicação". Quem mexeu em código vai para a revisão; o resto é informativo.
+- **Enquanto você estava fora** (Início): desde o último "Já vi" (até 7 dias), números (entregas, tarefas concluídas, marcos,
+  execuções e horas de agente, o que não terminou), por projeto as entregas, tarefas e o que andou no roadmap, e o que surgiu
+  (ideias, decisões, memórias). "Pedir à Central um resumo em texto": 6 linhas com o que avançou, o que precisa de você e
+  o próximo passo.
+- **Fila de revisão** (Esperando você): cada entrega com a nota e o diff; Aceitar (tarefa vai para Feito; o merge do PR
+  fica no GitHub), Pedir ajuste (o texto volta para o agente na mesma sessão e worktree, com permissão de editar; ao terminar,
+  a entrega volta para a revisão com o diff novo) ou Descartar. Testado: entrega real com 2 arquivos e ajuste com commit novo.
+- Vocabulário mais calmo: "Urgente" → "Prioritária" (laranja, não vermelho); saúde: Pede ação / Pendências / Sem movimento /
+  Em dia; "Precisa de você" → "Para você olhar"; execução que falhou → "não terminou", sem vermelho no Início.
+
+## Feito (v0.20)
+
+- **Responsável pelo "A fazer"** (barra do Backlog, por projeto): o agente escolhido pega sozinho cada tarefa que entra em
+  A fazer (uma execução por tarefa, ligada a ela: nota de entrega e revisão). Travas: até N por vez, horário ("08-22"),
+  não dispara com a sessão acima de 80% e não insiste por 12 h numa tarefa que não terminou. Confere a cada minuto e quando
+  o backlog muda. Desligado até você escolher.
+- **A caminho de produção**: aba Produção do projeto (por repositório, PRs em develop que não estão em main, há quanto tempo,
+  de qual entrega de agente; back-merges fora) e resumo na Visão geral (projetos com algo esperando, o mais antigo
+  primeiro). "Preparar subida" pede ao responsável (ou à Central) o pacote develop→main como decisão para você aprovar.
+- Agentes com liberdade total podem mergear PR em develop se o papel deles disser (push direto e main: nunca).
+- Tech Lead KultivAi: instruções ajustadas (uma tarefa por execução, merge em develop após revisão, sempre em worktree, a
+  Kanban é da Central); rotina "Revisão técnica diária" criada desligada (dias úteis, 8h). Backup das instruções antigas
+  em %APPDATA%\Centralackups.
+
+## Feito (v0.21)
+
+- **Boneco 3D por agente**: cabelo (curto, longo, rabo de cavalo, coque, cacheado, moicano, careca), acessório (óculos,
+  fone, gorro, boné, barba), pele e roupa (cor do projeto ou própria), com prévia girando no editor. Mudou o look: o
+  boneco é trocado no lugar no Escritório. O boneco mora em shared/ui/avatar3d (three.js só sob demanda).
+- **Editores em abas**: agente (Papel · Trabalho · Aparência) e projeto (Geral · Aparência · Pasta); excluir virou a lixeira
+  no rodapé, com confirmação.
+- Fechar qualquer modal clicando no fundo (como o Esc); "Marcar como feito" no Início e no modal da tarefa; aba Produção
+  abre o repositório e a comparação develop/main no GitHub; mapa 3D do Escritório pode ser desligado.
+
+## Feito (v0.22)
+
+- **Aprovar e planejar** (triagem, tecla P): aprova a ideia e põe o gestor do projeto para quebrar só ela em tarefas
+  ligadas (A fazer quando clara e pequena, Backlog quando precisa de definição) e decisões para o que depende de você.
+- **Comandos rápidos** no topo do app (como no Orca): nome, ação (terminal ou agente), comando, Enter no fim; avançado:
+  projeto da pasta do terminal (ou o aberto na tela), PowerShell/Git Bash/CMD, ou o agente que recebe. Um clique abre a
+  sessão no projeto e digita; botão direito edita/remove.
+- **Agente em espera**: faltou algo que só você resolve (sessão AWS/SSO, gh, credencial, VPN), o agente chama `need_gustavo`
+  (o que falta, o que fazer, o comando) e para. A tarefa fica em "fazendo", a entrega fica pausada; no Início aparece
+  "está esperando você" com "Rodar no terminal" e "Já resolvi, continuar", que retoma a mesma sessão de onde parou.
+
+## Feito (v0.23)
+
+- **Decisão ligada à tarefa**: escolha sobre uma tarefa que já existe vira decisão com task_id (create_decision). A tarefa
+  espera em Fazendo com o selo "decisão #N esperando você"; ao decidir, a resposta é anexada à própria tarefa e ela volta
+  para A fazer (o responsável segue). Antes, aprovar criava uma tarefa nova repetindo a pergunta.
+- **Pronto = produção** (por projeto, no editor: "Tarefa pronta quando"): coluna "Em dev". PR mergeado em develop leva a
+  tarefa para Em dev; quando o merge chega em main (ou foi direto em main), Feito, sozinho. Agentes do projeto sabem que
+  merge em develop não fecha a tarefa. Visão geral avisa tarefa em dev há 7+ dias.
+- Migração da tabela de tarefas (CHECK das colunas) testada numa cópia do banco: 18 tarefas preservadas, FKs íntegras.
+
+## Feito (v0.24)
+
+- **Workflow por projeto/frente** (Backlog → Workflow): colunas livres (nome, descrição, tipo) e, em cada uma, o agente que
+  pega o que entra nela, com instrução da etapa, até N por vez, horário e "quando terminar bem, vai para". Pipelines de
+  vários agentes (ex.: Pesquisa → Roteiro → Arte → sua revisão → Publicado). Modelos: Desenvolvimento, Desenvolvimento com
+  revisor, Conteúdo. Cada coluna tem um tipo (fila, a fazer, fazendo, revisão, em dev, feito): o que já existia (PR →
+  Em dev/Feito, saúde, resumo, Visão geral) segue lendo o tipo. Os agentes do projeto recebem o quadro no contexto e
+  movem com update_task stage=<coluna>. Etapa com decisão aberta ou agente esperando não dispara; etapa que não terminou
+  não insiste por 12 h. Projeto sem workflow = quadro padrão (com o "Responsável pelo A fazer").
+
+## Feito (v0.25)
+
+- **Quadros (workflows) independentes** (menu Quadros, /quadros): fluxos com colunas e um agente por coluna (de qualquer
+  projeto), de um projeto ou soltos. **Uma tarefa vive no backlog principal do projeto dela e pode estar em N quadros**,
+  numa coluna de cada; a coluna pode refletir no principal ("no backlog principal: fazendo"). Pedidos podem nascer direto
+  no quadro, até sem projeto (o agente atua na pasta dele). Agente termina bem → a tarefa vai para a próxima coluna (ou a
+  escolhida). Modelos: Simples, Código com revisor, Conteúdo.
+- UX: no quadro, "+ coluna" no fim e o botão "Agente nesta coluna" em cada uma (agente, instrução, depois vai para,
+  limites, reflexo no principal); "Visão geral" numa tabela enxuta (uma linha por coluna, detalhes na linha). No Kanban
+  principal o cartão mostra os quadros em que a tarefa está; no modal da tarefa, mover/tirar/pôr em quadros.
+- MCP: list_boards, create_board, move_on_board; create_task aceita board/stage (projeto opcional); list_tasks mostra os
+  quadros de cada tarefa. Os agentes recebem os quadros do projeto no contexto.
+- Migração: o workflow por projeto da v0.24 vira um quadro ligado ao projeto (colunas, agentes e posições preservados);
+  tarefas podem não ter projeto (tabela recriada; testado numa cópia do banco).
+
+- v0.25.1: colunas dos quadros reordenam arrastando (alça no cabeçalho; os cartões só passam entre listas de cartões);
+  cor opcional de coluna (cabeçalho e fundo) e de cartão (vale no backlog principal e em todos os quadros; modal da tarefa
+  e botão direito); ícone do agente no botão da coluna, na lista de quadros e na visão geral.
+
 ## Próximos marcos
 
 | # | Marco | Pronto quando |
 |---|---|---|
 | M3+ | **Planejador do turno**: "objetivo + prazo + teto" vira as tarefas sozinho (hoje você escolhe as tarefas) | turno criado só com o objetivo |
+| M8 | **Contexto, medição** | A/B de tokens por projeto (com e sem mapa); embeddings locais só se a medição pedir | ≥ 25% menos tokens sem piorar |
 | M4 | **Celular**: Central como servidor MCP + Tailscale (ou bot) para decidir e disparar de fora | turno disparado do celular em < 2 min |
 | M5 | **Ingestão**: CI falho, Gmail, transcrições de reunião, WhatsApp Coexistence → decisões | bug relatado no WhatsApp vira PR com um "sim" |
 | M6 | **Scouts + portfólio**: tendências, métricas próprias, revisão semanal empurra/congela/mata | primeira decisão de portfólio com dados da Central |

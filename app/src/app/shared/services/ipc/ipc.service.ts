@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Api, Events } from '../../contract';
 
 interface Bridge {
+  platform?: string;
   invoke(channel: string, ...args: unknown[]): Promise<unknown>;
   on(channel: string, cb: (payload: unknown) => void): () => void;
 }
@@ -10,6 +11,10 @@ interface Bridge {
 declare global {
   interface Window { central: Bridge }
 }
+
+/** sistema em que a Central roda (o preload informa) */
+export const PLATFORM = (typeof window !== 'undefined' && window.central?.platform) || 'win32';
+export const IS_WIN = PLATFORM === 'win32';
 
 /** Wrapper base: toda conversa com o processo principal passa por aqui. */
 @Injectable({ providedIn: 'root' })

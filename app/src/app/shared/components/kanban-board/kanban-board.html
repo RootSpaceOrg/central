@@ -1,24 +1,26 @@
-<div cdkDropListGroup class="grid h-full min-h-0 grid-cols-5 gap-3">
-  @for (col of columns; track col.id) {
+<div cdkDropListGroup class="grid h-full min-h-0 auto-cols-[minmax(230px,1fr)] grid-flow-col gap-3 overflow-x-auto pb-1">
+  @for (col of columns(); track col.id) {
     @let items = byColumn()[col.id];
     <section class="flex min-h-0 flex-col rounded-2xl bg-panel/70" [attr.aria-label]="col.label">
-      <header class="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
+      <header class="flex flex-wrap items-center gap-x-2 px-4 pt-3.5 pb-2.5">
         <h3 class="font-display text-[15px] font-semibold">{{ col.label }}</h3>
         <span class="rounded-full bg-raise px-2 text-[12px] tabular-nums text-mute">{{ items.length }}</span>
-        @if (col.id !== 'done' && col.id !== 'doing') {
-          <button type="button" class="ml-auto grid size-7 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text"
-                  (click)="dialogs.newTask({ projectSlug: projectSlug(), column: col.id })" [attr.aria-label]="'Nova tarefa em ' + col.label">
+        @if (col.kind !== 'done' && col.kind !== 'doing') {
+          <button type="button" class="ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-mute hover:bg-raise hover:text-text"
+                  (click)="dialogs.newTask({ projectSlug: projectSlug(), column: col.kind })" [attr.aria-label]="'Nova tarefa em ' + col.label">
             <app-icon name="plus" [size]="18" />
           </button>
         }
+        @if (col.hint) { <p class="mt-0.5 w-full text-[12px] leading-snug text-faint">{{ col.hint }}</p> }
       </header>
 
       <div cdkDropList [cdkDropListData]="col.id" (cdkDropListDropped)="drop($event)"
            class="min-h-24 flex-1 space-y-2 overflow-y-auto px-2.5 pb-3">
         @for (t of items; track t.id) {
-          <article cdkDrag [cdkDragData]="t" (click)="dialogs.editTask(t.id)" tabindex="0" (keydown.enter)="dialogs.editTask(t.id)"
+          <article cdkDrag [cdkDragData]="t" (click)="dialogs.editTask(t.id)" tabindex="0" (keydown.enter)="dialogs.editTask(t.id)" (contextmenu)="cardMenu($event, t)"
                    class="group cursor-grab rounded-xl border border-edge bg-raise p-3 hover:border-faint active:cursor-grabbing"
-                   [class.opacity-60]="t.column === 'done'">
+                   [class.opacity-60]="t.column === 'done'"
+                   [style.background]="t.color ? 'color-mix(in srgb, ' + t.color + ' 12%, var(--color-raise))' : null" [style.box-shadow]="t.color ? 'inset 3px 0 0 ' + t.color : null">
             <div *cdkDragPlaceholder class="h-16 rounded-xl border-2 border-dashed border-frost/50 bg-frost/5"></div>
 
             @if (!projectSlug() && project(t.projectSlug); as p) {
@@ -35,10 +37,22 @@
               @if (t.runStatus === 'running' || t.runStatus === 'preparing' || t.runStatus === 'queued') {
                 <span class="flex items-center gap-1.5 text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>agente</span>
               } @else if (t.runStatus === 'failed' && t.runId) {
-                <a routerLink="/agentes" [queryParams]="{ run: t.runId }" (click)="$event.stopPropagation()" class="text-no hover:underline">agente falhou</a>
+                <a routerLink="/execucoes" [queryParams]="{ run: t.runId }" (click)="$event.stopPropagation()" class="text-no hover:underline">agente falhou</a>
               } @else if (t.runStatus === 'succeeded' && t.runId && t.column === 'review') {
-                <a routerLink="/agentes" [queryParams]="{ run: t.runId }" (click)="$event.stopPropagation()"
+                <a routerLink="/execucoes" [queryParams]="{ run: t.runId }" (click)="$event.stopPropagation()"
                    class="flex items-center gap-1 text-yes hover:underline"><app-icon name="check" [size]="14" />agente concluiu</a>
+              }
+              @for (p of boards.ofTask().get(t.id) ?? []; track p.boardId) {
+                <a [routerLink]="['/quadros', p.boardId]" (click)="$event.stopPropagation()" class="flex max-w-full items-center gap-1 rounded-full bg-[#B48CFF]/12 px-2 py-0.5 text-[11.5px] text-[#C6A6FF] hover:underline"
+                   [title]="'Neste quadro: ' + boards.label(p)"><app-icon name="workflow" [size]="11" /><span class="truncate">{{ boards.label(p) }}</span></a>
+              }
+              @if (waitingFor(t); as w) {
+                <span class="flex items-center gap-1 text-[12px] text-mute" [title]="'Só começa quando estas forem entregues (Revisão, Em dev ou Feito)'">
+                  <app-icon name="timer" [size]="12" />depois da {{ w }}</span>
+              }
+              @if (asking().get(t.id); as d) {
+                <a routerLink="/triagem" (click)="$event.stopPropagation()" class="flex items-center gap-1 text-later hover:underline" [title]="d.title">
+                  <app-icon name="inbox" [size]="13" />decisão #{{ d.id }} esperando você</a>
               }
               @if (t.prUrl) {
                 <button type="button" class="flex items-center gap-1 text-frost hover:underline" (click)="openPr(t, $event)">
@@ -52,7 +66,7 @@
             </div>
           </article>
         } @empty {
-          <p class="px-2 py-6 text-center text-[12.5px] text-faint">{{ col.hint || 'Nada aqui' }}</p>
+          <p class="px-2 py-6 text-center text-[12.5px] text-faint">Nada aqui</p>
         }
       </div>
     </section>

@@ -1,6 +1,6 @@
-import { ProjectStatus } from '../../contract';
+import { ProjectIconKind, ProjectStatus } from '../../contract';
 
-export type { ProjectStatus };
+export type { ProjectIconKind, ProjectStatus };
 
 export interface Project {
   slug: string;
@@ -9,6 +9,8 @@ export interface Project {
   status: ProjectStatus;
   color: string;
   description: string | null;
+  iconKind: ProjectIconKind;
+  iconValue: string | null;
   folderExists: boolean;
   repoCount: number;
   dirtyRepos: number;
@@ -20,6 +22,15 @@ export interface Project {
   lastCommitRepo: string | null;
   openProposals: number;
   activeRuns: number;
+  /** subprojeto (frente) de um projeto-grupo */
+  parentSlug: string | null;
+  position: number;
+  /** responsável pelo "A fazer" (agente que pega as tarefas), quantas por vez e horário ("08-22") */
+  todoAgentId: number | null;
+  todoParallel: number;
+  todoHours: string;
+  /** pronto = PR mergeado ('merge') ou em produção ('prod', com a coluna Em dev) */
+  doneWhen: 'merge' | 'prod';
 }
 
 export interface Repo {
@@ -37,11 +48,24 @@ export interface Repo {
 }
 
 export interface NewProject {
+  parentSlug?: string | null;
   name: string;
   folder: string;
   status: ProjectStatus;
   color: string;
   description: string;
+}
+
+export interface ProjectEdit {
+  doneWhen?: 'merge' | 'prod';
+  name?: string;
+  status?: ProjectStatus;
+  color?: string;
+  description?: string | null;
+  iconKind?: ProjectIconKind;
+  iconValue?: string | null;
+  folder?: string;
+  parentSlug?: string | null;
 }
 
 export const STATUS_LABEL: Record<ProjectStatus, string> = {

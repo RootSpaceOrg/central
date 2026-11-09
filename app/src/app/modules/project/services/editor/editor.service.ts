@@ -4,6 +4,7 @@ import { errorMessage } from '../../../../shared/services/ipc/ipc.service';
 import { FilesApiService } from '../files/files-api.service';
 import { Monaco, loadMonaco } from '../monaco/monaco-loader';
 
+import { AskService } from '../../../../shared/services/ask/ask.service';
 export interface EditorTab {
   path: string;
   name: string;
@@ -17,6 +18,7 @@ interface Doc { model: any; savedVersion: number }
 /** Abas abertas por projeto. Sobrevive à troca de tela: os modelos do Monaco ficam em memória. */
 @Injectable({ providedIn: 'root' })
 export class EditorService {
+  private readonly ask = inject(AskService);
   private readonly files = inject(FilesApiService);
   private readonly docs = new Map<string, Doc>();
 
@@ -60,9 +62,9 @@ export class EditorService {
     }
   }
 
-  close(slug: string, path: string): void {
+  async close(slug: string, path: string): Promise<void> {
     const tab = this.tabsOf(slug).find(t => t.path === path);
-    if (tab?.dirty && !confirm(`${tab.name} tem mudanças não salvas. Fechar mesmo assim?`)) return;
+    if (tab?.dirty && !(await this.ask.confirm(`Fechar ${tab.name}?`, { message: 'Tem mudanças não salvas; elas se perdem.', confirmLabel: 'Fechar sem salvar', danger: true }))) return;
     const rest = this.tabsOf(slug).filter(t => t.path !== path);
     this.tabs.update(all => ({ ...all, [slug]: rest }));
     if (this.activeOf(slug) === path) this.active.update(a => ({ ...a, [slug]: rest.at(-1)?.path ?? null }));

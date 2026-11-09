@@ -7,6 +7,7 @@ import * as pty from '@lydell/node-pty';
 
 import type { CloneProgressDto, FileDto, FsEntryDto, GithubRepoDto, NewTerminalInput } from '../src/app/shared/contract';
 import { all } from './db';
+import { mcpConfigPath } from './mcp-config';
 
 const execFileP = promisify(execFile);
 const MAX_FILE = 2 * 1024 * 1024;
@@ -53,14 +54,48 @@ export function writeFile(path: string, content: string): void {
 
 // ---------- terminais ----------
 
+// "bash.exe" solto no PATH costuma ser o do WSL: procura o Git Bash nos lugares do instalador
+const GIT_BASH = [join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe'), join(process.env.LOCALAPPDATA ?? '', 'Programs/Git/bin/bash.exe')]
+  .find(p => existsSync(p)) ?? 'bash.exe';
+const UNIX_SHELL = process.env.SHELL || '/bin/zsh';
+const SHELLS: Record<string, [string, string[]]> = process.platform === 'win32' ? {
+  shell: ['powershell.exe', ['-NoLogo']],
+  cmd: ['cmd.exe', []],
+  bash: [GIT_BASH, ['--login', '-i']],
+} : {
+  // Mac/Linux: "shell" é o do usuário (zsh no Mac); bash continua bash; cmd não existe (cai no shell do usuário)
+  shell: [UNIX_SHELL, ['-l']],
+  cmd: [UNIX_SHELL, ['-l']],
+  bash: ['/bin/bash', ['-l']],
+};
+
+/** programa e argumentos para rodar um comando de uma vez (rotina de comando), sem terminal interativo */
+export function commandShell(kind: string, command: string): [string, string[]] {
+  if (process.platform === 'win32') {
+    if (kind === 'cmd') return ['cmd.exe', ['/d', '/s', '/c', command]];
+    if (kind === 'bash') return [GIT_BASH, ['-lc', command]];
+    return ['powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command]];
+  }
+  return kind === 'bash' ? ['/bin/bash', ['-lc', command]] : [UNIX_SHELL, ['-lc', command]];
+}
+
 const terminals = new Map<number, pty.IPty>();
 let nextTerminal = 1;
 
-export function createTerminal(input: NewTerminalInput, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
+export function createTerminal(input: NewTerminalInput, promptFile: string | null, onData: (id: number, d: string) => void, onExit: (id: number, code: number) => void): number {
   const cwd = guard(input.cwd);
-  const args = ['-NoLogo'];
-  if (input.kind === 'claude') args.push('-NoExit', '-Command', 'claude');
-  const term = pty.spawn('powershell.exe', args, {
+  if (!existsSync(cwd)) throw new Error(`A pasta ${cwd} não existe. Ajuste a pasta do projeto em Editar projeto.`);
+  let [file, args] = SHELLS[input.kind === 'claude' ? 'shell' : input.kind] ?? SHELLS.shell;
+  if (input.kind === 'claude') {
+    // a sessão interativa também enxerga e atualiza a Central (backlog, ideias, decisões)
+    const mcp = mcpConfigPath();
+    const extra = [mcp ? `--mcp-config '${mcp}'` : '', promptFile ? `--append-system-prompt-file '${promptFile}'` : ''].filter(Boolean).join(' ');
+    // Windows: PowerShell continua aberto depois; Mac/Linux: roda o claude e, quando ele sair, fica no shell
+    args = process.platform === 'win32'
+      ? [...args, '-NoExit', '-Command', `claude ${extra}`.trim()]
+      : ['-l', '-i', '-c', `claude ${extra}; exec ${UNIX_SHELL} -l`];
+  }
+  const term = pty.spawn(file, args, {
     name: 'xterm-256color', cwd, cols: input.cols || 100, rows: input.rows || 30,
     env: childEnv({ TERM_PROGRAM: 'Central' }),
   });

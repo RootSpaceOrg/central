@@ -1,21 +1,32 @@
 {
   "name": "central",
-  "version": "0.4.1",
+  "version": "0.64.2",
   "scripts": {
     "ng": "ng",
     "start": "npm run icons && npm run build:main && ng build && electron .",
     "build": "ng build",
+    "check": "node scripts/run-checks.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "build:main": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --format=cjs --target=node22 --outdir=dist-electron --external:electron --external:@lydell/node-pty",
+    "build:main": "esbuild electron/main.ts electron/preload.ts electron/context/indexer.ts --bundle --platform=node --format=cjs --target=node22 --outdir=dist-electron --external:electron --external:@lydell/node-pty --external:web-tree-sitter",
     "dev": "npm run icons && npm run build:main && concurrently -k -n ui,app \"ng serve --port 4300\" \"wait-on tcp:4300 && electron . --dev\"",
-    "dist": "npm run icons && npm run build:main && ng build && electron-builder --win nsis",
+    "dist": "npm run icons && npm run build:ext && npm run build:main && ng build && electron-builder --win nsis",
+    "dist:mac": "npm run icons && npm run build:main && ng build && electron-builder --mac dmg --arm64 --x64 --publish never",
+    "build:ext": "node scripts/build-extensions.mjs",
     "icons": "node scripts/file-icons.mjs"
   },
   "private": true,
   "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@lydell/node-pty": "^1.2.0-beta.18"
+    "@lydell/node-pty": "^1.2.0-beta.18",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tree-sitter-grammars/tree-sitter-hcl": "^1.2.0",
+    "three": "^0.187.0",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "web-tree-sitter": "^0.27.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@angular/build": "^21.2.29",
@@ -32,14 +43,19 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource/atkinson-hyperlegible-next": "^5.3.0",
     "@tailwindcss/postcss": "^4.3.3",
+    "@types/cytoscape-fcose": "^2.2.5",
+    "@types/three": "^0.187.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "concurrently": "^10.0.6",
+    "cytoscape": "^3.34.4",
+    "cytoscape-fcose": "^2.2.0",
     "electron": "^45.2.1",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
+    "lucide-static": "^1.66.0",
     "material-icon-theme": "^5.40.0",
-    "material-symbols": "^0.48.2",
     "monaco-editor": "^0.52.2",
     "postcss": "^8.5.32",
     "prettier": "^3.8.1",
@@ -63,10 +79,28 @@
     "files": [
       "dist-electron/**",
       "dist/web/browser/**",
-      "package.json"
+      "package.json",
+      "build/icon.png",
+      "!node_modules/tree-sitter-*/src/**",
+      "!node_modules/tree-sitter-*/bindings/**",
+      "!node_modules/tree-sitter-*/prebuilds/**",
+      "!node_modules/tree-sitter-*/*.c",
+      "!node_modules/@tree-sitter-grammars/*/src/**",
+      "!node_modules/@tree-sitter-grammars/*/bindings/**",
+      "!node_modules/@tree-sitter-grammars/*/prebuilds/**",
+      "!node_modules/tree-sitter-typescript/typescript/**",
+      "!node_modules/tree-sitter-typescript/tsx/**",
+      "!node_modules/tree-sitter-typescript/common/**",
+      "!node_modules/tree-sitter-*/build/**",
+      "!node_modules/tree-sitter-*/node_modules/**"
     ],
     "asarUnpack": [
-      "node_modules/@lydell/**"
+      "node_modules/@lydell/**",
+      "node_modules/web-tree-sitter/**",
+      "node_modules/tree-sitter-typescript/**",
+      "node_modules/tree-sitter-javascript/**",
+      "node_modules/tree-sitter-python/**",
+      "node_modules/@tree-sitter-grammars/**"
     ],
     "win": {
       "target": "nsis",
@@ -79,6 +113,26 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Central"
-    }
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "Central-${version}-${arch}.${ext}",
+      "identity": null
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RootSpaceOrg/central.git"
   }
 }

@@ -27,6 +27,9 @@ import { Icon } from '../../ui/icon';
           @if (l.resetsAt && l.percent > 0) { <span class="tabular-nums text-faint">{{ reset(l) }}</span> }
         </span>
       }
+      @if (usage.brake(); as b) {
+        <span class="rounded-full bg-later/15 px-2 py-0.5 text-[12px] font-semibold text-later" title="A fila segura o que começa conforme a prioridade de cada agente; perto do limite pausa e retoma sozinho depois.">{{ b }}</span>
+      }
     } @else {
       <span class="text-faint">Lendo uso do Claude…</span>
     }

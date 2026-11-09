@@ -1,108 +1,299 @@
-<div class="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,640px)_1fr] gap-14 px-10 pt-9 pb-16">
-  <section aria-labelledby="dec-title">
-    <h1 id="dec-title" class="font-display text-[34px] font-bold leading-tight tracking-tight" aria-live="polite">
-      @switch (proposals.inbox().length) {
-        @case (0) { Nada esperando você. }
-        @case (1) { Uma decisão esperando você. }
-        @default { {{ proposals.inbox().length }} decisões esperando você. }
-      }
-    </h1>
-    <p class="mt-2 text-mute">Uma de cada vez. Atalhos: A aprova, D deixa para depois, N recusa.</p>
-
-    @if (proposals.error()) {
-      <p role="alert" class="mt-6 rounded-2xl bg-no/10 px-5 py-4 text-no">{{ proposals.error() }}</p>
-    }
-
-    <div class="relative mt-8">
-      @if (current(); as p) {
-        @for (i of [1, 2]; track i) {
-          @if (i <= behind()) {
-            <div aria-hidden="true" class="absolute inset-x-0 top-0 h-full origin-bottom rounded-[28px] border border-edge bg-panel"
-                 [style.transform]="'translateY(' + i * 12 + 'px) scale(' + (1 - i * 0.04) + ')'"
-                 [style.opacity]="1 - i * 0.35" [style.z-index]="3 - i"></div>
-          }
+<div class="mx-auto max-w-[1280px] px-8 pt-8 pb-28 xl:px-10">
+  <header class="flex flex-wrap items-end gap-4">
+    <div class="min-w-0 flex-1">
+      <h1 class="font-display text-[32px] font-bold leading-tight tracking-tight" aria-live="polite">
+        @switch (total()) {
+          @case (0) { Triagem limpa. }
+          @case (1) { Uma coisa para triar. }
+          @default { {{ total() }} coisas para triar. }
         }
+      </h1>
+      <p class="mt-1 text-[13.5px] text-mute">Clique num card para abrir. Aberto: A aprova, N descarta, D deixa para depois, R direciona, ← → passa.</p>
+    </div>
 
-        <article class="card-leave relative z-10 rounded-[28px] border border-edge bg-raise p-8 shadow-[0_24px_60px_-30px_rgb(0_0_0/0.8)]"
-                 [class.leave-approve]="leaving() === 'approve'" [class.leave-reject]="leaving() === 'reject'"
-                 [class.leave-defer]="leaving() === 'defer'">
-          @if (project(p.projectSlug); as pr) {
-            <p class="flex items-center gap-2 font-semibold" [style.color]="pr.color">
-              <span class="size-2.5 rounded-[4px]" [style.background]="pr.color"></span>{{ pr.name }}
-            </p>
+    <!-- gatilho do agente de triagem -->
+    <details class="relative">
+      <summary class="flex cursor-pointer list-none items-center gap-2 rounded-full border border-edge bg-panel px-3.5 py-1.5 text-[13px] hover:border-faint">
+        @if (triageRunning()) { <span class="pulse size-2 rounded-full bg-frost"></span> }
+        @else { <span class="size-2 rounded-full" [class]="triageMode() === 'off' ? 'bg-faint' : 'bg-yes'"></span> }
+        Agente de triagem: <span class="font-semibold">{{ modeLabel() }}</span>
+        <app-icon name="chevron" [size]="12" class="text-faint" />
+      </summary>
+      <div class="absolute right-0 z-30 mt-2 w-[360px] rounded-2xl border border-edge bg-raise p-4 shadow-[0_24px_60px_-30px_rgb(0_0_0/0.8)]">
+        <p class="text-[13px] leading-relaxed text-mute">Lê as ideias que você anota, descobre o projeto, organiza o texto, divide se forem várias e deixa uma recomendação no card. Nunca aprova nem descarta.</p>
+        <fieldset class="mt-3 space-y-1.5">
+          <legend class="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-faint">Quando rodar</legend>
+          @for (m of modes; track m.id) {
+            <label class="flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2" [class]="triageMode() === m.id ? 'border-frost/50 bg-frost/10' : 'border-edge hover:border-faint'">
+              <input type="radio" name="triage-mode" class="mt-1 accent-frost" [checked]="triageMode() === m.id" (change)="setMode(m.id)">
+              <span><span class="block text-[14px] font-semibold">{{ m.label }}</span><span class="block text-[12.5px] text-mute">{{ m.hint }}</span></span>
+            </label>
           }
-          <h2 class="mt-2 font-display text-[26px] font-semibold leading-tight selectable">{{ p.title }}</h2>
-          @if (p.body) { <p class="mt-4 text-[15.5px] leading-relaxed text-text/85 whitespace-pre-line selectable">{{ p.body }}</p> }
-          @if (p.nextAction) {
-            <p class="mt-5 rounded-2xl bg-night px-4 py-3 leading-relaxed"><span class="font-semibold text-yes">Se aprovar:</span> {{ p.nextAction }}</p>
-          }
+        </fieldset>
+        <p class="mt-3 mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-faint">Quem faz</p>
+        <app-agent-select [value]="triageAgent()" (valueChange)="setAgent($event)" noneLabel="A Central (padrão)" />
+      </div>
+    </details>
+  </header>
 
-          <ul class="mt-5 flex flex-wrap gap-2 text-[13px] text-mute" aria-label="Detalhes">
-            @if (p.tier !== null) {
-              <li class="rounded-full border px-3 py-1" [class]="p.tier === 2 ? 'border-no text-no' : 'border-edge'">{{ risk[p.tier] }}</li>
-            }
-            @if (p.attentionMin) { <li class="rounded-full border border-edge px-3 py-1">~{{ p.attentionMin }} min seus</li> }
-            <li class="rounded-full border border-edge px-3 py-1">{{ source(p.source) }}</li>
-          </ul>
-
-          <div class="mt-8 flex gap-2">
-            <button type="button" (click)="decide('reject')" class="flex-1 rounded-full border-2 border-edge py-3.5 font-semibold text-no hover:border-no">
-              Não <kbd class="ml-1 text-xs opacity-60">N</kbd></button>
-            <button type="button" (click)="decide('defer')" class="flex-1 rounded-full border-2 border-edge py-3.5 font-semibold text-later hover:border-later">
-              Depois <kbd class="ml-1 text-xs opacity-60">D</kbd></button>
-            <button type="button" (click)="decide('approve')" class="flex-[1.6] rounded-full bg-yes py-3.5 font-semibold text-night hover:brightness-110">
-              Aprovar <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
-          </div>
-        </article>
-      } @else if (proposals.loaded()) {
-        <div class="rounded-[28px] border-2 border-dashed border-edge px-6 py-14 text-center text-mute">
-          Inbox limpa. Anote a próxima ideia ao lado.
-        </div>
+  <!-- abas: decisões e ideias -->
+  <div class="mt-6 flex flex-wrap items-center gap-3 border-b border-edge" role="tablist" aria-label="O que triar">
+    @for (t of [{ id: 'decision', label: 'Decisões', n: decisionCount() }, { id: 'idea', label: 'Ideias', n: ideaCount() }, { id: 'waiting', label: 'Esperando você', n: waitingCount() }]; track t.id) {
+      <button type="button" role="tab" [attr.aria-selected]="focus.tab() === t.id" (click)="setTab($any(t.id))"
+              class="-mb-px flex items-center gap-2 border-b-2 px-1 pb-2.5 font-display text-[17px] font-semibold transition-colors"
+              [class]="focus.tab() === t.id ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+        {{ t.label }}<span class="rounded-full px-2 text-[12.5px] tabular-nums" [class]="focus.tab() === t.id ? 'bg-frost/15 text-frost' : 'bg-raise text-faint'">{{ t.n }}</span>
+        @if (t.id === 'idea' && newIdeas()) { <span class="rounded-full bg-later px-2 text-[11.5px] font-bold tabular-nums text-night" [title]="newIdeas() + ' que você ainda não viu'">{{ newIdeas() }} novas</span> }
+      </button>
+    }
+    @if (focus.tab() === 'idea' && newIdeas()) {
+      <button type="button" class="mb-2 text-[12.5px] text-mute hover:text-text" (click)="markAllSeen()" title="Tira o selo de novidade de todas (elas continuam aqui)">Marcar todas como vistas</button>
+    }
+    <span class="flex-1"></span>
+    <!-- colunas da grade -->
+    <div [hidden]="focus.tab() === 'waiting'" class="mb-2 flex items-center gap-1 rounded-lg border border-edge p-0.5 text-[12.5px]" role="radiogroup" aria-label="Colunas da grade">
+      @for (n of [2, 3]; track n) {
+        <button type="button" role="radio" [attr.aria-checked]="focus.cols() === n" (click)="focus.setCols($any(n))" [title]="n + ' colunas'"
+                class="flex items-center gap-1 rounded-md px-2 py-1" [class]="focus.cols() === n ? 'bg-raise font-semibold text-text' : 'text-mute hover:text-text'">
+          <span class="flex gap-0.5" aria-hidden="true">@for (c of n === 2 ? [1, 2] : [1, 2, 3]; track c) { <span class="h-3 w-1.5 rounded-sm bg-current opacity-70"></span> }</span>{{ n }}
+        </button>
       }
     </div>
-  </section>
+  </div>
 
-  <aside class="space-y-10 pt-2">
-    <form (submit)="capture($event)" aria-labelledby="anotar">
-      <h2 id="anotar" class="mb-3 font-display text-xl font-semibold">Anotar ideia</h2>
-      <div class="space-y-2.5 rounded-3xl border border-edge bg-panel p-4">
-        <input class="field" placeholder="O que precisa acontecer?" aria-label="Ideia" autocomplete="off"
-               [value]="title()" (input)="title.set($any($event.target).value)">
-        <textarea class="field min-h-20 resize-y" placeholder="Detalhes, se quiser" aria-label="Detalhes"
-                  [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
-        <div class="flex gap-2">
-          <select class="field" aria-label="Projeto" [value]="projectSlug()" (change)="projectSlug.set($any($event.target).value)">
-            <option value="" [selected]="!(projectSlug())">Sem projeto</option>
-            @for (pr of projects.living(); track pr.slug) { <option [value]="pr.slug" [selected]="(pr.slug) === (projectSlug())">{{ pr.name }}</option> }
-          </select>
-          <button class="btn btn-primary" [disabled]="!title().trim()">Anotar</button>
-        </div>
-        @if (captureError()) { <p role="alert" class="text-[13px] text-no">{{ captureError() }}</p> }
-      </div>
-    </form>
+  @if (focus.tab() === 'waiting') {
+    <!-- agentes parados por sua causa: as ações ficam aqui mesmo -->
+    <app-waiting-runs />
+  } @else {
+  <!-- filtros: projetos (toggles) e só o que trava -->
+  <div class="mt-4 flex flex-wrap items-center gap-1.5 text-[13px]" aria-label="Filtros">
+    @if (!scope.slug()) {
+    <button type="button" (click)="focus.set({ projects: [], blocking: focus.focus().blocking })" [attr.aria-pressed]="!focus.focus().projects.length"
+            class="rounded-full border px-3 py-1" [class]="!focus.focus().projects.length ? 'border-frost/60 bg-frost/15 font-semibold text-text' : 'border-edge text-mute hover:text-text'">Todos</button>
+    @for (c of chips(); track c.id) {
+      <button type="button" (click)="focus.toggleProject(c.id)" [attr.aria-pressed]="c.on"
+              class="flex items-center gap-1.5 rounded-full border px-2.5 py-1" [class]="c.on ? 'border-frost/60 bg-frost/15 font-semibold text-text' : 'border-edge text-mute hover:text-text'">
+        @if (c.project; as pr) { <app-project-avatar [project]="pr" [size]="16" />{{ pr.name }} } @else { Sem projeto }
+        <span class="tabular-nums text-faint">{{ c.count }}</span>
+      </button>
+    }
+    }
+    @if (focus.tab() === 'decision') {
+      <span class="mx-1 h-5 w-px bg-edge" aria-hidden="true"></span>
+      <button type="button" (click)="focus.set({ projects: focus.focus().projects, blocking: !focus.focus().blocking })" [attr.aria-pressed]="focus.focus().blocking"
+              class="flex items-center gap-1.5 rounded-full border px-3 py-1" [class]="focus.focus().blocking ? 'border-later/60 bg-later/15 font-semibold text-later' : 'border-edge text-mute hover:text-text'">
+        <span class="size-2 rounded-full bg-later"></span>Só o que trava agentes <span class="tabular-nums opacity-70">{{ stuckCount() }}</span>
+      </button>
+    } @else {
+      <a routerLink="/ideias" class="ml-auto text-[13px] text-frost hover:underline">Anotar uma ideia em Ideias</a>
+    }
+  </div>
 
-    <section aria-labelledby="aprovadas">
-      <div class="mb-3 flex items-baseline justify-between">
-        <h2 id="aprovadas" class="font-display text-xl font-semibold">Viraram tarefas</h2>
-        <a routerLink="/backlog" class="text-[13px] text-frost hover:underline">Abrir quadro</a>
+  @if (sentToPlan().length) {
+    <p class="mt-4 rounded-2xl bg-yes/10 px-5 py-3 text-[13.5px] text-yes" role="status">
+      O gestor está quebrando em tarefas: {{ sentToPlan().join(' · ') }}. Acompanhe no Escritório ou no backlog do projeto.</p>
+  }
+  @if ((proposals.error() || error()) && !current()) {
+    <p role="alert" class="mt-4 rounded-2xl bg-no/10 px-5 py-3 text-no">{{ error() ?? proposals.error() }}</p>
+  }
+  @if (discussing().length) {
+    <div class="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
+      <span class="text-mute">Com a Central:</span>
+      @for (d of discussing(); track d.id) {
+        <button type="button" (click)="openChat(d.id)" class="flex max-w-72 items-center gap-2 rounded-full border border-edge bg-panel px-3 py-1 hover:border-faint"
+                [title]="d.live ? 'Trabalhando há ' + live.since(d.live.startedAt) : 'Respondeu ' + (d.at | ago)">
+          @if (d.live) { <span class="pulse size-2 shrink-0 rounded-full bg-frost"></span> } @else { <app-icon name="check" [size]="12" class="shrink-0 text-yes" /> }
+          <span class="truncate">{{ d.title }}</span>
+        </button>
+      }
+    </div>
+  }
+
+  <!-- grade por projeto -->
+  @for (g of groups(); track g.slug) {
+    <section class="mt-8" [attr.aria-label]="g.project?.name ?? 'Sem projeto'">
+      <div class="mb-3 flex items-center gap-2.5">
+        @if (g.project; as pr) { <app-project-avatar [project]="pr" [size]="22" /><h2 class="font-display text-[18px] font-semibold" [style.color]="pr.color">{{ pr.name }}</h2> }
+        @else { <h2 class="font-display text-[18px] font-semibold text-mute">Sem projeto</h2> }
+        <span class="text-[13px] text-faint">{{ g.list.length }}</span>
+        @if (g.stuck) { <span class="rounded-full bg-later/15 px-2 py-0.5 text-[12px] font-semibold text-later">{{ g.stuck }} {{ g.stuck === 1 ? 'trava' : 'travam' }} agente</span> }
+        <button type="button" class="ml-auto text-[12.5px] text-faint hover:text-text" (click)="selectGroup(g.list)">{{ allIn(g.list) ? 'Desmarcar' : 'Selecionar' }} todos</button>
       </div>
-      @for (t of approvedTasks(); track t.id) {
-        <div class="mb-2 rounded-2xl border border-edge bg-panel px-4 py-3">
-          @if (project(t.projectSlug); as pr) { <span class="text-[12.5px] font-semibold" [style.color]="pr.color">{{ pr.name }}</span> }
-          <p class="leading-snug">{{ t.title }}</p>
-          <div class="mt-2.5">
-            @if (t.column === 'doing') {
-              <span class="flex items-center gap-1.5 text-[13px] text-yes"><span class="pulse size-1.5 rounded-full bg-yes"></span>Agente trabalhando</span>
-            } @else if (t.column === 'review') {
-              <span class="text-[13px] text-frost">Em revisão{{ t.prUrl ? ', PR aberto' : '' }}</span>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2" [class]="focus.cols() === 3 ? 'lg:grid-cols-3' : ''">
+        @for (q of g.list; track key(q)) {
+          @let sel = selected().has(key(q));
+          <article tabindex="0" role="button" (click)="open(q)" (keydown.enter)="open(q)" (keydown.space)="$event.preventDefault(); toggleSel(q)"
+                   [attr.aria-label]="'Abrir: ' + (q.kind === 'decision' ? q.p.title : q.i.title)"
+                   class="group relative flex min-h-36 cursor-pointer flex-col rounded-2xl border p-4 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-frost/60"
+                   [class]="sel ? 'border-frost/70 bg-frost/5' : 'border-edge bg-panel hover:border-faint'">
+            <input type="checkbox" class="absolute top-4 right-4 size-4 cursor-pointer accent-frost transition-opacity" [checked]="sel"
+                   [class]="sel || selected().size ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'"
+                   (click)="$event.stopPropagation()" (change)="toggleSel(q)" [attr.aria-label]="'Selecionar ' + (q.kind === 'decision' ? q.p.title : q.i.title)">
+            @if (q.kind === 'decision') {
+              @let p = q.p;
+              <p class="flex items-center gap-2 pr-7 text-[12px]">
+                @if (stuck(q)) { <span class="rounded-full bg-later/15 px-2 py-0.5 font-semibold text-later">Agente esperando · {{ p.createdAt | ago }}</span> }
+                @else { <span class="text-faint">{{ source(p.source) }} · {{ p.createdAt | ago }}</span> }
+                @if (p.tier === 2) { <span class="rounded-full border border-no px-2 py-px text-no">risco alto</span> }
+              </p>
+              <h3 class="mt-2 line-clamp-2 pr-2 font-display text-[16px] font-semibold leading-snug">{{ p.title }}</h3>
+              <p class="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-mute">{{ p.summary ?? oneLine(p.body) }}</p>
+              @if (p.options.length) {
+                <div class="mt-auto flex flex-wrap gap-1 pt-3">
+                  @for (o of p.options.slice(0, 3); track $index) { <span class="max-w-full truncate rounded-full border border-yes/40 px-2 py-0.5 text-[12px] text-yes">{{ o }}</span> }
+                  @if (p.options.length > 3) { <span class="px-1 text-[12px] text-faint">+{{ p.options.length - 3 }}</span> }
+                </div>
+              }
             } @else {
-              <button type="button" class="btn btn-sm" (click)="toAgent(t)"><app-icon name="agent" [size]="15" />Mandar para um agente</button>
+              @let i = q.i;
+              <p class="flex items-center gap-1.5 pr-7 text-[12px] text-faint">
+                @if (!i.seen) { <span class="rounded-full bg-later px-1.5 text-[10.5px] font-bold uppercase tracking-wide text-night">nova</span> }
+                {{ i.author === 'gustavo' ? 'sua' : 'de um agente' }} · {{ i.createdAt | ago }}</p>
+              <h3 class="mt-2 line-clamp-2 pr-2 font-display text-[16px] font-semibold leading-snug">{{ i.title }}</h3>
+              @if (i.body) { <p class="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-mute">{{ oneLine(i.body) }}</p> }
+              @if (i.triage) {
+                <p class="mt-auto flex items-start gap-1.5 pt-3 text-[12.5px] text-frost"><app-icon name="spark" [size]="13" class="mt-0.5 shrink-0" /><span class="line-clamp-1">{{ i.triage }}</span></p>
+              } @else if (reading(i)) {
+                <p class="mt-auto flex items-center gap-1.5 pt-3 text-[12.5px] text-frost"><span class="pulse size-1.5 rounded-full bg-frost"></span>lendo…</p>
+              }
+            }
+          </article>
+        }
+      </div>
+    </section>
+  } @empty {
+    @if (proposals.loaded() && ideas.loaded()) {
+      <div class="mt-8 rounded-[28px] border-2 border-dashed border-edge px-6 py-16 text-center text-mute">
+        @if (focus.focus().projects.length || focus.focus().blocking) { Nada com esses filtros. <button type="button" class="text-frost hover:underline" (click)="focus.set({ projects: [], blocking: false })">Mostrar tudo</button> }
+        @else if (focus.tab() === 'decision') { Nenhuma decisão esperando você. }
+        @else { Nenhuma ideia nova. <a routerLink="/ideias" class="text-frost hover:underline">Anote em Ideias</a>. }
+      </div>
+    }
+  }
+  }
+</div>
+
+<!-- lote: aparece com algo selecionado -->
+@if (selected().size) {
+  <div class="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-edge bg-raise py-2 pr-2 pl-5 text-[13.5px] shadow-[0_24px_60px_-20px_rgb(0_0_0/0.9)]" role="toolbar" aria-label="Ações em lote">
+    <span class="font-semibold">{{ selected().size }} {{ selected().size === 1 ? 'selecionada' : 'selecionadas' }}</span>
+    <span class="mx-1 h-5 w-px bg-edge" aria-hidden="true"></span>
+    <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" (click)="batch('approve')"><app-icon name="check" [size]="14" />Aprovar</button>
+    <button type="button" class="btn btn-sm btn-ghost !text-later" (click)="batch('defer')">Depois</button>
+    <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="batch('reject')">{{ focus.tab() === 'idea' ? 'Descartar' : 'Recusar' }}</button>
+    @if (focus.tab() === 'decision') { <button type="button" class="btn btn-sm btn-ghost !text-no" (click)="removeSelected()" title="Excluir de vez (some também do histórico)"><app-icon name="delete" [size]="14" />Excluir</button> }
+    <button type="button" class="btn btn-sm btn-ghost" (click)="clearSel()" aria-label="Limpar seleção"><app-icon name="close" [size]="14" /></button>
+  </div>
+}
+
+<!-- item aberto -->
+@if (current(); as item) {
+  <div class="fixed inset-0 z-40 grid place-items-center bg-night/70 p-6 backdrop-blur-[2px]" (click)="close()">
+    <article id="tri-modal" role="dialog" aria-modal="true" aria-labelledby="tri-modal-title" tabindex="-1" (click)="$event.stopPropagation()"
+             class="card-leave flex max-h-[90vh] w-full max-w-[760px] flex-col rounded-[28px] border border-edge bg-raise shadow-[0_30px_80px_-30px_rgb(0_0_0/0.9)] outline-none"
+             [class.leave-approve]="leaving() === 'approve'" [class.leave-reject]="leaving() === 'reject'" [class.leave-defer]="leaving() === 'defer'">
+      @let slug = item.kind === 'decision' ? item.p.projectSlug : item.i.projectSlug;
+      <!-- topo: tipo, projeto, posição e navegação -->
+      <div class="flex items-center gap-2 border-b border-edge px-6 py-3 text-[13px]">
+        @if (item.kind === 'decision') { <span class="rounded-full bg-later/15 px-2.5 py-0.5 font-semibold text-later">Decisão</span> }
+        @else { <span class="rounded-full bg-frost/15 px-2.5 py-0.5 font-semibold text-frost">Ideia</span> }
+        @if (project(slug); as pr) { <span class="flex items-center gap-1.5 font-semibold" [style.color]="pr.color"><app-project-avatar [project]="pr" [size]="16" />{{ pr.name }}</span> }
+        @if (stuck(item)) { <span class="text-later">· agente esperando {{ item.kind === 'decision' ? (item.p.createdAt | ago) : '' }}</span> }
+        <span class="flex-1"></span>
+        <span class="tabular-nums text-faint">{{ position() + 1 }} de {{ flat().length }}</span>
+        <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-text disabled:opacity-30" [disabled]="position() <= 0" (click)="move(-1)" aria-label="Anterior" title="Anterior (←)"><app-icon name="chevron" [size]="14" class="rotate-180" /></button>
+        <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-text disabled:opacity-30" [disabled]="position() >= flat().length - 1" (click)="move(1)" aria-label="Próximo" title="Próximo (→)"><app-icon name="chevron" [size]="14" /></button>
+        @if (item.kind === 'decision') {
+          <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-no" (click)="removeCurrent()" aria-label="Excluir decisão" title="Excluir de vez (some também do histórico)"><app-icon name="delete" [size]="15" /></button>
+        }
+        <button type="button" class="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-text" (click)="close()" aria-label="Fechar" title="Fechar (Esc)"><app-icon name="close" [size]="15" /></button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+        @if (item.kind === 'decision') {
+          @let p = item.p;
+          <h2 id="tri-modal-title" class="font-display text-[26px] font-semibold leading-tight selectable">{{ p.title }}</h2>
+          @if (p.summary ?? oneLine(p.body); as s) { <p class="mt-2 text-[16px] font-medium leading-relaxed text-text/90 selectable">{{ s }}</p> }
+          @if (p.body) {
+            <details class="mt-4 rounded-2xl bg-night/60 px-4 py-3" [open]="!p.summary">
+              <summary class="cursor-pointer text-[13px] font-semibold text-mute">Contexto completo</summary>
+              <div class="md mt-2 text-[14.5px] text-text/85 selectable" [innerHTML]="p.body | markdown"></div>
+            </details>
+          }
+          @if (p.nextAction) { <p class="mt-4 text-[14px] leading-relaxed text-mute"><span class="font-semibold text-yes">Se aprovar:</span> {{ p.nextAction }}</p> }
+          <p class="mt-3 text-[12.5px] text-faint">{{ source(p.source) }}@if (p.tier !== null) { · {{ risk[p.tier] }} }</p>
+        } @else {
+          @let i = item.i;
+          <h2 id="tri-modal-title" class="font-display text-[26px] font-semibold leading-tight selectable">{{ i.title }}</h2>
+          <p class="mt-1 text-[13px] text-faint">{{ i.author === 'gustavo' ? 'sua' : 'sugerida por um agente' }}, {{ i.createdAt | ago }}</p>
+          @if (i.triage) {
+            <p class="mt-4 flex gap-2.5 rounded-2xl border border-frost/30 bg-frost/10 px-4 py-3 text-[14px] leading-relaxed">
+              <app-icon name="spark" [size]="16" class="mt-0.5 shrink-0 text-frost" />
+              <span><span class="font-semibold text-frost">Triagem sugere:</span> {{ i.triage }}</span></p>
+          } @else if (reading(i)) {
+            <p class="mt-4 flex items-center gap-2.5 text-[13.5px] text-frost"><span class="pulse size-2 rounded-full bg-frost"></span>O agente de triagem está lendo esta ideia…</p>
+          }
+          @if (i.body) { <div class="md mt-4 text-[15px] text-text/85 selectable" [innerHTML]="i.body | markdown"></div> }
+          <div class="mt-5 flex items-center gap-3 text-[13.5px]">
+            <span class="text-mute">Projeto</span>
+            @if (project(i.projectSlug); as pr) {
+              <span class="flex items-center gap-2 font-semibold" [style.color]="pr.color"><app-project-avatar [project]="pr" [size]="18" />{{ pr.name }}</span>
+            } @else {
+              <app-project-select class="w-72" [value]="pickSlug()" (valueChange)="pickSlug.set($event)" noneLabel="Escolha o projeto…" />
             }
           </div>
+        }
+
+        @if (steering()) {
+          <div class="mt-5 rounded-2xl border border-frost/40 bg-night p-3">
+            <label for="tri-guidance" class="px-1 text-[13px] font-semibold text-frost">O que fazer com isto?</label>
+            <textarea id="tri-guidance" class="mt-1.5 min-h-24 w-full resize-y bg-transparent px-1 leading-relaxed outline-none placeholder:text-faint"
+                      placeholder="Ex.: divide em duas · aprova só para o KultivAi · junta com a ideia de onboarding · pesquisa antes e me traz 2 opções"
+                      [value]="guidance()" (input)="guidance.set($any($event.target).value)" (keydown.control.enter)="steer()"></textarea>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <span class="px-1 text-[12px] text-faint">Para</span>
+              <app-agent-select class="w-56" [compact]="true" [value]="steerTo()" (valueChange)="steerTo.set($event)" noneLabel="A Central" [hideCentral]="true" />
+              <span class="min-w-40 flex-1 px-1 text-[12px] text-faint">Recebe o item inteiro e o seu texto. Ctrl+Enter envia.</span>
+              <button type="button" class="btn btn-sm btn-ghost" (click)="steering.set(false)">Cancelar</button>
+              <button type="button" class="btn btn-sm btn-primary" (click)="steer()" [disabled]="!guidance().trim() || sending()">
+                <app-icon name="send" [size]="14" />{{ sending() ? 'Enviando…' : 'Mandar para ' + steerName() }}</button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- ações -->
+      <div class="border-t border-edge px-6 py-4">
+        @if (error()) { <p role="alert" class="mb-3 text-[13.5px] text-no">{{ error() }}</p> }
+        @if (item.kind === 'decision' && item.p.options.length) {
+          <div class="mb-2 grid gap-2" [class]="item.p.options.length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
+            @for (o of item.p.options; track $index) {
+              <button type="button" (click)="choose(o)" class="flex items-center gap-2 rounded-2xl border-2 border-yes/60 px-4 py-2.5 text-left font-semibold text-yes hover:bg-yes/10">
+                <kbd class="grid size-5 shrink-0 place-items-center rounded bg-yes/15 text-[11px]">{{ $index + 1 }}</kbd><span class="min-w-0">{{ o }}</span></button>
+            }
+          </div>
+        }
+        @let hint = suggested();
+        <div class="flex flex-wrap gap-2 [&>button]:whitespace-nowrap">
+          <button type="button" (click)="decide('reject')" class="rounded-full border-2 px-5 py-2.5 font-semibold text-no hover:border-no" [class]="hint === 'reject' ? 'border-no' : 'border-edge'">
+            {{ item.kind === 'idea' ? 'Descartar' : 'Não' }} <kbd class="ml-1 text-xs opacity-60">N</kbd></button>
+          <button type="button" (click)="decide('defer')" class="rounded-full border-2 border-edge px-5 py-2.5 font-semibold text-later hover:border-later">
+            Depois <kbd class="ml-1 text-xs opacity-60">D</kbd></button>
+          <button type="button" (click)="openSteer()" [attr.aria-pressed]="steering()" title="Dizer o que fazer: a Central lê e age"
+                  class="rounded-full border-2 px-5 py-2.5 font-semibold text-frost hover:border-frost" [class]="steering() || hint === 'steer' ? 'border-frost' : 'border-edge'">
+            Direcionar <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
+          <span class="flex-1"></span>
+          @if (item.kind === 'idea') {
+            <button type="button" (click)="approveAndPlan()" title="Aprova e põe o gestor do projeto para quebrar em tarefas ou decisões"
+                    class="rounded-full border-2 border-yes px-5 py-2.5 font-semibold text-yes hover:bg-yes/10" [class]="hint === 'plan' ? 'bg-yes/10' : ''">
+              Aprovar e planejar <kbd class="ml-1 text-xs opacity-60">P</kbd></button>
+          }
+          @if (item.kind === 'idea' || !item.p.options.length) {
+            <button type="button" (click)="decide('approve')" class="rounded-full bg-yes px-6 py-2.5 font-semibold text-night hover:brightness-110" [class]="hint === 'approve' ? 'ring-2 ring-yes/50 ring-offset-2 ring-offset-raise' : ''">
+              Aprovar <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
+          }
         </div>
-      } @empty {
-        <p class="text-mute">Aprovar uma decisão cria uma tarefa em "A fazer", pronta para um agente.</p>
-      }
-    </section>
-  </aside>
-</div>
+      </div>
+    </article>
+  </div>
+}
