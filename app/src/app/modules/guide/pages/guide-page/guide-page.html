@@ -3,6 +3,7 @@
   <header class="flex flex-wrap items-center gap-3 border-b border-edge bg-panel px-6 py-4">
     <app-icon [name]="t.icon" [size]="22" class="text-frost" />
     <div class="min-w-0 flex-1">
+      <p class="text-[12.5px] font-semibold text-faint"><a routerLink="/estudio" [queryParams]="scope.queryFor('/estudio')" class="hover:text-text">Estúdio</a> ›</p>
       <h1 class="font-display text-[20px] font-bold tracking-tight">{{ t.title }}{{ project() ? ' · ' + project()!.name + (scope.direct() ? ' (sem frente)' : '') : '' }}</h1>
       <p class="text-[13px] text-mute">{{ t.subtitle }}</p>
     </div>
@@ -302,7 +303,7 @@
                 <div class="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[#7ED6C2]/40 bg-[#7ED6C2]/5 px-5 py-3">
                   <app-icon name="users" [size]="16" class="text-[#7ED6C2]" />
                   <span class="min-w-0 flex-1 text-[13px]">O rumo pede mudanças no time (quem faz o quê). Isso se decide na Agência.</span>
-                  <a routerLink="/agencia" [queryParams]="{ projeto: g.projectSlug, foco: fa }" class="btn btn-sm">Levar para a Agência</a>
+                  <a routerLink="/estudio/time" [queryParams]="{ projeto: g.projectSlug, foco: fa }" class="btn btn-sm">Levar para a Agência</a>
                 </div>
               }
               <h3 class="mt-6 font-display text-lg font-semibold">Plano aprovado</h3>
@@ -411,7 +412,7 @@
           <div class="md mt-2 text-[13.5px]" [innerHTML]="(h.minutes ?? 'Sem ata.') | markdown"></div>
           <div class="mt-2 flex flex-wrap gap-4 text-[13px]">
             @if (h.centralChat) { <a routerLink="/agentes" [queryParams]="{ conversa: h.centralChat }" class="text-frost hover:underline">Ver a conversa da sessão</a> }
-            @if (kind === 'rumo') { <a routerLink="/agencia" [queryParams]="{ projeto: h.projectSlug, foco: forAgency(h) || null }" class="text-frost hover:underline">Revisar a agência para esse rumo</a> }
+            @if (kind === 'rumo') { <a routerLink="/estudio/time" [queryParams]="{ projeto: h.projectSlug, foco: forAgency(h) || null }" class="text-frost hover:underline">Revisar a agência para esse rumo</a> }
           </div>
         </details>
       }

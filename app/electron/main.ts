@@ -37,6 +37,7 @@ import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, u
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
 import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, talkGuide } from './guides';
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
+import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -307,7 +308,16 @@ function registerIpc(): void {
     // guiar projeto: quando um dos dois termina de falar, o outro recebe a vez
     if (!message && !busy) try { guideIdle(chat_id, guideDeps); } catch (e) { console.error('guia', e); }
   };
-  const guideDeps = { notify: chatNotify, changed: () => { send('guides:changed', null); changed(); } };
+  const guideDeps = {
+    notify: chatNotify, changed: () => { send('guides:changed', null); changed(); },
+    notifyReady: (slug: string) => toast('Piloto automático pronto', `${get<{ name: string }>('select name from projects where slug = ?', slug)?.name ?? slug}: rumo e time esperando o seu ok.`, `/estudio/piloto?projeto=${slug}`, 'waiting'),
+  };
+  initPilot(guideDeps);
+  handle('pilot:list', () => listPilots());
+  handle('pilot:start', (slug, direct, focus) => startPilot(slug, direct, focus));
+  handle('pilot:approve', id => { approvePilot(id); send('guides:changed', null); });
+  handle('pilot:feedback', (id, text) => { feedbackPilot(id, text); send('guides:changed', null); });
+  handle('pilot:abandon', id => { abandonPilot(id); send('guides:changed', null); });
   onGuidesChanged(() => send('guides:changed', null));
   handle('guides:list', () => listGuides());
   handle('guides:start', (slug, direct, focus, kind) => startGuide(slug, direct, focus, guideDeps, kind ?? 'rumo'));

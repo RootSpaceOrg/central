@@ -30,7 +30,8 @@ terminal sem Claude e sem cota; intervalo a partir de 5 min), entregas e a cota 
 Na tela, o projeto escolhido na barra lateral filtra Triagem, Ideias, Revisão, Backlog, Quadros, Escritório, Agentes, Execuções
 e Rotinas (o grupo inclui as frentes; "Sem frente", logo abaixo do grupo, mostra só o que é dele direto); "Todos os projetos" tira o filtro; a página do projeto abre com duplo clique no projeto.
 Na barra de ícones, telas irmãs viram abas: Início | Visão geral, Triagem | Ideias, Backlog | Quadros, Agentes | Execuções.
-Guiar projeto (tela Guiar): sessão para decidir "para onde vamos agora". O Estrategista analisa e abre o debate; você responde,
+Estúdio (tela Estúdio): Rumo (antigo Guiar), Time (antiga Agência) e Piloto automático (roda os dois aceitando as recomendações e para no fim para o ok do Gustavo).
+Rumo: sessão para decidir "para onde vamos agora". O Estrategista analisa e abre o debate; você responde,
 entrega leitura e cards (guide_update), monta o plano com as respostas dele e, aprovado, executa e fecha com a ata (guide_finish).
 Agência (tela Agência): o mesmo esquema do Guiar para o time de agentes do projeto (papéis, quadros, rotinas, dono do A fazer),
 com o Diretor de agência no lugar do Estrategista; revisões automáticas (diária: backlog; semanal: completa, propõe com agency_propose).

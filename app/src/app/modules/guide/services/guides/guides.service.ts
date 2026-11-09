@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import { GuideCard, GuideDto, GuidePlanItem } from '../../../../shared/contract';
+import { GuideCard, GuideDto, GuidePlanItem, PilotDto } from '../../../../shared/contract';
 import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
 
 export type { GuideCard, GuidePlanItem };
@@ -50,11 +50,34 @@ const toGuide = (d: GuideDto): Guide => ({
   approvedAt: d.approved_at ? new Date(d.approved_at) : null, finishedAt: d.finished_at ? new Date(d.finished_at) : null,
 });
 
+export interface Pilot {
+  id: number;
+  projectSlug: string;
+  direct: boolean;
+  status: PilotDto['status'];
+  stage: PilotDto['stage'];
+  rumoGuide: number;
+  timeGuide: number | null;
+  focus: string | null;
+  feedback: string | null;
+  error: string | null;
+  createdAt: Date;
+  approvedAt: Date | null;
+  finishedAt: Date | null;
+}
+const toPilot = (d: PilotDto): Pilot => ({
+  id: d.id, projectSlug: d.project_slug, direct: !!d.direct, status: d.status, stage: d.stage, rumoGuide: d.rumo_guide, timeGuide: d.time_guide,
+  focus: d.focus, feedback: d.feedback, error: d.error, createdAt: new Date(d.created_at),
+  approvedAt: d.approved_at ? new Date(d.approved_at) : null, finishedAt: d.finished_at ? new Date(d.finished_at) : null,
+});
+
 /** Guiar projeto: sessões (abertas e atas), e as ações de cada etapa. */
 @Injectable({ providedIn: 'root' })
 export class GuidesService {
   private readonly ipc = inject(IpcService);
   readonly guides = signal<Guide[]>([]);
+  /** piloto automático (Rumo + Time sem você no meio) */
+  readonly pilots = signal<Pilot[]>([]);
   readonly error = signal<string | null>(null);
   readonly open = computed(() => this.guides().filter(g => g.status === 'open'));
 
@@ -63,7 +86,20 @@ export class GuidesService {
     this.ipc.on('guides:changed', () => this.load());
   }
 
-  load(): void { this.ipc.invoke('guides:list').then(l => this.guides.set(l.map(toGuide))); }
+  load(): void {
+    this.ipc.invoke('guides:list').then(l => this.guides.set(l.map(toGuide)));
+    this.ipc.invoke('pilot:list').then(l => this.pilots.set(l.map(toPilot)));
+  }
+
+  /** piloto em andamento ou esperando você neste escopo */
+  pilotFor(slug: string, direct: boolean): Pilot | null {
+    return this.pilots().find(p => p.projectSlug === slug && p.direct === direct && ['running', 'ready', 'approved', 'failed'].includes(p.status)) ?? null;
+  }
+  guide(id: number | null): Guide | null { return id ? this.guides().find(g => g.id === id) ?? null : null; }
+  pilotStart(slug: string, direct: boolean, focus: string | null) { return this.act(this.ipc.invoke('pilot:start', slug, direct, focus)); }
+  pilotApprove(id: number) { return this.act(this.ipc.invoke('pilot:approve', id)); }
+  pilotFeedback(id: number, text: string) { return this.act(this.ipc.invoke('pilot:feedback', id, text)); }
+  pilotAbandon(id: number) { return this.act(this.ipc.invoke('pilot:abandon', id)); }
 
   /** sessão aberta deste escopo (projeto inteiro ou só o projeto direto) */
   openFor(slug: string, direct: boolean, kind: Guide['kind'] = 'rumo'): Guide | null { return this.open().find(g => g.projectSlug === slug && g.direct === direct && g.kind === kind) ?? null; }

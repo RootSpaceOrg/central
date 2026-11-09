@@ -276,6 +276,24 @@ export interface GuidePlanItem {
   include: boolean;
 }
 
+/** Estúdio → piloto automático */
+export interface PilotDto {
+  id: number;
+  project_slug: string;
+  direct: number;
+  /** running = andando sozinho; ready = esperando o seu ok; approved = executando; done; failed; abandoned */
+  status: 'running' | 'ready' | 'approved' | 'done' | 'failed' | 'abandoned';
+  stage: 'rumo' | 'time' | 'ready';
+  rumo_guide: number;
+  time_guide: number | null;
+  focus: string | null;
+  feedback: string | null;
+  error: string | null;
+  created_at: string;
+  approved_at: string | null;
+  finished_at: string | null;
+}
+
 export interface GuideDto {
   id: number;
   project_slug: string;
@@ -1129,6 +1147,11 @@ export interface Api {
   'ideas:update': (id: number, patch: IdeaPatch) => void;
   'direction:get': (projectSlug: string) => DirectionDto | null;
   'guides:list': () => GuideDto[];
+  'pilot:list': () => PilotDto[];
+  'pilot:start': (projectSlug: string, direct: boolean, focus: string | null) => PilotDto;
+  'pilot:approve': (id: number) => void;
+  'pilot:feedback': (id: number, text: string) => void;
+  'pilot:abandon': (id: number) => void;
   'guides:start': (projectSlug: string, direct: boolean, focus: string | null, kind: 'rumo' | 'agencia') => GuideDto;
   'guides:talk': (id: number) => void;
   /** retrato do time ao vivo (tela Agência, sem sessão) */

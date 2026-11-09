@@ -225,6 +225,24 @@ db.exec(`
 
   -- roadmap do projeto: marcos em Agora / Próximo / Depois (sem data obrigatória; alvo opcional, ex.: "dez", "Q1")
   -- Guiar projeto: uma sessão aberta por projeto/escopo; etapas 1 retrato, 2 decisões, 3 plano, 4 em andamento
+  -- Estúdio → piloto automático: Rumo + Time sem o Gustavo no meio; ele vê o final (ok ou feedback)
+  create table if not exists pilots (
+    id           integer primary key autoincrement,
+    project_slug text not null references projects on delete cascade,
+    direct       integer not null default 0,
+    status       text not null default 'running',
+    stage        text not null default 'rumo',
+    rumo_guide   integer not null,
+    time_guide   integer,
+    focus        text,
+    feedback     text,
+    error        text,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at   text,
+    approved_at  text,
+    finished_at  text
+  );
+
   create table if not exists guides (
     id              integer primary key autoincrement,
     project_slug    text not null references projects on delete cascade,

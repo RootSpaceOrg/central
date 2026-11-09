@@ -13,7 +13,13 @@ import { getDirection } from './direction';
 import { releaseStatus } from './release';
 
 type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) => void;
-export interface GuideDeps { notify: Notify; changed: () => void }
+export interface GuideDeps { notify: Notify; changed: () => void; /** piloto automático pronto (aviso no sistema) */ notifyReady?: (slug: string) => void }
+
+/** ganchos do piloto automático: sessão terminou de falar / fechou com a ata */
+let idleHook = (_id: number) => {};
+let finishHook = (_id: number) => {};
+export function onGuideIdle(fn: (id: number) => void): void { idleHook = fn; }
+export function onGuideFinish(fn: (id: number) => void): void { finishHook = fn; }
 
 // Opus nos dois (decisão de rumo); CENTRAL_GUIDE_MODEL troca nos testes
 const MODEL = { model: process.env.CENTRAL_GUIDE_MODEL || 'opus', effort: '' };
@@ -236,6 +242,7 @@ Comente em 1 a 2 linhas (concorda? muda algo?). Se mudar os cards ou o plano, aj
   } else if (chatId === g.central_chat && g.phase === 'reply') {
     run(`update guides set phase = 'idle' where id = ?`, g.id);
     d.changed();
+    idleHook(g.id);
   }
 }
 
@@ -341,6 +348,7 @@ export function finishGuide(id: number, minutes: string): string {
   if (!g) throw new Error('Sessão não encontrada.');
   run(`update guides set status = 'done', minutes = ?, finished_at = ? where id = ?`, minutes.trim(), now(), id);
   guidesChanged();
+  setTimeout(() => finishHook(id), 0);
   return 'Sessão fechada com a ata.';
 }
 

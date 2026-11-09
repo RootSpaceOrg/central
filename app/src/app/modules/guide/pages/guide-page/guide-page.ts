@@ -27,7 +27,7 @@ const KIND: Record<string, string> = {
 /** textos de cada tipo de sessão (mesma tela, mesmo motor) */
 const TEXT = {
   rumo: {
-    title: 'Guiar', icon: 'compass' as const, subtitle: 'Retrato do projeto, debate entre o estrategista e a Central, suas decisões e o plano que os agentes executam.',
+    title: 'Rumo', icon: 'compass' as const, subtitle: 'Retrato do projeto, debate entre o estrategista e a Central, suas decisões e o plano que os agentes executam.',
     specialist: 'estrategista', Specialist: 'Estrategista', startTitle: 'Para onde vamos agora?', startButton: 'Guiar este projeto', step1: 'Retrato', reading: 'Leitura do momento',
     startBody: 'O estrategista lê o projeto inteiro (rumo, roadmap, backlog, ideias, decisões, o que andou e o que espera produção) e abre o debate. A Central responde e monta as decisões para você. Usa Opus nos dois.',
     analysing: 'O estrategista está lendo o projeto e vai abrir o debate na conversa ao lado…',
@@ -44,7 +44,7 @@ const TEXT = {
     planHelp: 'Agora: um agente começa já. Backlog: tarefa em A fazer com o agente. Depois: vira marco ou ideia.',
   },
   agencia: {
-    title: 'Agência', icon: 'users' as const, subtitle: 'O time de agentes do projeto: quem faz o quê, os fluxos e as rotinas, revisados pelo diretor de agência e a Central.',
+    title: 'Time', icon: 'users' as const, subtitle: 'O time de agentes do projeto: quem faz o quê, os fluxos e as rotinas, revisados pelo diretor de agência e a Central.',
     specialist: 'diretor de agência', Specialist: 'Diretor', startTitle: 'O time dá conta desse rumo?', startButton: 'Revisar a agência', step1: 'Retrato do time', reading: 'Leitura do time',
     startBody: 'O diretor de agência lê o rumo, o roadmap, o backlog e como cada agente tem trabalhado, e propõe o time (papéis, quadros e rotinas). A Central responde e monta as decisões. Usa Opus nos dois.',
     analysing: 'O diretor de agência está lendo o time e vai abrir o debate na conversa ao lado…',
