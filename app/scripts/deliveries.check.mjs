@@ -23,6 +23,7 @@ db.exec(\`
   create table ideas (id integer primary key, created_at text, status text);
   create table proposals (id integer primary key, created_at text, status text);
   create table memories (id integer primary key, created_at text, author text, status text);
+  create table run_procs (id integer primary key autoincrement, run_id integer, pid integer, start text, cmd text, server integer default 0, kill_after text);
   \${${JSON.stringify(schema)}}
   insert into tasks values (7, 'Exportar roadmap', 'kultivai', 'review', '2026-11-01T10:00:00Z', null);
   insert into runs values (1, 'kultivai', 2, 7, 'Exportar o roadmap em PDF\\nDetalhes', 'succeeded', 'Feito. PR aberto.', 'https://github.com/x/y/pull/3', null, null, 0.5, '2026-11-02T10:00:00Z', '2026-11-02T11:30:00Z', null);
