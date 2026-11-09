@@ -3,6 +3,7 @@
  * (report_delivery pelo MCP). A Central completa com o diff e o PR; sem nota, registra o resultado e marca "sem explicação".
  * Quem mexeu em código entra na fila de revisão; o resto é informativo. O digest junta tudo desde a última visita.
  */
+import { deliveryReviewed } from './leftovers';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -85,6 +86,8 @@ export function reviewDelivery(id: number, action: 'accepted' | 'adjusting' | 'd
   const d = get<{ task_id: number | null }>('select task_id from deliveries where id = ?', id);
   if (!d) throw new Error('Entrega não encontrada.');
   run('update deliveries set status = ?, review_note = ?, reviewed_at = ? where id = ?', action, note?.trim() || null, now(), id);
+  // revisou: os servidores que a execução deixou para o teste já podem cair
+  if (action !== 'adjusting') { const r = get<{ run_id: number }>('select run_id from deliveries where id = ?', id); if (r) deliveryReviewed(r.run_id); }
   if (action === 'accepted' && d.task_id) {
     const prodWithPr = get('select 1 from tasks t join projects p on p.slug = t.project_slug where t.id = ? and p.done_when = ? and t.pr_url is not null', d.task_id, 'prod');
     if (!prodWithPr) run(`update tasks set "column" = 'done', updated_at = ? where id = ? and "column" <> 'done'`, now(), d.task_id);

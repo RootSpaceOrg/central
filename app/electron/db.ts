@@ -226,6 +226,17 @@ db.exec(`
   -- roadmap do projeto: marcos em Agora / Próximo / Depois (sem data obrigatória; alvo opcional, ex.: "dez", "Q1")
   -- Guiar projeto: uma sessão aberta por projeto/escopo; etapas 1 retrato, 2 decisões, 3 plano, 4 em andamento
   -- Estúdio → piloto automático: Rumo + Time sem o Gustavo no meio; ele vê o final (ok ou feedback)
+  -- processos que uma execução deixou rodando (servidor de dev, testes): a Central derruba no fim / na revisão / no prazo
+  create table if not exists run_procs (
+    id         integer primary key autoincrement,
+    run_id     integer not null,
+    pid        integer not null,
+    start      text not null,
+    cmd        text,
+    server     integer not null default 0,
+    kill_after text
+  );
+
   create table if not exists pilots (
     id           integer primary key autoincrement,
     project_slug text not null references projects on delete cascade,

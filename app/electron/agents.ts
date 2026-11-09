@@ -1,3 +1,4 @@
+import { runEnded, watchRun } from './leftovers';
 import { ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -373,6 +374,8 @@ Continue exatamente de onde parou, sem refazer o que já fez: confira o estado (
   // Prompt vai por stdin: nenhum texto do usuário passa pela linha de comando do shell.
   const child = spawn('claude', args, { cwd, shell: true, windowsHide: true, env: childEnv(), ...treeSpawn });
   procs.set(id, child);
+  // o que ela abrir (ng serve, testes…) fica anotado para cair no fim / na revisão
+  watchRun(id, child.pid);
   set(id, { status: 'running' }, emit);
   child.stdin.end(frame);
 
@@ -426,6 +429,7 @@ Continue exatamente de onde parou, sem refazer o que já fez: confira o estado (
 
   await new Promise<void>(done => child.on('close', code => {
     clearInterval(checkpointTimer);
+    runEnded(id, child.pid).catch(() => {});
     saveCheckpoint();
     untrack('run', id, tracker);
     const now_ = dto(id);
@@ -614,6 +618,8 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
   pendentes na descrição da tarefa: a tarefa espera, e quando ele decidir a resposta volta para ela e você segue.${prodRule(r.project_slug)}
 - Precisa de outro agente (ex.: achou um bug urgente que é de quem cuida do código ou da monitoração)? notify_agent com um
   resumo seu do que viu e do que precisa (não cole texto de cliente ou de fora), urgent só se for mesmo. Os agentes estão em list_agents.
+- Servidor de dev, testes ou watch que você subir em segundo plano: pare antes de terminar. Se deixar um servidor
+  para o Gustavo testar, diga a porta no "como testar" (a Central derruba quando ele revisar, ou em 2 horas).
 - Antes de terminar, chame report_delivery: o que mudou, por quê, como testar em 1 minuto e o que ficou de risco.
   É o que o Gustavo lê quando volta; sem isso ele não sabe o que você fez.
 - E registre o que aprendeu (até 3 itens, só o que não é óbvio e não está no código, no backlog nem no rumo):

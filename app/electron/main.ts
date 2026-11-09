@@ -38,6 +38,7 @@ import { directionHistory, getDirection, planBacklog, setDirection } from './dir
 import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, talkGuide } from './guides';
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
+import { startLeftovers } from './leftovers';
 import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -313,6 +314,8 @@ function registerIpc(): void {
     notifyReady: (slug: string) => toast('Piloto automático pronto', `${get<{ name: string }>('select name from projects where slug = ?', slug)?.name ?? slug}: rumo e time esperando o seu ok.`, `/estudio/piloto?projeto=${slug}`, 'waiting'),
   };
   initPilot(guideDeps);
+  // o que execuções deixaram rodando (e venceu com a Central fechada) cai
+  if (!CAPTURE) startLeftovers();
   handle('pilot:list', () => listPilots());
   handle('pilot:start', (slug, direct, focus) => startPilot(slug, direct, focus));
   handle('pilot:approve', id => { approvePilot(id); send('guides:changed', null); });
