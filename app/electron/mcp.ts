@@ -19,7 +19,7 @@ import { agentSend, notifyOwners } from './whatsapp';
 import { analyzeVideo, transcribeFile } from './media';
 import { RESTRICTED_CENTRAL, createAgent, deleteAgent, getAgent, listAgents, updateAgent } from './agentdefs';
 import {
-  createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
+  createIdea, createProposal, createTask, decide, linkDecision, deleteProposal, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
@@ -309,6 +309,9 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), next_action: z.string().optional(), tier: z.number().int().min(0).max(2).optional(),
     task_id: z.number().int().optional(), summary: z.string().optional(), options: z.array(z.string()).max(4).optional(),
   }, a => createProposal({ summary: a.summary ?? null, options: a.options ?? null, title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, next_action: a.next_action ?? null, tier: a.tier ?? null, source: 'central', task_id: a.task_id ?? null, agent_id: who, origin: caller }), () => { h.backlog(); h.projects(); });
+  tool('link_decision', 'Liga uma decisão (aberta ou já respondida) a outras tarefas. Use quando a mesma escolha segura vários cartões, em vez de criar outra decisão igual: enquanto ela estiver aberta, essas tarefas esperam (o quadro não roda) e recebem a resposta quando o Gustavo decidir.', {
+    decision_id: z.number().int(), task_ids: z.array(z.number().int()).min(1),
+  }, a => linkDecision(a.decision_id, a.task_ids), h.backlog);
   tool('delete_decision', 'Apaga uma decisão de vez (some da Triagem e do histórico). Só quando o Gustavo pedir para apagar/excluir; para dizer não, use decide com reject.', {
     id: z.number().int(),
   }, a => { deleteProposal(a.id); return `Decisão #${a.id} apagada.`; }, () => { h.backlog(); h.projects(); });
@@ -332,7 +335,22 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     listAgents().map(a => ({ id: a.id, name: a.name, description: a.description, project: a.project_slug, priority: a.priority, tools: a.tools, permission: a.permission, model: a.model, builtin: a.builtin, chats: a.chats, routines: a.routines, runs: a.runs, instructions: a.instructions.slice(0, 400) })));
   tool('create_agent', 'Cria um agente (ex.: "Suporte KultivAi", "Marketing"). project_slug é opcional: sem projeto ele trabalha numa pasta própria.', { ...agentShape, name: z.string() }, a =>
     createAgent({ ...a, name: a.name, project_slug: a.project_slug ?? null }), h.agents);
-  tool('update_agent', 'Edita um agente: nome, papel/instruções, projeto, ferramentas, liberdade, modelo, ícone.', { id: z.number().int(), ...agentShape }, ({ id, ...patch }) => updateAgent(id, patch), h.agents);
+  tool('get_agent', 'Um agente com as instruções INTEIRAS (list_agents mostra só o começo). Leia antes de mexer nas instruções.', { id: z.number().int() }, ({ id }) => {
+    const a = getAgent(id);
+    if (!a) throw new Error('Agente não encontrado.');
+    return { id: a.id, name: a.name, description: a.description, project: a.project_slug, permission: a.permission, model: a.model, tools: a.tools, instructions: a.instructions };
+  });
+  tool('update_agent', 'Edita um agente: nome, papel/instruções, projeto, ferramentas, liberdade, modelo, ícone. instructions SUBSTITUI tudo (leia antes com get_agent); para acrescentar uma regra sem apagar o resto, use instructions_append.', {
+    id: z.number().int(), ...agentShape,
+    instructions_append: z.string().optional().describe('texto acrescentado no fim das instruções atuais (não apaga nada)'),
+  }, ({ id, instructions_append, ...patch }) => {
+    if (instructions_append?.trim()) {
+      const cur = getAgent(id);
+      if (!cur) throw new Error('Agente não encontrado.');
+      patch.instructions = `${(patch.instructions ?? cur.instructions).trimEnd()}\n\n${instructions_append.trim()}`;
+    }
+    updateAgent(id, patch);
+  }, h.agents);
   tool('delete_agent', 'Exclui um agente (e as conversas dele). Só use se o Gustavo pediu explicitamente.', { id: z.number().int(), confirm: z.literal(true) }, ({ id }) => deleteAgent(id), () => { h.agents(); h.routines(); });
 
   // ---------- execuções ----------

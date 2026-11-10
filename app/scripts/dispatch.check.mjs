@@ -27,6 +27,7 @@ db.exec(\`
   create table boards (id integer primary key autoincrement, name text not null, description text, project_slug text, color text not null default '#7FA2FF', position integer not null default 0, created_at text default '2026-11-01');
   create table board_cols (board_id integer, key text, label text, description text, kind text, position integer, agent_id integer, instruction text, parallel integer, hours text, next_key text, color text, primary key (board_id, key));
   create table task_boards (task_id integer, board_id integer, stage text, position integer default 0, updated_at text, primary key (task_id, board_id));
+  create table proposal_tasks (proposal_id integer, task_id integer, primary key (proposal_id, task_id));
   create table deliveries (pr_url text, title text, task_id integer);
   insert into agents (id, permission, name, builtin) values (1, 'edits', 'Central', 1);
   alter table tasks add column depends_on text;
@@ -181,6 +182,27 @@ started = [];
 await d.dispatchTodo({ ...deps(10), now: () => new Date('2026-11-04T13:00:00Z') });
 ok(started.some(x => x.task_id === 9), 'mudou de coluna: o aviso antigo não trava mais');
 db.exec("update runs set status = 'succeeded' where task_id = 9");
+
+// laço: a etapa terminou e o cartão ficou na mesma coluna sem mudar ("segurar aqui"): não roda de novo em seguida
+const soon = new Date(Date.now() + 60_000).toISOString();
+db.exec(`insert into runs (task_id, board_id, stage, status, finished_at) values (9, ${solto.id}, 'pesquisa', 'succeeded', '${soon}')`);
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date() });
+ok(!started.some(x => x.task_id === 9), 'passou na coluna e ficou nela sem mudar: não roda em laço');
+// alguém mexeu no cartão (ou uma decisão dele foi respondida): roda de novo
+db.exec(`update task_boards set updated_at = '${new Date(Date.now() + 120_000).toISOString()}' where task_id = 9`);
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date() });
+ok(started.some(x => x.task_id === 9), 'cartão mudou depois da passada: a etapa roda de novo');
+db.exec("update runs set status = 'succeeded' where task_id = 9");
+// decisão ligada a outras tarefas (link_decision): enquanto aberta, segura o cartão também
+db.exec(`update task_boards set updated_at = '${new Date(Date.now() + 180_000).toISOString()}' where task_id = 9`);
+db.exec("insert into proposals (id, status, title) values (771, 'proposed', 'Regra que segura vários cartões')");
+db.exec("insert into proposal_tasks values (771, 9)");
+started = [];
+await d.dispatchTodo({ ...deps(10), now: () => new Date() });
+ok(!started.some(x => x.task_id === 9), 'decisão aberta ligada à tarefa (link_decision): o cartão espera');
+db.exec("delete from proposal_tasks; delete from proposals where id = 771; update runs set status = 'succeeded' where task_id = 9");
 
 // remover uma coluna com tarefa: ela vai para a primeira; apagar o quadro não apaga a tarefa
 bd.saveColumns(solto.id, [{ key: 'ideias', label: 'Ideias' }, { key: 'publicado', label: 'Publicado', kind: 'done' }]);

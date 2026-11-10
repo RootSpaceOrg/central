@@ -141,8 +141,13 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
          and not exists (select 1 from runs r where r.task_id = t.id and r.board_id = x.board_id and r.stage = x.stage and r.waiting is not null
            and r.id = (select max(r2.id) from runs r2 where r2.task_id = t.id and r2.board_id = x.board_id))
          and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
+         and not exists (select 1 from proposal_tasks pt join proposals p on p.id = pt.proposal_id where pt.task_id = t.id and p.status = 'proposed')
+         -- laço: a última passada nesta coluna terminou e o cartão ficou aqui sem mudar (ninguém moveu, nenhuma decisão
+         -- respondida): não roda de novo antes do prazo (antes, um "segurar nesta coluna" fazia a etapa rodar sem parar)
+         and not exists (select 1 from runs r where r.task_id = t.id and r.board_id = x.board_id and r.stage = x.stage
+           and r.status = 'succeeded' and r.finished_at > x.updated_at and r.finished_at > ?)
          and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
-       order by t.priority, x.position, t.id limit ?`, s.board, s.key, s.board, s.key, since, slots);
+       order by t.priority, x.position, t.id limit ?`, s.board, s.key, s.board, s.key, since, since, slots);
     for (const t of tasks) {
       const head = `Etapa "${s.label}" do quadro ${s.bname}.${s.instruction ? `\n${s.instruction}` : ''}\nAo terminar bem, a Central leva a tarefa para ${s.next ? `"${s.next}"` : 'o fim do quadro'}. Se a etapa não terminou (esperando algo, devolvendo para trás, ou para ficar nesta coluna), mova você o cartão com move_on_board (pode ser para esta mesma coluna): aí a Central não avança.`;
       try {

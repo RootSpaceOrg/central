@@ -59,6 +59,17 @@ const decidedHooks: ((p: ProposalDto, verdict: Verdict) => boolean)[] = [];
 export const onDecided = (fn: (p: ProposalDto, verdict: Verdict) => boolean) => { decidedHooks.push(fn); };
 
 /** Aprovar vira tarefa em "A fazer", pronta para um agente. */
+/** liga uma decisão aberta a outras tarefas: elas esperam a resposta (o quadro não roda) e recebem quando você decidir */
+export function linkDecision(id: number, taskIds: number[]): string {
+  const p = get<{ status: string; title: string }>('select status, title from proposals where id = ?', id);
+  if (!p) throw new Error('Decisão não encontrada.');
+  const ok = taskIds.filter(t => get('select 1 from tasks where id = ?', t));
+  for (const t of ok) run('insert or ignore into proposal_tasks (proposal_id, task_id) values (?,?)', id, t);
+  return p.status === 'proposed'
+    ? `Decisão #${id} ligada a ${ok.map(t => `#${t}`).join(', ')}: essas tarefas esperam a resposta e a recebem quando o Gustavo decidir.`
+    : `A decisão #${id} já foi respondida (${p.status}): aplique a resposta dela direto nas tarefas, sem perguntar de novo.`;
+}
+
 export function decide(id: number, verdict: Verdict, reason: string | null): void {
   if (!VERDICT[verdict]) throw new Error('Decisão inválida.');
   if (!run('update proposals set status = ?, updated_at = ? where id = ?', VERDICT[verdict], now(), id).changes) {
@@ -69,12 +80,17 @@ export function decide(id: number, verdict: Verdict, reason: string | null): voi
   for (const h of decidedHooks) if (h(p, verdict)) return;
   // escolha sobre uma tarefa que já existe: a resposta volta para ela (vai para A fazer, o responsável segue) em vez de
   // virar uma tarefa nova que repete a pergunta
-  const task = p.task_id ? get<{ id: number; body: string | null; column: string }>('select id, body, "column" from tasks where id = ?', p.task_id) : null;
-  if (task && verdict !== 'defer') {
+  const ids = [...new Set([p.task_id, ...all<{ t: number }>('select task_id t from proposal_tasks where proposal_id = ?', id).map(x => x.t)].filter((x): x is number => !!x))];
+  const tasks = ids.map(t => get<{ id: number; body: string | null; column: string }>('select id, body, "column" from tasks where id = ?', t)).filter((x): x is { id: number; body: string | null; column: string } => !!x);
+  if (tasks.length && verdict !== 'defer') {
     const when = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     const answer = `Decisão #${p.id} (${when}): ${verdict === 'approve' ? 'APROVADA' : 'RECUSADA'}: ${p.title}${p.next_action && verdict === 'approve' ? `\nSe aprovada: ${p.next_action}` : ''}${reason ? `\nGustavo: ${reason}` : ''}`;
-    run(`update tasks set body = ?, "column" = case when "column" = 'done' then 'done' else 'todo' end, updated_at = ? where id = ?`,
-      [task.body?.trim(), answer].filter(Boolean).join('\n\n'), now(), task.id);
+    for (const task of tasks) {
+      run(`update tasks set body = ?, "column" = case when "column" = 'done' then 'done' else 'todo' end, updated_at = ? where id = ?`,
+        [task.body?.trim(), answer].filter(Boolean).join('\n\n'), now(), task.id);
+      // no quadro: a resposta conta como mudança (a coluna roda de novo, mesmo que tenha passado há pouco)
+      run('update task_boards set updated_at = ? where task_id = ?', now(), task.id);
+    }
     return;
   }
   if (verdict === 'approve' && p.project_slug && !get('select 1 from tasks where proposal_id = ?', id)) {

@@ -227,6 +227,13 @@ db.exec(`
   -- Guiar projeto: uma sessão aberta por projeto/escopo; etapas 1 retrato, 2 decisões, 3 plano, 4 em andamento
   -- Estúdio → piloto automático: Rumo + Time sem o Gustavo no meio; ele vê o final (ok ou feedback)
   -- processos que uma execução deixou rodando (servidor de dev, testes): a Central derruba no fim / na revisão / no prazo
+  -- decisão que vale para mais de uma tarefa (ex.: uma regra que segura vários cartões): todas esperam e recebem a resposta
+  create table if not exists proposal_tasks (
+    proposal_id integer not null references proposals on delete cascade,
+    task_id     integer not null references tasks on delete cascade,
+    primary key (proposal_id, task_id)
+  );
+
   create table if not exists run_procs (
     id         integer primary key autoincrement,
     run_id     integer not null,
