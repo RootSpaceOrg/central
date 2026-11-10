@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dir = mkdtempSync(join(root, '.dsp-check-'));
+process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
 const stub = join(dir, 'db.js');
 writeFileSync(stub, `
 const { DatabaseSync } = require('node:sqlite');
