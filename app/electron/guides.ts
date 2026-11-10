@@ -156,7 +156,9 @@ export function cardsText(cards: GuideCard[]): string {
 const planPrompt = (g: GuideDto, cards: GuideCard[]) => `[Guia #${g.id}] O Gustavo respondeu os cards:
 ${cardsText(cards)}
 
-Monte o plano com guide_update(guide_id ${g.id}, plan): itens { id, kind, title, detail, agent, when }.
+Monte o plano com guide_update(guide_id ${g.id}, plan): itens { id, kind, title, detail, why, agent, when }.
+why = por quê, em UMA linha que o Gustavo entenda sem contexto (a decisão que ele tomou ou o problema que o item resolve).
+title = o que acontece, em linguagem simples (ex.: "Criar o marco 'Stone em prod' em Agora").
 kind: 'rumo' (ajuste do texto do rumo; detail = o texto novo), 'marco' (criar/mover marco do roadmap), 'tarefa', 'ideia',
 'cortar' (arquivar ideia/tarefa ou congelar frente), 'agente' (pôr um agente QUE JÁ EXISTE para trabalhar) ou
 'agencia' (o rumo pede um papel, um fluxo ou uma rotina que não existe: title = a necessidade, detail = o porquê; quem decide é a

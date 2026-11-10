@@ -132,7 +132,9 @@ Não mude nada ainda. Termine dizendo em 1 linha que os cards estão prontos.`;
 const planPrompt = (g: GuideDto, cards: GuideCard[]) => `[Agência #${g.id}] O Gustavo respondeu os cards:
 ${cardsText(cards)}
 
-Monte o plano com guide_update(guide_id ${g.id}, plan): itens { id, kind, title, detail, agent, when }.
+Monte o plano com guide_update(guide_id ${g.id}, plan): itens { id, kind, title, detail, why, agent, when }.
+why = por quê, em UMA linha que o Gustavo entenda sem contexto (o problema do time que o item resolve).
+title = o que acontece, em linguagem simples (ex.: "Criar o agente Revisor de UX (Sonnet)").
 kind: 'criar_agente' (detail = papel, instruções, modelo e liberdade propostos), 'ajustar_agente' (o que muda), 'aposentar_agente',
 'quadro' (criar ou mudar um quadro: etapas e agentes), 'rotina' (criar/ajustar/desligar: o que faz, agente, quando), 'dono_todo'
 (quem puxa o A fazer), 'tarefa' (algo a fazer no projeto que saiu da conversa).

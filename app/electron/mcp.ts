@@ -265,6 +265,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     })).optional(),
     plan: z.array(z.object({
       id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente', 'agencia', 'criar_agente', 'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'dono_todo']), title: z.string(), detail: z.string().optional(),
+      why: z.string().optional().describe('por quê, em uma linha: a decisão ou o motivo que levou a este item'),
       agent: z.string().optional(), when: z.enum(['agora', 'backlog', 'depois']),
     })).optional(),
   }, a => updateGuide(a.guide_id, { reading: a.reading, cards: a.cards as never, plan: a.plan as never }), h.projects);

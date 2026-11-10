@@ -271,6 +271,8 @@ export interface GuidePlanItem {
   kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente' | 'agencia' | 'criar_agente' | 'ajustar_agente' | 'aposentar_agente' | 'quadro' | 'rotina' | 'dono_todo';
   title: string;
   detail?: string;
+  /** por quê, em uma linha (a decisão ou o motivo que levou a este item) */
+  why?: string;
   agent?: string;
   when: 'agora' | 'backlog' | 'depois';
   include: boolean;

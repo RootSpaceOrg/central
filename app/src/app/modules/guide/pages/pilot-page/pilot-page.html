@@ -1,124 +1,299 @@
-<div class="mx-auto max-w-6xl px-6 py-7" [attr.data-project]="scope.slug()">
-  <p class="text-[12.5px] font-semibold text-faint"><a routerLink="/estudio" [queryParams]="scope.queryFor('/estudio')" class="hover:text-text">Estúdio</a> ›</p>
-  <h1 class="flex items-center gap-2.5 font-display text-[28px] font-bold tracking-tight"><app-icon name="spark" [size]="26" class="text-frost" />Piloto automático{{ project() ? ' · ' + project()!.name : '' }}</h1>
-  <p class="mt-1 max-w-3xl text-mute">Rumo e Time sem você no meio: ele aceita as recomendações do Rumo, monta o Time para esse rumo e para no fim para o seu ok.</p>
-  @if (guides.error()) { <p role="alert" class="mt-3 text-no">{{ guides.error() }}</p> }
+<div class="flex h-full min-h-0 flex-col" [attr.data-project]="scope.slug()">
+  <!-- topo (igual ao Rumo e ao Time) -->
+  <header class="flex flex-wrap items-center gap-3 border-b border-edge bg-panel px-6 py-4">
+    <app-icon name="spark" [size]="22" class="text-frost" />
+    <div class="min-w-0 flex-1">
+      <p class="text-[12.5px] font-semibold text-faint"><a routerLink="/estudio" [queryParams]="scope.queryFor('/estudio')" class="hover:text-text">Estúdio</a> ›</p>
+      <h1 class="font-display text-[20px] font-bold tracking-tight">Piloto automático{{ project() ? ' · ' + project()!.name + (scope.direct() ? ' (sem frente)' : '') : '' }}</h1>
+      <p class="text-[13px] text-mute">Rumo e Time sem você no meio: aceita as recomendações do Rumo, monta o Time para esse rumo e para no fim para o seu ok.</p>
+    </div>
+    @if (pilot(); as p) {
+      @if (p.status === 'running' || p.status === 'ready' || p.status === 'failed') {
+        <button type="button" class="btn btn-sm btn-ghost hover:!text-no" (click)="abandon(p)"><app-icon name="delete" [size]="14" />Parar o piloto</button>
+      }
+    }
+  </header>
+  @if (guides.error()) { <p role="alert" class="border-b border-no/30 bg-no/10 px-6 py-2 text-[13px] text-no">{{ guides.error() }}</p> }
 
   @if (!project()) {
-    <p class="mt-8 text-mute">Escolha um projeto na lista ao lado (ou aqui).</p>
-    <div class="mt-3 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
-      @for (p of choices(); track p.slug) {
-        <button type="button" (click)="scope.set(p.slug)" class="flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 text-left transition hover:border-faint">
-          <app-project-avatar [project]="p" [size]="28" /><span class="min-w-0 flex-1 truncate font-semibold">{{ p.name }}</span>
-        </button>
-      }
+    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <p class="text-mute">Escolha um projeto na lista ao lado (ou aqui).</p>
+      <div class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
+        @for (c of choices(); track c.slug) {
+          <button type="button" (click)="scope.set(c.slug)" class="flex items-center gap-3 rounded-2xl border border-edge bg-panel px-4 py-3 text-left transition hover:border-faint">
+            <app-project-avatar [project]="c" [size]="28" /><span class="min-w-0 flex-1 truncate font-semibold">{{ c.name }}</span>
+            <app-icon name="chevron" [size]="14" class="text-faint" />
+          </button>
+        }
+      </div>
     </div>
   } @else if (!pilot()) {
-    <!-- começar -->
-    <div class="mt-7 grid gap-5 @4xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section class="flex flex-col rounded-3xl border border-edge bg-panel px-7 py-6">
-        <h2 class="font-display text-2xl font-bold">Rodar o piloto para {{ project()!.name }}</h2>
-        <label class="mt-4 flex flex-1 flex-col">
-          <span class="text-[13.5px] font-semibold">Tem algo em mente? <span class="font-normal text-faint">(opcional, mas guia as recomendações)</span></span>
-          <textarea class="field mt-2 min-h-[14rem] flex-1 resize-y text-[14.5px] leading-relaxed" placeholder="ex.: quero fechar a Stone e os Reels este mês com um time enxuto"
-                    aria-label="Foco do piloto" [value]="focus()" (input)="focus.set($any($event.target).value)" (keydown.control.enter)="start()"></textarea>
-        </label>
-        <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-edge pt-4">
-          <span class="min-w-0 flex-1 text-[12.5px] text-faint">Usa Opus. Leva alguns minutos; você é avisado quando o resultado estiver pronto.</span>
-          <button type="button" class="btn btn-primary" (click)="start()" [disabled]="busy()"><app-icon name="spark" [size]="17" />{{ busy() ? 'Começando…' : 'Rodar agora' }}</button>
-        </div>
-      </section>
-      <aside class="space-y-4">
-        <section class="rounded-3xl border border-edge bg-panel px-5 py-5">
-          <h3 class="text-[13px] font-semibold text-mute">Como funciona</h3>
-          <ol class="mt-3 space-y-3 text-[13px]">
-            <li><b>1. Rumo.</b> <span class="text-mute">O estrategista e a Central debatem e montam as decisões; o piloto escolhe as recomendadas e pede o plano.</span></li>
-            <li><b>2. Time.</b> <span class="text-mute">O diretor de agência monta o time, os quadros e as rotinas para executar esse plano.</span></li>
-            <li><b>3. Você.</b> <span class="text-mute">Vê só o final: o rumo e o time. Dá o ok (executa) ou um feedback (refaz a partir do rumo).</span></li>
-          </ol>
+    <!-- começar (mesmo compositor do Rumo e do Time) -->
+    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div class="mx-auto grid max-w-6xl gap-5 @4xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section class="flex flex-col rounded-3xl border border-edge bg-panel px-7 py-6" aria-labelledby="start-title">
+          <div class="flex items-start gap-4">
+            @if (project(); as p) { <app-project-avatar [project]="p" [size]="44" /> }
+            <div class="min-w-0">
+              <h2 id="start-title" class="font-display text-2xl font-bold">Deixar o projeto no automático?</h2>
+              <p class="mt-1 text-[14px] text-mute">O piloto roda o Rumo e o Time sozinho, escolhendo as recomendações, e te mostra só o final: o rumo decidido e o time proposto. Usa Opus.</p>
+            </div>
+          </div>
+          <label class="mt-5 flex flex-1 flex-col">
+            <span class="text-[13.5px] font-semibold">Tem algo em mente? <span class="font-normal text-faint">(opcional, mas guia as recomendações)</span></span>
+            <textarea class="field mt-2 min-h-[16rem] flex-1 resize-y text-[14.5px] leading-relaxed @4xl:min-h-[22rem]"
+                      placeholder="ex.: quero fechar a Stone e os Reels este mês com um time enxuto" aria-label="Foco do piloto"
+                      [value]="focus()" (input)="focus.set($any($event.target).value)" (keydown.control.enter)="start()"></textarea>
+          </label>
+          <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Sugestões">
+            @for (s of suggestions; track s) {
+              <button type="button" class="rounded-full border border-edge px-3 py-1 text-[12.5px] text-mute transition-colors hover:border-frost/50 hover:text-text" (click)="addSuggestion(s)">+ {{ s }}</button>
+            }
+          </div>
+          <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-edge pt-4">
+            <span class="min-w-0 flex-1 text-[12.5px] text-faint">Leva alguns minutos; você é avisado quando o resultado estiver pronto.</span>
+            <span class="text-[12px] text-faint">Ctrl+Enter</span>
+            <button type="button" class="btn btn-primary" (click)="start()" [disabled]="busy()"><app-icon name="spark" [size]="18" />{{ busy() ? 'Começando…' : 'Rodar o piloto' }}</button>
+          </div>
         </section>
-        @if (last(); as l) {
-          <section class="rounded-3xl border border-edge bg-panel px-5 py-5">
-            <h3 class="text-[13px] font-semibold text-mute">Último piloto <span class="font-normal text-faint">· {{ l.finishedAt ? (l.finishedAt | ago) : '' }}</span></h3>
-            @if (guides.guide(l.rumoGuide)?.minutes; as m) { <div class="md mt-2 line-clamp-[10] text-[13px]" [innerHTML]="m | markdown"></div> }
+        <aside class="space-y-4">
+          <section class="rounded-3xl border border-edge bg-panel px-5 py-5" aria-labelledby="how-title">
+            <h3 id="how-title" class="text-[13px] font-semibold text-mute">O que acontece</h3>
+            <ul class="mt-3 space-y-2.5">
+              @for (r of [
+                { icon: 'compass', label: 'Rumo', hint: 'o estrategista e a Central debatem; o piloto escolhe as recomendadas e pede o plano' },
+                { icon: 'users', label: 'Time', hint: 'o diretor de agência monta o time, os quadros e as rotinas para esse rumo' },
+                { icon: 'check', label: 'Seu ok', hint: 'você vê o rumo e o time lado a lado: ok executa; feedback refaz a partir do Rumo' },
+                { icon: 'activity', label: 'Em andamento', hint: 'a Central aplica o rumo e depois o time; cada um fecha com uma ata' }
+              ]; track r.label) {
+                <li class="flex gap-2.5 text-[13px]">
+                  <app-icon [name]="$any(r.icon)" [size]="15" class="mt-0.5 shrink-0 text-frost" />
+                  <span><b class="font-semibold">{{ r.label }}</b> <span class="text-mute">{{ r.hint }}</span></span>
+                </li>
+              }
+            </ul>
           </section>
-        }
-      </aside>
+          @if (last(); as l) {
+            <section class="rounded-3xl border border-edge bg-panel px-5 py-5">
+              <h3 class="text-[13px] font-semibold text-mute">Último piloto <span class="font-normal text-faint">· {{ l.finishedAt ? (l.finishedAt | ago) : '' }}</span></h3>
+              @if (guides.guide(l.rumoGuide)?.minutes; as m) { <div class="md mt-2 line-clamp-[12] text-[13px]" [innerHTML]="m | markdown"></div> }
+            </section>
+          }
+        </aside>
+      </div>
     </div>
   } @else {
     @let p = pilot()!;
-    <!-- linha do tempo -->
-    <ol class="mt-6 grid gap-3 @3xl:grid-cols-3" aria-label="Andamento">
-      @for (s of steps(); track s.label) {
-        <li class="rounded-2xl border px-4 py-3" [class]="s.on ? 'border-frost/60 bg-frost/5' : 'border-edge bg-panel'">
-          <p class="flex items-center gap-2 font-semibold">
-            @if (s.done) { <app-icon name="check" [size]="15" class="text-yes" /> } @else if (s.on) { <span class="pulse size-2 rounded-full bg-frost"></span> } @else { <span class="size-2 rounded-full bg-edge"></span> }
-            {{ s.label }}</p>
-          <p class="mt-0.5 text-[12.5px] text-mute">{{ s.detail }}</p>
-        </li>
-      }
-    </ol>
+    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto @3xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] @3xl:overflow-hidden">
+      <!-- etapas (igual ao Rumo e ao Time) -->
+      <section class="min-w-0 @3xl:overflow-y-auto" aria-label="Etapas">
+        <nav class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-edge bg-night/95 px-6 pt-3 backdrop-blur [scrollbar-width:none]" aria-label="Etapas do piloto">
+          @for (s of steps; track s.n) {
+            <button type="button" (click)="go(s.n)" [disabled]="s.n > current()" [attr.aria-current]="step() === s.n ? 'step' : null"
+                    class="-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 pb-2.5 pt-1 text-[13.5px] font-semibold transition-colors disabled:opacity-40"
+                    [class]="step() === s.n ? 'border-frost text-text' : 'border-transparent text-mute hover:text-text'">
+              <span class="grid size-5 place-items-center rounded-full text-[11px]"
+                    [class]="s.n < current() ? 'bg-yes/20 text-yes' : step() === s.n ? 'bg-frost text-night' : s.n === current() ? 'bg-frost/20 text-frost' : 'bg-edge text-mute'">{{ s.n }}</span>
+              {{ s.label }}
+              @if (s.n === current() && (p.status === 'running' || p.status === 'approved')) { <span class="pulse size-1.5 rounded-full bg-frost"></span> }
+            </button>
+          }
+        </nav>
 
-    @if (p.status === 'running') {
-      <div class="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-edge bg-panel px-5 py-4 text-[13.5px]">
-        <span class="pulse size-2 rounded-full bg-frost"></span>
-        <span class="min-w-0 flex-1 text-mute">Andando sozinho. Você é avisado quando o rumo e o time estiverem prontos para o seu ok.</span>
-        <a routerLink="/estudio/rumo" [queryParams]="scope.queryFor('/estudio/rumo')" class="btn btn-sm btn-ghost">Ver o debate do Rumo</a>
-        @if (p.timeGuide) { <a routerLink="/estudio/time" [queryParams]="scope.queryFor('/estudio/time')" class="btn btn-sm btn-ghost">Ver o debate do Time</a> }
-        <button type="button" class="btn btn-sm btn-ghost hover:!text-no" (click)="abandon(p)">Parar</button>
-      </div>
-    } @else if (p.status === 'failed') {
-      <div class="mt-5 rounded-2xl border border-no/40 bg-no/10 px-5 py-4 text-[13.5px]">
-        <p class="font-semibold text-no">O piloto parou: {{ p.error }}</p>
-        <button type="button" class="btn btn-sm mt-2" (click)="abandon(p)">Descartar</button>
-      </div>
-    } @else if (p.status === 'approved') {
-      <div class="mt-5 flex items-center gap-3 rounded-2xl border border-yes/40 bg-yes/5 px-5 py-4 text-[13.5px]">
-        <span class="pulse size-2 rounded-full bg-yes"></span>
-        <span class="text-mute">Executando: {{ rumo()?.status === 'done' ? 'rumo aplicado, agora o time' : 'aplicando o rumo (o time vem em seguida)' }}. Cada um fecha com uma ata.</span>
-      </div>
-    }
+        <div class="px-6 py-5">
+          @if (p.status === 'failed') {
+            <div class="mb-4 rounded-2xl border border-no/40 bg-no/10 px-5 py-4 text-[13.5px]"><b class="text-no">O piloto parou:</b> {{ p.error }}</div>
+          }
+          @switch (step()) {
+            @case (1) { <ng-container *ngTemplateOutlet="sessionView; context: { g: rumo(), who: 'estrategista', icon: 'compass' }" /> }
+            @case (2) { <ng-container *ngTemplateOutlet="sessionView; context: { g: time(), who: 'diretor de agência', icon: 'users' }" /> }
 
-    <!-- o resultado: rumo e time lado a lado -->
-    @if (p.status === 'ready' || p.status === 'approved') {
-      <div class="mt-6 grid gap-4 @4xl:grid-cols-2">
-        @for (side of [{ g: rumo(), title: 'Rumo decidido', icon: 'compass' }, { g: time(), title: 'Time proposto', icon: 'users' }]; track side.title) {
-          <section class="rounded-3xl border border-edge bg-panel px-6 py-5">
-            <h2 class="flex items-center gap-2 font-display text-lg font-bold"><app-icon [name]="$any(side.icon)" [size]="18" class="text-frost" />{{ side.title }}</h2>
-            @if (side.g?.reading; as r) { <div class="md mt-2 text-[13.5px] text-mute" [innerHTML]="r | markdown"></div> }
-            <h3 class="mt-4 text-[12px] font-semibold uppercase tracking-wide text-faint">Escolhas feitas pelas recomendações</h3>
-            <ul class="mt-2 space-y-1.5 text-[13px]">
-              @for (c of picked(side.g); track $index) { <li><span class="text-mute" [innerHTML]="c.q | refs"></span> → <b [innerHTML]="c.a | refs"></b></li> }
-            </ul>
-            <h3 class="mt-4 text-[12px] font-semibold uppercase tracking-wide text-faint">Plano</h3>
-            <ul class="mt-2 space-y-1.5">
-              @for (i of plan(side.g); track i.id) {
-                <li class="rounded-xl border border-edge bg-night px-3 py-2 text-[13px]">
-                  <span class="mr-1.5 rounded bg-raise px-1.5 text-[10.5px] font-bold uppercase text-frost">{{ i.when }}</span>
-                  <span class="mr-1.5 text-[11px] text-faint">{{ kindLabel[i.kind] ?? i.kind }}</span>
-                  <span class="font-semibold" [innerHTML]="i.title | refs"></span>
-                  @if (i.agent) { <span class="text-mute"> · {{ i.agent }}</span> }
-                </li>
-              } @empty { <li class="text-[13px] text-faint">Sem plano.</li> }
-            </ul>
-          </section>
-        }
-      </div>
-    }
+            <!-- 3. seu ok: o que acontece, em que ordem e por quê -->
+            @case (3) {
+              <section class="rounded-2xl border border-later/40 bg-later/5 px-5 py-4">
+                <h3 class="font-display text-[19px] font-bold">Ao dar ok, isto acontece</h3>
+                <p class="mt-1 text-[14px]">
+                  <b>{{ summary().total }} {{ summary().total === 1 ? 'item' : 'itens' }}:&nbsp;</b>
+                  <span class="text-mute">{{ summary().parts.join(' · ') || 'nada a aplicar' }}</span>
+                </p>
+                <p class="mt-1 text-[12.5px] text-faint">Primeiro o Rumo; quando ele fechar com a ata, o Time. Nada disso acontece antes do seu ok.</p>
+              </section>
 
-    @if (p.status === 'ready') {
-      <section class="sticky bottom-0 mt-6 rounded-3xl border border-later/50 bg-panel/95 px-6 py-5 backdrop-blur">
-        <div class="flex flex-wrap items-start gap-3">
-          <textarea class="field min-h-16 min-w-0 flex-1 basis-80 resize-y text-[14px]" placeholder="Mudar a rota? ex.: não quero criar agente novo agora; priorize a Stone antes dos Reels"
-                    aria-label="Feedback para o piloto" [value]="feedback()" (input)="feedback.set($any($event.target).value)" (keydown.control.enter)="sendFeedback(p)"></textarea>
-          <div class="flex flex-col gap-2">
-            <button type="button" class="btn btn-primary" (click)="approve(p)" [disabled]="busy()"><app-icon name="check" [size]="16" />Ok, executar</button>
-            <button type="button" class="btn" (click)="sendFeedback(p)" [disabled]="busy() || !feedback().trim()">Mudar a rota</button>
-            <button type="button" class="btn btn-ghost text-mute" (click)="abandon(p)">Descartar</button>
-          </div>
+              @for (part of [{ g: rumo(), id: 'rumo', n: 1, title: 'Rumo', icon: 'compass', when: 'aplicado primeiro' }, { g: time(), id: 'time', n: 2, title: 'Time', icon: 'users', when: 'depois que o rumo fechar' }]; track part.id) {
+                <section class="mt-5 rounded-2xl border border-edge bg-panel px-5 py-5">
+                  <h3 class="flex flex-wrap items-center gap-2 font-display text-[18px] font-bold">
+                    <span class="grid size-6 place-items-center rounded-full bg-frost text-[12px] text-night">{{ part.n }}</span>
+                    <app-icon [name]="$any(part.icon)" [size]="17" class="text-frost" />{{ part.title }}
+                    <span class="text-[12.5px] font-normal text-faint">· {{ part.when }}</span>
+                    <button type="button" class="ml-auto text-[12px] font-normal text-frost hover:underline" (click)="go($any(part.n))">ver o debate e as decisões</button>
+                  </h3>
+                  @if (part.g?.reading; as r) {
+                    <div class="mt-3 rounded-xl bg-raise/40 px-4 py-3">
+                      <p class="text-[11.5px] font-semibold uppercase tracking-wide text-faint">Por quê, no geral</p>
+                      <div class="md mt-1 text-[13.5px]" [innerHTML]="r | markdown"></div>
+                    </div>
+                  }
+                  @for (grp of review(part.g, $any(part.id)); track grp.id) {
+                    <h4 class="mt-4 flex items-baseline gap-2 text-[14px] font-semibold">{{ grp.title }} <span class="text-[12px] font-normal text-faint">{{ grp.hint }}</span></h4>
+                    <ul class="mt-2 space-y-2">
+                      @for (i of grp.items; track i.id) {
+                        <li class="rounded-xl border border-edge bg-night px-4 py-3">
+                          <p class="flex flex-wrap items-start gap-2">
+                            <span class="mt-0.5 shrink-0 rounded px-1.5 text-[10.5px] font-bold uppercase tracking-wide {{ tone[i.kind] ?? 'bg-raise text-mute' }}">{{ i.action }}</span>
+                            <span class="min-w-0 flex-1 text-[14px] font-semibold leading-snug" [innerHTML]="i.title | refs"></span>
+                            @if (i.agent) { <span class="flex items-center gap-1 text-[12px] text-mute"><app-icon name="agent" [size]="12" />{{ i.agent }}</span> }
+                          </p>
+                          @if (i.reason) { <p class="mt-1.5 text-[13px]"><span class="font-semibold text-later">Por quê:&nbsp;</span> <span class="text-mute" [innerHTML]="i.reason | refs"></span></p> }
+                          @if (i.detail && i.why) {
+                            <details class="mt-1 text-[12.5px] text-mute">
+                              <summary class="cursor-pointer text-faint hover:text-mute">como vai ser feito</summary>
+                              <p class="mt-1 whitespace-pre-line" [innerHTML]="i.detail | refs"></p>
+                            </details>
+                          }
+                        </li>
+                      }
+                    </ul>
+                  } @empty {
+                    <p class="mt-3 text-[13px] text-faint">{{ part.g ? 'Nada a aplicar aqui.' : 'Ainda não montado.' }}</p>
+                  }
+                  @if (chosen(part.g).length) {
+                    <details class="mt-4 text-[13px]">
+                      <summary class="cursor-pointer font-semibold text-mute hover:text-text">Decisões tomadas pelas recomendações ({{ chosen(part.g).length }})</summary>
+                      <ul class="mt-2 space-y-1.5">
+                        @for (c of chosen(part.g); track $index) { <li><span class="text-mute" [innerHTML]="c.q | refs"></span> → <b [innerHTML]="c.a | refs"></b></li> }
+                      </ul>
+                    </details>
+                  }
+                </section>
+              }
+
+              @if (p.status === 'ready') {
+                <section class="sticky bottom-0 mt-5 rounded-2xl border border-later/50 bg-night/95 px-5 py-4 backdrop-blur">
+                  <div class="flex flex-wrap items-start gap-3">
+                    <textarea class="field min-h-16 min-w-0 flex-1 basis-72 resize-y text-[13.5px]" placeholder="Mudar a rota? ex.: não quero agente novo agora; priorize a Stone antes dos Reels"
+                              aria-label="Feedback para o piloto" [value]="feedback()" (input)="feedback.set($any($event.target).value)" (keydown.control.enter)="sendFeedback(p)"></textarea>
+                    <div class="flex flex-col gap-2">
+                      <button type="button" class="btn btn-primary" (click)="approve(p)" [disabled]="busy()"><app-icon name="check" [size]="16" />Ok, aplicar os {{ summary().total }}</button>
+                      <button type="button" class="btn" (click)="sendFeedback(p)" [disabled]="busy() || !feedback().trim()">Mudar a rota</button>
+                    </div>
+                  </div>
+                  @if (p.feedback) { <p class="mt-2 whitespace-pre-line text-[12.5px] text-faint">Feedbacks anteriores: {{ p.feedback }}</p> }
+                </section>
+              }
+            }
+
+            <!-- 4. em andamento -->
+            @case (4) {
+              <div class="flex items-center gap-2 rounded-2xl border border-edge px-5 py-4 text-mute">
+                <span class="pulse size-2 rounded-full bg-yes"></span>
+                {{ rumo()?.status === 'done' ? 'Rumo aplicado; a Central está aplicando o time.' : 'A Central está aplicando o rumo; o time vem em seguida.' }}
+              </div>
+              <div class="mt-4 grid gap-3 @3xl:grid-cols-2">
+                @for (s of [{ g: rumo(), title: 'Rumo' }, { g: time(), title: 'Time' }]; track s.title) {
+                  <section class="rounded-2xl border border-edge bg-panel px-5 py-4">
+                    <h3 class="flex items-center gap-2 font-semibold">{{ s.title }}
+                      <span class="ml-auto rounded-full px-2 text-[11.5px]" [class]="s.g?.status === 'done' ? 'bg-yes/15 text-yes' : 'bg-raise text-mute'">{{ s.g?.status === 'done' ? 'feito' : 'em andamento' }}</span></h3>
+                    @if (s.g?.minutes; as m) { <div class="md mt-2 text-[13px]" [innerHTML]="m | markdown"></div> }
+                    @else { <p class="mt-2 text-[13px] text-faint">A ata aparece aqui quando terminar.</p> }
+                  </section>
+                }
+              </div>
+            }
+          }
         </div>
-        @if (p.feedback) { <p class="mt-2 whitespace-pre-line text-[12.5px] text-faint">Feedbacks anteriores: {{ p.feedback }}</p> }
       </section>
-    }
+
+      <!-- debate (igual ao Rumo e ao Time), com a conversa do Rumo ou do Time -->
+      <aside class="flex min-h-[520px] min-w-0 flex-col border-t border-edge bg-panel @3xl:min-h-0 @3xl:border-t-0 @3xl:border-l" aria-label="Debate">
+        <div class="flex items-center gap-2 border-b border-edge px-4 py-3">
+          <p class="text-[13px] font-semibold">Debate</p>
+          <div class="ml-1 flex gap-1 rounded-full border border-edge bg-night p-0.5 text-[12px]" role="tablist" aria-label="Conversa">
+            @for (s of [{ id: 'rumo', label: 'Rumo' }, { id: 'time', label: 'Time' }]; track s.id) {
+              <button type="button" role="tab" [attr.aria-selected]="side() === s.id" (click)="side.set($any(s.id))" [disabled]="s.id === 'time' && !time()"
+                      class="rounded-full px-2.5 py-0.5 font-semibold disabled:opacity-40" [class]="side() === s.id ? 'bg-raise text-text' : 'text-mute hover:text-text'">{{ s.label }}</button>
+            }
+          </div>
+          <span class="ml-auto text-[12px]">
+            @if (specialistBusy()) { <span class="flex items-center gap-1.5 text-[#C8A2FF]"><span class="pulse size-1.5 rounded-full bg-[#C8A2FF]"></span>especialista pensando</span> }
+            @else if (centralBusy()) { <span class="flex items-center gap-1.5 text-frost"><span class="pulse size-1.5 rounded-full bg-frost"></span>Central respondendo</span> }
+          </span>
+        </div>
+        @if (sideGuide()?.centralChat) {
+          <app-chat-view class="min-h-0 flex-1" [session]="session" [compact]="true" />
+        } @else {
+          <div class="grid flex-1 place-items-center px-6 text-center text-[13px] text-mute">
+            <p><span class="pulse mr-1.5 inline-block size-2 rounded-full bg-[#C8A2FF]"></span>{{ side() === 'time' ? 'O diretor de agência' : 'O estrategista' }} está lendo. A fala dele abre o debate aqui.</p>
+          </div>
+        }
+      </aside>
+    </div>
   }
 </div>
+
+<!-- uma sessão (Rumo ou Time) vista pelo piloto: leitura, decisões escolhidas e plano -->
+<ng-template #sessionView let-g="g" let-who="who" let-icon="icon">
+  @if (g?.reading) {
+    <div class="rounded-2xl border border-frost/30 bg-frost/5 px-5 py-4">
+      <p class="text-[12px] font-semibold uppercase tracking-wide text-frost">Leitura</p>
+      <div class="md mt-1.5" [innerHTML]="g.reading | markdown"></div>
+    </div>
+  } @else {
+    <div class="flex items-center gap-2 rounded-2xl border border-edge px-5 py-4 text-mute">
+      <span class="pulse size-2 rounded-full bg-frost"></span>{{ status(g, who) }}
+    </div>
+  }
+
+  @if (chosen(g).length) {
+    <h3 class="mt-6 font-display text-lg font-semibold">Decisões <span class="text-[13px] font-normal text-faint">escolhidas pelas recomendações</span></h3>
+    <div class="mt-3 space-y-3">
+      @for (c of chosen(g); track $index) {
+        <article class="rounded-2xl border border-yes/30 bg-panel px-5 py-4">
+          <p class="text-[11.5px] font-semibold uppercase tracking-wide text-frost">{{ cardKind[c.kind] ?? c.kind }}</p>
+          <h4 class="mt-0.5 font-display text-[16px] font-semibold leading-snug" [innerHTML]="c.q | refs"></h4>
+          @if (c.context) { <p class="mt-1 text-[13px] text-mute" [innerHTML]="c.context | refs"></p> }
+          <p class="mt-3 flex items-start gap-2 rounded-xl border border-frost/40 bg-frost/10 px-4 py-2.5">
+            <app-icon name="check" [size]="15" class="mt-0.5 shrink-0 text-frost" />
+            <span><b [innerHTML]="c.a | refs"></b>@if (c.detail) { <span class="block text-[13px] text-mute" [innerHTML]="c.detail | refs"></span> }</span>
+          </p>
+          @if (c.strategist || c.central) {
+            <div class="mt-3 grid gap-2 text-[12.5px] @3xl:grid-cols-2">
+              @if (c.strategist) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-[#C8A2FF]">Especialista:</b> <span [innerHTML]="c.strategist | refs"></span></p> }
+              @if (c.central) { <p class="rounded-xl bg-raise/50 px-3 py-2"><b class="text-frost">Central:</b> <span [innerHTML]="c.central | refs"></span></p> }
+            </div>
+          }
+        </article>
+      }
+    </div>
+  }
+
+  @if (count(g)) {
+    <h3 class="mt-6 font-display text-lg font-semibold">Plano</h3>
+    <div class="mt-3 grid gap-3 @4xl:grid-cols-3">
+      @for (col of columns(g); track col.id) {
+        <section class="rounded-2xl border border-edge bg-panel/60 p-3" [attr.aria-label]="col.label">
+          <header class="mb-2 flex items-baseline gap-2 px-1">
+            <h4 class="font-semibold" [class]="col.tone">{{ col.label }}</h4>
+            <span class="text-[12px] tabular-nums text-faint">{{ col.items.length }}</span>
+          </header>
+          <ul class="space-y-2">
+            @for (i of col.items; track i.id) {
+              <li class="rounded-xl border border-edge bg-night px-3 py-2.5">
+                <p class="flex items-start gap-2">
+                  <span class="mt-0.5 shrink-0 rounded px-1.5 text-[10.5px] font-bold uppercase tracking-wide {{ tone[i.kind] ?? 'bg-raise text-mute' }}">{{ kindLabel[i.kind] ?? i.kind }}</span>
+                  <span class="min-w-0 text-[13.5px] font-semibold leading-snug" [innerHTML]="i.title | refs"></span>
+                </p>
+                @if (i.agent) { <p class="mt-1 flex items-center gap-1 text-[12px] text-mute"><app-icon name="agent" [size]="12" />{{ i.agent }}</p> }
+                @if (i.detail) {
+                  <details class="mt-1 text-[12.5px] text-mute">
+                    <summary class="cursor-pointer text-faint hover:text-mute">detalhes</summary>
+                    <p class="mt-1 whitespace-pre-line" [innerHTML]="i.detail | refs"></p>
+                  </details>
+                }
+              </li>
+            } @empty { <li class="px-1 text-[12.5px] text-faint">nada aqui</li> }
+          </ul>
+        </section>
+      }
+    </div>
+  }
+</ng-template>
