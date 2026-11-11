@@ -16,7 +16,7 @@
   <!-- modo foco: só o conteúdo (a Grade) na tela cheia -->
   <div class="grid min-h-0" [class]="layout.focus() ? 'grid-cols-[1fr]' : bareDesk() ? 'grid-cols-[56px_1fr]' : 'grid-cols-[56px_252px_1fr]'">
     <!-- barra de atividades -->
-    <nav [hidden]="layout.focus()" class="flex min-h-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-edge bg-night py-3 [scrollbar-width:none]" aria-label="Seções">
+    <nav [hidden]="layout.focus()" (contextmenu)="railMenu($event)" class="flex min-h-0 flex-col items-center gap-1.5 overflow-y-auto border-r border-edge bg-night py-3 [scrollbar-width:none]" aria-label="Seções (botão direito: escolher o que aparece)">
       <!-- agente Central: sempre à mão, destacado -->
       <button type="button" (click)="chat.toggle()" [attr.aria-pressed]="chat.open()" aria-label="Agente Central (Ctrl+J)"
               class="nav-item group mb-2 !bg-frost/12 !text-frost hover:!bg-frost/20" [class.!bg-frost]="chat.open()" [class.!text-night]="chat.open()">

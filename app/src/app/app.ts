@@ -101,12 +101,35 @@ export class App {
     { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
   ];
   /** modo diretor (padrão): a Mesa, o Estúdio e os Bastidores; o resto mora nos Bastidores */
-  private readonly directorNav: NavItem[] = [
-    { path: '/', label: 'Mesa (o que é seu: usar, decidir, seus produtos)', icon: 'desk' },
-    { path: '/estudio', label: 'Estúdio (rumo, time e piloto automático)', icon: 'compass' },
-    { path: '/bastidores', label: 'Bastidores (a operação por dentro)', icon: 'layers', also: BACKSTAGE },
-  ];
-  protected readonly navItems = computed(() => (this.layout.operator() ? this.operatorNav : this.directorNav));
+  /** telas que dá para fixar na barra do modo diretor (botão direito na barra) */
+  private readonly pinnable = computed(() => this.operatorNav.filter(n => n.path !== '/' && n.path !== '/estudio'));
+  private readonly directorNav = computed<NavItem[]>(() => {
+    const pinned = this.pinnable().filter(n => this.layout.pinned().includes(n.path));
+    const lit = new Set(pinned.flatMap(n => (n.tabs ?? [n]).map(t => t.path)));
+    return [
+      { path: '/', label: 'Mesa (o que é seu: usar, decidir, seus produtos)', icon: 'desk' },
+      { path: '/estudio', label: 'Estúdio (rumo, time e piloto automático)', icon: 'compass' },
+      ...pinned,
+      // os Bastidores acendem nas telas de operação que não estão fixadas
+      { path: '/bastidores', label: 'Bastidores (a operação por dentro; botão direito na barra fixa telas aqui)', icon: 'layers', also: BACKSTAGE.filter(p => !lit.has(p)) },
+    ];
+  });
+  protected readonly navItems = computed(() => (this.layout.operator() ? this.operatorNav : this.directorNav()));
+
+  /** botão direito na barra: escolher o que aparece */
+  protected railMenu(e: MouseEvent): void {
+    e.preventDefault();
+    const on = this.layout.operator();
+    this.menu.open(e, [
+      ...this.pinnable().map(n => {
+        const pinned = on || this.layout.pinned().includes(n.path);
+        return { label: n.label.replace(/\s*\(.*\)$/, ''), icon: pinned ? 'check' as const : n.icon, hint: pinned ? 'na barra' : undefined,
+          disabled: on, run: () => this.layout.togglePin(n.path) };
+      }),
+      null,
+      { label: on ? 'Voltar ao modo diretor (barra enxuta)' : 'Modo operador (todas as telas)', icon: 'layers', run: () => this.layout.setOperator(!on) },
+    ]);
+  }
   /** na Mesa do modo diretor, a lista de projetos sai: os produtos já estão na própria Mesa */
   protected readonly bareDesk = computed(() => !this.layout.operator() && this.scope.path() === '/');
   /** o que é do Gustavo (selo da Mesa): histórias para usar, decisões e agentes esperando ele */
