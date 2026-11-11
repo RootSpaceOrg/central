@@ -612,7 +612,7 @@ const PROD_POLICY = 'Produção (main/master, deploy em prod): hotfix pequeno qu
 
 /** Projeto com dono por eventos: dúvida que não é crítica vai para o dono, não para o Gustavo. */
 const ownerRule = (slug: string | null) => {
-  const o = slug ? get<{ name: string }>(`select a.name from projects p join agents a on a.id = p.todo_agent_id where p.slug = ? and p.owner_on = 1`, slug) : null;
+  const o = slug ? get<{ name: string }>(`select a.name from projects p join agents a on a.id = coalesce(p.owner_agent_id, p.todo_agent_id) where p.slug = ? and p.owner_on = 1`, slug) : null;
   return o ? `\n  Precisa de outra cabeça numa escolha que não é crítica? O dono deste projeto é ${o.name}: emit_event (project_slug ${slug}) com a dúvida e o que você recomenda, e siga com a recomendação.` : '';
 };
 

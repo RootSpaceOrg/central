@@ -42,7 +42,13 @@ export class ProductRoom {
   private readonly query = toSignal(this.route.queryParamMap);
   protected readonly project = computed(() => this.projects.bySlug().get(this.slug()) ?? null);
   protected readonly company = computed(() => { const p = this.project(); return p?.parentSlug ? this.projects.bySlug().get(p.parentSlug) ?? null : null; });
-  protected readonly owner = computed(() => this.agents.byId().get(this.project()?.todoAgentId ?? -1) ?? null);
+  /** quem fala com você: o dono de negócio; sem ele, o tech lead faz os dois papéis */
+  protected readonly owner = computed(() => { const p = this.project(); return this.agents.byId().get(p?.ownerAgentId ?? p?.todoAgentId ?? -1) ?? null; });
+  /** quem executa o A fazer (o tech lead); null = ninguém, e tudo bem */
+  protected readonly tech = computed(() => this.agents.byId().get(this.project()?.todoAgentId ?? -1) ?? null);
+  /** o tech lead também é o dono (não há dono só de negócio) */
+  protected readonly sameAgent = computed(() => !this.project()?.ownerAgentId);
+  protected readonly creating = signal(false);
   protected readonly instrument = computed(() => this.cockpit.companies().flatMap(c => c.products).find(p => p.slug === this.slug()) ?? null);
   /** o 1:1 aberto deste produto (ou null) */
   protected readonly guide = computed(() => this.guides.openFor(this.slug(), false, 'dono'));
@@ -87,6 +93,11 @@ export class ProductRoom {
     this.starting.set(false);
   }
 
-  protected setOwner(id: string): void { this.projects.setTodoOwner(this.slug(), { agentId: id ? Number(id) : null }).catch(() => {}); }
+  protected setOwner(id: string): void { this.projects.setBusinessOwner(this.slug(), id ? Number(id) : null).catch(() => {}); }
+  protected setTech(id: string): void { this.projects.setTodoOwner(this.slug(), { agentId: id ? Number(id) : null }).catch(() => {}); }
+  protected async createOwner(): Promise<void> {
+    this.creating.set(true);
+    try { await this.projects.createOwner(this.slug()); } finally { this.creating.set(false); }
+  }
   protected toggleOwner(): void { const p = this.project(); if (p) this.projects.setOwnerOn(p.slug, !p.ownerOn).catch(() => {}); }
 }

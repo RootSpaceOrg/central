@@ -41,7 +41,7 @@ const RING = 2 * Math.PI * 26;
           @else { <p class="mt-0.5 text-[12.5px] text-later">sem rumo escrito</p> }
         </div>
         <!-- o dono: rosto e estado -->
-        <a [routerLink]="['/produtos', p.slug]" class="group flex shrink-0 flex-col items-center gap-1" [title]="p.owner ? p.owner.name + ' · ' + state().label : 'Escolher o dono'">
+        <a [routerLink]="['/produtos', p.slug]" class="group flex shrink-0 flex-col items-center gap-1" [title]="p.owner ? 'Dono: ' + p.owner.name + ' · ' + state().label + (p.techLead && p.techLead.id !== p.owner.id ? ' · tech lead: ' + p.techLead.name : '') : 'Escolher o dono'">
           <span class="relative grid size-11 place-items-center">
             @if (p.owner) {
               <svg class="absolute inset-0 size-11 {{ state().ring }}" viewBox="0 0 44 44" aria-hidden="true">

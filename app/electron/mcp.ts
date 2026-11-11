@@ -136,7 +136,8 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     color: z.string().optional(), description: z.string().optional(),
     icon_kind: z.enum(['letter', 'emoji', 'lucide']).optional(), icon_value: z.string().optional().describe('emoji ou nome de ícone Lucide em kebab-case'),
     folder: z.string().optional(), parent_slug: z.string().nullable().optional().describe('projeto de cima (frente); null = solta'),
-    todo_agent_id: z.number().int().nullable().optional().describe('agente que puxa o A fazer do projeto (dono do A fazer); null = ninguém'),
+    todo_agent_id: z.number().int().nullable().optional().describe('quem executa o A fazer do projeto (o tech lead); null = ninguém'),
+    owner_agent_id: z.number().int().nullable().optional().describe('dono de negócio do produto (fala com o Gustavo, acorda pelos eventos); null = o tech lead faz os dois papéis'),
     dev_url: z.string().nullable().optional().describe('link do ambiente de dev publicado (onde as histórias são testadas)'),
     dev_login: z.string().nullable().optional().describe('como entrar no dev (conta de teste; nunca a senha em texto: diga onde ela está)'),
   }, ({ slug, ...patch }) => { updateProject(slug, patch); if (patch.folder) syncProjects(slug, h.projects); }, h.projects);

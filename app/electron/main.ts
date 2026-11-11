@@ -32,7 +32,7 @@ import { dispatchOwners, onCriticalAlert, ownerDiary, pendingEvents, resolveAler
 import { listOperatorActions, onDecided, onDirection, onIdea, onReviewed, onTaskMoved } from './operator';
 import { pulse } from './pulse';
 import { cockpit } from './cockpit';
-import './oneonone';
+import { createBusinessOwner, techLeadOf } from './oneonone';
 import { meetingPrompt } from './insights';
 import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
 import { getUsage, usageNow } from './usage';
@@ -45,7 +45,7 @@ import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reor
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
-import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, talkGuide } from './guides';
+import { abandonGuide, answerCard, askTech, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, talkGuide } from './guides';
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
@@ -321,6 +321,7 @@ function registerIpc(): void {
   handle('cockpit:get', () => cockpit());
   handle('alerts:resolve', id => { resolveAlert(id); changed(); });
   handle('owner:set', (slug, on) => { setOwnerOn(slug, on); changed(); });
+  handle('owner:create', slug => { const id = createBusinessOwner(slug); changed(); agentsChanged(); return id; });
   handle('insights:meeting', async ({ title, text, file, project_slug }) => {
     let body = text?.trim() ?? '';
     if (file) {
@@ -367,6 +368,12 @@ function registerIpc(): void {
   handle('guides:list', () => listGuides());
   handle('guides:start', (slug, direct, focus, kind) => startGuide(slug, direct, focus, guideDeps, kind ?? 'rumo'));
   handle('guides:talk', id => talkGuide(id, guideDeps));
+  handle('guides:askTech', (id, q) => {
+    const g = get<{ project_slug: string }>('select project_slug from guides where id = ?', id);
+    const tech = g ? techLeadOf(g.project_slug) : null;
+    if (!tech) throw new Error('Este produto não tem tech lead. Dá para escolher um no topo da sala.');
+    askTech(id, tech, q, guideDeps);
+  });
   handle('agency:team', (slug, direct) => teamSnapshot(slug, direct));
   handle('agency:routines', slug => agencyRoutines(slug));
   handle('agency:setRoutines', (slug, on) => { const r = setAgencyRoutines(slug, on); routinesChanged(); return r; });

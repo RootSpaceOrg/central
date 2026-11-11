@@ -120,7 +120,7 @@ export function updateProject(slug: string, patch: ProjectPatch): void {
   if (patch.todo_hours && !/^\d{1,2}-\d{1,2}$/.test(patch.todo_hours.trim())) throw new Error('Horário no formato 08-22.');
   const fields = Object.entries(patch)
     // campo ausente chega como undefined pelo IPC: não mexe nele (senão vira null e quebra colunas NOT NULL, ex.: folder)
-    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'parent_slug', 'todo_agent_id', 'todo_parallel', 'todo_hours', 'done_when', 'dev_url', 'dev_login'].includes(k))
+    .filter(([k, v]) => v !== undefined && ['name', 'status', 'color', 'description', 'icon_kind', 'icon_value', 'folder', 'parent_slug', 'todo_agent_id', 'owner_agent_id', 'todo_parallel', 'todo_hours', 'done_when', 'dev_url', 'dev_login'].includes(k))
   if (!fields.length) return;
   run(`update projects set ${fields.map(([k]) => `${k} = ?`).join(', ')} where slug = ?`,
     ...fields.map(([k, v]) => (typeof v === 'string' && k !== 'icon_value' ? v.trim() : v ?? null) as string | number | null), slug);

@@ -13,9 +13,9 @@ writeFileSync(stub, `
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(':memory:');
 db.exec(\`
-  create table agents (id integer primary key, name text, priority text default 'normal', project_slug text);
+  create table agents (id integer primary key, name text, priority text default 'normal', project_slug text, description text);
   insert into agents (id, name, project_slug) values (6, 'Tech Lead', 'kultivai'), (7, 'Montador', 'kultivai');
-  create table projects (slug text primary key, name text, color text default '#fff', status text default 'active', todo_agent_id integer, owner_on integer default 0, position integer default 0, one_on_one text, one_on_one_at text);
+  create table projects (slug text primary key, name text, color text default '#fff', status text default 'active', todo_agent_id integer, owner_on integer default 0, position integer default 0, one_on_one text, one_on_one_at text, owner_agent_id integer);
   create table routines (id integer primary key, name text, project_slug text, enabled integer default 1);
   insert into projects (slug, name, todo_agent_id) values ('kultivai', 'KultivAi', 6), ('solto', 'Solto', null);
   create table runs (id integer primary key, project_slug text, prompt text, status text, result text, created_at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')));
@@ -169,4 +169,17 @@ ok(db.prepare("select count(*) n from alerts where resolved_at is null").get().n
 // pedido de 1:1 fica no produto
 mt.requestOneOnOne('kultivai', 'Repensar o time da Linha');
 ok(db.prepare("select one_on_one from projects where slug = 'kultivai'").get().one_on_one === 'Repensar o time da Linha', 'pedido de 1:1');
+// papéis: com dono de negócio, é ele quem acorda; sem tech lead, nada trava (o prompt só avisa)
+db.exec("insert into agents (id, name, project_slug) values (9, 'Dono · KultivAi', 'kultivai'); update projects set owner_agent_id = 9 where slug = 'kultivai'");
+db.exec("update events set handled_at = 'x'; update runs set status = 'succeeded'");
+started = [];
+o.emitEvent('kultivai', 'alerta', 'papel', 'teste de papel');
+await o.dispatchOwners(deps());
+ok(started.length === 1 && started[0].agent_id === 9, 'o dono de negócio acorda (não o tech lead)');
+ok(/Tech lead[^\n]*Tech Lead/.test(started[0].prompt), 'o dono sabe quem é o tech lead');
+db.exec("update runs set status = 'succeeded'; update projects set todo_agent_id = null where slug = 'kultivai'");
+started = [];
+o.emitEvent('kultivai', 'alerta', 'papel2', 'sem tech lead');
+await o.dispatchOwners(deps());
+ok(started.length === 1 && /NINGUÉM/.test(started[0].prompt) && /sem insistir/.test(started[0].prompt), 'sem tech lead: segue, só avisa');
 console.log('owner ok');

@@ -7,15 +7,17 @@
  * Também aqui: métricas como dado (definição combinada com o dono, sem deploy) e o pedido de 1:1 que o dono faz.
  */
 import type { GuideCard, GuideDto, GuidePlanItem } from '../src/app/shared/contract';
+import { createAgent } from './agentdefs';
 import { all, get, run } from './db';
 import { listMetricDefs } from './metrics';
 import { cardsText, registerProfile, scopeText, snapshot } from './guides';
-import { OWNER_HEAD } from './owner';
+import { OWNER_HEAD, teamBlock } from './owner';
 
 const STRATEGIST = 'Estrategista';
 const strategistId = () => get<{ id: number }>('select id from agents where name = ? order by id limit 1', STRATEGIST)?.id
   ?? get<{ id: number }>('select id from agents where builtin = 1')!.id;
-const ownerOf = (slug: string) => get<{ id: number; name: string }>('select a.id, a.name from projects p join agents a on a.id = p.todo_agent_id where p.slug = ?', slug);
+const ownerOf = (slug: string) => get<{ id: number; name: string }>('select a.id, a.name from projects p join agents a on a.id = coalesce(p.owner_agent_id, p.todo_agent_id) where p.slug = ?', slug);
+const techOf = (slug: string) => get<{ id: number; name: string }>('select a.id, a.name from projects p join agents a on a.id = p.todo_agent_id where p.slug = ?', slug);
 
 // ---------- o 1:1 (perfil do motor de sessões) ----------
 
@@ -42,6 +44,7 @@ Ele está vendo esta conversa ao vivo. Fale com ele de igual para igual, curto e
 
 Retrato em números (montado agora):
 ${g.snapshot}
+${teamBlock(g.project_slug)}
 ${g.focus ? `\nO que ele trouxe para este 1:1: "${g.focus}"\n` : ''}
 Abra com a PAUTA, em markdown curto (até ~250 palavras):
 1. **O que fiz** desde o último 1:1 (histórias entregues, consertos, o que aprendi), com números.
@@ -73,7 +76,7 @@ aprovar, então tem que ser claro sobre O QUE MUDA NA PRÁTICA:
   nome, de onde vem, de quanto em quanto tempo, meta).
 - kind: 'historia' (trabalho para o time; vira história com partes), 'rumo', 'marco', 'cortar', 'metrica', 'criar_agente',
   'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'ideia'.
-- agent: quem do time faz (list_agents), quando fizer sentido.
+- agent: quem do time faz (list_agents); histórias vão para o tech lead, quando houver.
 - when: 'agora' (começa já), 'backlog' (fica pronto na fila), 'depois' (marco ou ideia).
 Siga o que ele decidiu, sem inventar escopo. Resuma o plano aqui em 3 linhas.`;
 
@@ -98,6 +101,30 @@ ${cardsText(cards)}
 No fim chame guide_finish(guide_id ${g.id}, minutes) com a ata em markdown curto (o que foi decidido, o que muda na prática,
 quem faz). Depois diga aqui, em 2-3 linhas, o que já está andando.`;
 };
+
+/**
+ * Dono de negócio para um produto: fala com o Gustavo (1:1, pauta, números, rumo), acorda pelos eventos e não mexe em
+ * código (o técnico é do tech lead). Fica como dono do projeto; quem executa continua o mesmo.
+ */
+export function createBusinessOwner(slug: string): number {
+  const p = get<{ name: string; color: string; owner: number | null }>('select name, color, owner_agent_id owner from projects where slug = ?', slug);
+  if (!p) throw new Error('Projeto não encontrado.');
+  if (p.owner) return p.owner;
+  const a = createAgent({
+    name: `Dono · ${p.name}`, color: p.color, icon_kind: 'letter', model: 'opus', permission: 'edits', room: 'gestao', project_slug: slug,
+    description: `Dono do produto ${p.name}: responde pelo resultado, fala com o Gustavo no 1:1 e cuida do o quê e do porquê.`,
+    instructions: `Você é o dono do produto ${p.name}. Pense como um bom gerente de produto: usuário, rumo, números e prioridade.
+- Fale com o Gustavo em linguagem de negócio e de usuário, curto e direto. Nada de jargão técnico na pauta.
+- O como é do tech lead: histórias que você cria vão para ele; antes de prometer prazo ou esforço, pergunte a ele.
+- Você não edita código nem roda comandos: planeja, decide dentro do rumo, mede e cobra resultado.
+- Traga sempre números (os combinados) e diga o que eles mostram.`,
+  } as Parameters<typeof createAgent>[0]);
+  run('update projects set owner_agent_id = ? where slug = ?', a.id, slug);
+  return a.id;
+}
+
+/** "Ouvir o tech lead" no 1:1: a viabilidade e o esforço antes de você decidir */
+export const techLeadOf = (slug: string) => techOf(slug)?.id ?? null;
 
 registerProfile('dono', {
   label: '1:1',

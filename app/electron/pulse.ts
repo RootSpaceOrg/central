@@ -32,7 +32,7 @@ export function pulse(): PulseDto {
   const count = (action: string, slug?: string) => get<{ n: number }>(
     `select count(*) n from operator_actions where action = ? and at > ? ${slug ? 'and project_slug = ?' : ''}`, action, since, ...(slug ? [slug] : []))!.n;
   const projects = all<{ slug: string; name: string; color: string; owner_on: number; owner: string | null }>(
-    `select p.slug, p.name, p.color, p.owner_on, a.name owner from projects p left join agents a on a.id = p.todo_agent_id
+    `select p.slug, p.name, p.color, p.owner_on, a.name owner from projects p left join agents a on a.id = coalesce(p.owner_agent_id, p.todo_agent_id)
      where p.status in ('active','maintenance') order by p.position, p.name`);
   return {
     validated: count('história: accepted'),

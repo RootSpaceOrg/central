@@ -31,8 +31,10 @@ export interface Project {
   todoHours: string;
   /** pronto = PR mergeado ('merge') ou em produção ('prod', com a coluna Em dev) */
   doneWhen: 'merge' | 'prod';
-  /** o dono (o agente do A fazer) acorda sozinho pelos eventos do projeto */
+  /** o dono acorda sozinho pelos eventos do projeto */
   ownerOn: boolean;
+  /** dono de negócio (fala com você); null = quem executa (todoAgentId, o tech lead) faz os dois papéis */
+  ownerAgentId: number | null;
   /** dev publicado e como entrar (o teste de usuário das histórias usa) */
   devUrl: string | null;
   devLogin: string | null;

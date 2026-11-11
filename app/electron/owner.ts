@@ -11,6 +11,8 @@ import { dueMetrics } from './metrics';
 import { PRIORITY_OF, Priority, canStart } from './governor';
 
 export const OWNER_HEAD = '[dono]';
+/** o dono de um projeto em SQL (alias p = projects): o de negócio; sem ele, quem executa (tech lead) faz os dois papéis */
+export const OWNER_OF = 'coalesce(p.owner_agent_id, p.todo_agent_id)';
 /** espera os eventos juntarem antes de acordar (urgente acorda na hora) */
 const DEBOUNCE_MIN = 10;
 const MAX_PER_DAY_DEFAULT = 10;
@@ -81,7 +83,7 @@ export interface OwnerDeps {
 /** Acorda os donos que têm eventos novos (e avisa "fila vazia" de quem ficou sem trabalho). Devolve quantos acordou. */
 export async function dispatchOwners(deps: OwnerDeps): Promise<number> {
   const owners = all<{ slug: string; agent: number; priority: string; name: string }>(
-    `select p.slug, p.todo_agent_id agent, a.priority, p.name from projects p join agents a on a.id = p.todo_agent_id
+    `select p.slug, ${OWNER_OF} agent, a.priority, p.name from projects p join agents a on a.id = ${OWNER_OF}
      where p.owner_on = 1 and p.status <> 'dead'`);
   if (!owners.length) return 0;
   const now = deps.now?.() ?? new Date();
@@ -141,6 +143,19 @@ function memoryCheck(slug: string, deps: OwnerDeps): void {
   emitEvent(slug, 'memoria_cresceu', `memoria:${n}`, `${n} registros entre a memória do projeto e a dos agentes dele: hora da curadoria.`);
 }
 
+/** o time pelos papéis: o dono, quem executa (tech lead) e os outros agentes do projeto */
+function teamBlock(slug: string): string {
+  const p = get<{ owner: number | null; tech: number | null }>('select owner_agent_id owner, todo_agent_id tech from projects where slug = ?', slug);
+  const name = (id: number | null | undefined) => (id ? get<{ name: string }>('select name from agents where id = ?', id)?.name ?? null : null);
+  const tech = name(p?.tech);
+  const others = all<{ name: string; description: string | null }>(`select name, description from agents where project_slug = ? and id not in (?, ?) order by name`, slug, p?.owner ?? 0, p?.tech ?? 0);
+  return `Seu time, por papel:
+- Tech lead (quem executa o A fazer: quebra histórias em partes, cuida do técnico e testa a história como usuário): ${tech ? (p?.tech === p?.owner || !p?.owner ? `${tech} (você mesmo: o produto ainda não tem um dono só de negócio)` : tech) : 'NINGUÉM. As histórias em A fazer esperam alguém executar. Se fizer falta, sugira ao Gustavo uma vez (create_decision), sem insistir; ele pode preferir assim.'}
+${others.length ? others.map(o => `- ${o.name}${o.description ? `: ${o.description.slice(0, 140)}` : ''}`).join('\n') : '- (sem outros agentes no projeto)'}
+Você cuida do o quê e do por quê (usuário, rumo, números, prioridade); o como é do tech lead. Antes de prometer prazo ou
+esforço, pergunte a ele (notify_agent).`;
+}
+
 const counts = (slug: string) => {
   const c = all<{ c: string; n: number }>(`select "column" c, count(*) n from tasks where project_slug = ? and parent_id is null group by 1`, slug);
   return ['backlog', 'todo', 'doing', 'review', 'dev'].map(k => `${k} ${c.find(x => x.c === k)?.n ?? 0}`).join(', ');
@@ -180,6 +195,7 @@ const GUIDE: [EventKind[], string][] = [
 ];
 const guide = (kinds: EventKind[]) => GUIDE.filter(([k]) => k.some(x => kinds.includes(x))).map(([, t]) => t).join('\n');
 
+export { teamBlock };
 export function ownerPrompt(slug: string, name: string, evs: { kind: EventKind; ref: string; summary: string; created_at: string }[]): string {
   const hhmm = (iso: string) => new Date(iso.endsWith('Z') ? iso : `${iso}Z`).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const decisions = get<{ n: number }>(`select count(*) n from proposals where project_slug = ? and status = 'proposed'`, slug)!.n;
@@ -191,6 +207,7 @@ A Central te acordou por isto:
 ${evs.map(e => `- ${hhmm(e.created_at)} ${LABEL[e.kind]} [${e.ref}]: ${e.summary}`).join('\n')}
 
 Estado agora: tarefas soltas e histórias por coluna: ${counts(slug)}; decisões esperando o Gustavo: ${decisions}.
+${teamBlock(slug)}
 Leia antes o que precisar: get_direction (rumo), list_milestones, list_tasks, list_deliveries, list_decisions, memory_recall.
 
 O que fazer (só com as ferramentas da Central; nesta passada você não edita código nem roda o produto):

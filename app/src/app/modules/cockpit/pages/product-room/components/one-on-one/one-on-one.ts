@@ -82,6 +82,10 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
           <div class="mt-4 flex flex-wrap items-center gap-2">
             <button type="button" class="btn" [disabled]="asking()" (click)="askStrategist()" title="O estrategista lê a conversa e os cards e dá a opinião dele">
               <app-icon name="compass" [size]="14" />Ouvir o estrategista</button>
+            @if (hasTech()) {
+              <button type="button" class="btn" [disabled]="asking()" (click)="askTech()" title="O tech lead diz se é viável, quanto esforço e qual o risco técnico de cada caminho">
+                <app-icon name="code" [size]="14" />Ouvir o tech lead</button>
+            }
             <span class="flex-1"></span>
             @if (answered()) { <span class="text-[12.5px] text-mute">{{ answered() }} de {{ g.cards.length }} respondidos</span> }
             <button type="button" class="btn btn-primary" [disabled]="!answered() || busy()" (click)="plan()">
@@ -157,6 +161,8 @@ export class OneOnOne {
   readonly guide = input.required<Guide>();
   /** o dono está falando (conversa ocupada) */
   readonly busy = input(false);
+  /** o produto tem tech lead (quem executa) para ser ouvido */
+  readonly hasTech = input(false);
   protected readonly whens = WHEN;
   protected readonly asking = signal(false);
 
@@ -180,6 +186,11 @@ export class OneOnOne {
   protected plan(): void { this.guides.requestPlan(this.guide().id); }
   protected approve(): void { this.guides.approve(this.guide().id); }
   protected end(): void { this.guides.abandon(this.guide().id); }
+  protected async askTech(): Promise<void> {
+    this.asking.set(true);
+    await this.guides.askTech(this.guide().id, '');
+    this.asking.set(false);
+  }
   protected async askStrategist(): Promise<void> {
     this.asking.set(true);
     await this.guides.ask(this.guide().id, '');

@@ -17,9 +17,9 @@ import { Select, SelectOption } from '../../../../../../shared/ui/select';
   template: `
     @let p = project();
     <app-icon name="agent" [size]="15" class="text-mute" />
-    <span class="text-mute">Dono do projeto</span>
+    <span class="text-mute">Tech lead (executa o A fazer)</span>
     <app-select class="w-56" [compact]="true" [options]="candidates()" [value]="p.todoAgentId ? '' + p.todoAgentId : ''" (valueChange)="setAgent($event)"
-                label="Dono do projeto" />
+                label="Tech lead" />
     @if (p.todoAgentId) {
       <span class="text-mute">até</span>
       <app-select class="w-16" [compact]="true" [options]="parallels" [value]="'' + p.todoParallel" (valueChange)="save({ parallel: +$event })"
@@ -43,7 +43,7 @@ export class TodoOwner {
   protected readonly candidates = computed<SelectOption[]>(() => {
     const p = this.project();
     const mine = new Set([p.slug, p.parentSlug].filter(Boolean));
-    return [{ value: '', label: 'ninguém (você dispara)' }, ...this.agents.agents().filter(a => !a.builtin && (!a.projectSlug || mine.has(a.projectSlug)))
+    return [{ value: '', label: 'ninguém' }, ...this.agents.agents().filter(a => !a.builtin && (!a.projectSlug || mine.has(a.projectSlug)))
       .sort((a, b) => Number(!mine.has(a.projectSlug ?? '')) - Number(!mine.has(b.projectSlug ?? '')))
       .map(a => ({ value: String(a.id), label: a.name, avatar: a }))];
   });

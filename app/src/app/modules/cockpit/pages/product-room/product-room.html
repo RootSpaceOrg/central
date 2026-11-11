@@ -14,28 +14,38 @@
           @if (instrument()?.focus; as f) { <p class="mt-0.5 line-clamp-1 max-w-[80ch] text-[14px] text-mute" [title]="f">{{ f }}</p> }
         </div>
       </div>
-      <!-- o dono -->
-      <div class="flex items-center gap-3 rounded-2xl border border-edge bg-panel/80 px-4 py-2.5">
-        @if (owner(); as o) {
-          <app-project-avatar [project]="o" [size]="34" />
+      <!-- os papéis: quem fala com você (dono) e quem executa (tech lead); nenhum é obrigatório -->
+      <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-edge bg-panel/80 px-4 py-2.5">
+        <div class="flex items-center gap-2.5">
+          @if (owner(); as o) { <app-project-avatar [project]="o" [size]="34" /> }
           <div class="leading-tight">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-faint">Dono</p>
-            <select class="-ml-1 bg-transparent text-[14px] font-semibold outline-none" [value]="'' + o.id" (change)="setOwner($any($event.target).value)" aria-label="Dono do produto">
-              @for (a of candidates(); track a.id) { <option [value]="'' + a.id" [selected]="a.id === o.id">{{ a.name }}</option> }
+            <select class="-ml-1 max-w-[210px] bg-transparent text-[14px] font-semibold outline-none" (change)="setOwner($any($event.target).value)" aria-label="Dono do produto">
+              <option value="" [selected]="sameAgent()">{{ tech() ? 'o tech lead (' + tech()!.name + ')' : 'ninguém' }}</option>
+              @for (a of candidates(); track a.id) { <option [value]="'' + a.id" [selected]="!sameAgent() && a.id === p.ownerAgentId">{{ a.name }}</option> }
             </select>
+            @if (sameAgent() && tech()) {
+              <button type="button" class="block text-[11.5px] text-frost hover:underline disabled:opacity-50" [disabled]="creating()" (click)="createOwner()"
+                      title="Um agente só de negócio para falar com você; o tech lead fica no técnico">{{ creating() ? 'criando…' : '+ criar um dono de negócio' }}</button>
+            }
           </div>
-          <span class="mx-1 h-8 w-px bg-edge"></span>
+        </div>
+        <span class="h-8 w-px bg-edge"></span>
+        <div class="leading-tight">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-faint">Tech lead</p>
+          <select class="-ml-1 max-w-[190px] bg-transparent text-[14px] font-semibold outline-none" (change)="setTech($any($event.target).value)" aria-label="Tech lead (quem executa)">
+            <option value="" [selected]="!tech()">ninguém</option>
+            @for (a of candidates(); track a.id) { <option [value]="'' + a.id" [selected]="a.id === p.todoAgentId">{{ a.name }}</option> }
+          </select>
+          @if (!tech()) { <p class="text-[11.5px] text-faint">histórias esperam quem execute</p> }
+        </div>
+        @if (owner()) {
+          <span class="h-8 w-px bg-edge"></span>
           <button type="button" role="switch" [attr.aria-checked]="p.ownerOn" (click)="toggleOwner()" class="flex items-center gap-2.5 text-left">
             <span class="relative h-5 w-9 shrink-0 rounded-full transition-colors" [class]="p.ownerOn ? 'bg-yes' : 'bg-edge'">
               <span class="absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform" [class.translate-x-4]="p.ownerOn"></span></span>
             <span class="text-[12.5px] leading-tight"><b class="block">{{ p.ownerOn ? 'Age sozinho' : 'Parado' }}</b><span class="text-faint">{{ p.ownerOn ? 'pelos eventos' : 'só o que você pede' }}</span></span>
           </button>
-        } @else {
-          <p class="text-[13px] text-mute">Sem dono.</p>
-          <select class="field !w-52 !py-1.5 text-[13px]" (change)="setOwner($any($event.target).value)" aria-label="Escolher o dono">
-            <option value="">Escolher o dono…</option>
-            @for (a of candidates(); track a.id) { <option [value]="'' + a.id">{{ a.name }}</option> }
-          </select>
         }
       </div>
       <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm btn-ghost" title="Backlog, roadmap, sessões, produção, contexto"><app-icon name="layers" [size]="14" />Bastidores do produto</a>
@@ -51,7 +61,7 @@
         </div>
 
         @if (guide(); as g) {
-          <app-one-on-one class="mt-4 block" [guide]="g" [busy]="talking()" />
+          <app-one-on-one class="mt-4 block" [guide]="g" [busy]="talking()" [hasTech]="!!tech() && !sameAgent()" />
         } @else {
           <!-- começar: o que você quer trazer -->
           @if (instrument()?.oneOnOne; as r) {
@@ -67,7 +77,7 @@
               @for (s of suggestions; track s) { <button type="button" class="rounded-full border border-edge px-3 py-1 text-[12.5px] text-mute hover:border-faint hover:text-text" (click)="add(s)">{{ s }}</button> }
             </div>
             <div class="mt-5 flex items-center gap-3">
-              <span class="flex-1 text-[12px] text-faint">{{ owner() ? '' : 'Escolha o dono acima para abrir o 1:1.' }}</span>
+              <span class="flex-1 text-[12px] text-faint">{{ owner() ? '' : 'Escolha o dono ou o tech lead acima para abrir o 1:1.' }}</span>
               <button type="button" class="btn btn-primary px-5" [disabled]="!owner() || starting()" (click)="start()"><app-icon name="central" [size]="15" />{{ starting() ? 'Chamando…' : 'Abrir o 1:1' }}</button>
             </div>
           </section>

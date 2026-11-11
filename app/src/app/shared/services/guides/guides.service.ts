@@ -127,5 +127,7 @@ export class GuidesService {
   }
   approve(id: number) { return this.act(this.ipc.invoke('guides:approve', id)); }
   ask(id: number, question: string) { return this.act(this.ipc.invoke('guides:ask', id, question)); }
+  /** 1:1: o tech lead diz viabilidade, esforço e risco */
+  askTech(id: number, question: string) { return this.act(this.ipc.invoke('guides:askTech', id, question)); }
   abandon(id: number) { return this.act(this.ipc.invoke('guides:abandon', id)); }
 }

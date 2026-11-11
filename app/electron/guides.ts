@@ -231,6 +231,20 @@ export async function startGuide(slug: string, direct: boolean, focus: string | 
 export function guideIdle(chatId: number, d: GuideDeps): void {
   const g = get<GuideDto>(`select * from guides where status = 'open' and (strategist_chat = ? or central_chat = ?)`, chatId, chatId);
   if (!g) return;
+  // o tech lead foi ouvido no 1:1: a fala dele entra na conversa e o dono comenta
+  if (g.tech_chat && chatId === g.tech_chat && g.phase === 'consult') {
+    const last = get<{ text: string }>(`select text from chat_messages where chat_id = ? and role = 'assistant' order by id desc limit 1`, chatId)?.text;
+    if (!last || !g.central_chat) return;
+    run(`update guides set phase = 'reply' where id = ?`, g.id);
+    saveMessage(g.central_chat, 'peer', JSON.stringify({ agent_id: get<{ a: number }>('select agent_id a from chats where id = ?', chatId)?.a, text: last }), d.notify);
+    toCentral(g, `[1:1 #${g.id}] O tech lead respondeu ao Gustavo:
+
+${last}
+
+Comente em 1 a 2 linhas e, se mudar algo nos cards ou no plano (esforço, risco, outro caminho), ajuste com guide_update.`, d);
+    d.changed();
+    return;
+  }
   if (chatId === g.strategist_chat && (g.phase === 'analysis' || g.phase === 'consult')) {
     const last = get<{ text: string }>(`select text from chat_messages where chat_id = ? and role = 'assistant' order by id desc limit 1`, chatId)?.text;
     if (!last) return;
@@ -277,6 +291,25 @@ ${cardsText(parse<GuideCard>(g.cards))}
 Responda direto, em até ~200 palavras. Não crie nem mude nada.`, d.notify, d.changed, null, MODEL);
   // primeira consulta (o 1:1 não abre com o especialista): guarda a conversa para a resposta voltar ao debate
   if (!g.strategist_chat) run('update guides set strategist_chat = ? where id = ?', sid, id);
+  d.changed();
+}
+
+/** "Ouvir o tech lead" (1:1): viabilidade, esforço e risco técnico, antes do Gustavo decidir */
+export function askTech(id: number, techId: number, question: string, d: GuideDeps): void {
+  const g = getGuide(id);
+  if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
+  const recent = g.central_chat ? all<{ role: string; text: string }>(`select role, text from chat_messages where chat_id = ? and role in ('user','assistant') order by id desc limit 6`, g.central_chat).reverse() : [];
+  run(`update guides set phase = 'consult' where id = ?`, id);
+  const tid = sendChat(g.tech_chat ?? null, techId, `[1:1 #${id}] O Gustavo e o dono do produto querem ouvir você, o tech lead${question.trim() ? `: ${question.trim()}` : ''}.
+Conversa recente (Gustavo e o dono):
+${recent.map(m => `${m.role === 'user' ? 'Gustavo' : 'Dono'}: ${m.text.slice(0, 1200)}`).join('\n\n') || '(nada ainda)'}
+
+Caminhos em discussão:
+${cardsText(parse<GuideCard>(g.cards))}
+${parse<GuidePlanItem>(g.plan).length ? `\nPlano em montagem:\n${parse<GuidePlanItem>(g.plan).map(i => `- [${i.kind}] ${i.title}${i.detail ? `: ${i.detail}` : ''}`).join('\n')}\n` : ''}
+Responda curto (até ~200 palavras), para quem decide: para cada caminho, é viável? quanto esforço (P/M/G e em quantas
+partes)? qual o risco técnico? o que já existe e ajuda? Se o código mostrar algo que muda a decisão, diga. Não mude nada.`, d.notify, d.changed, null, MODEL);
+  if (!g.tech_chat) run('update guides set tech_chat = ? where id = ?', tid, id);
   d.changed();
 }
 

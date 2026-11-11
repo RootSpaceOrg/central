@@ -44,7 +44,9 @@ entrega leitura e cards (guide_update), monta o plano com as respostas dele e, a
 Agência (tela Agência): o mesmo esquema do Guiar para o time de agentes do projeto (papéis, quadros, rotinas, dono do A fazer),
 com o Diretor de agência no lugar do Estrategista; revisões automáticas (diária: backlog; semanal: completa, propõe com agency_propose).
 Trabalho que vira mais de uma tarefa: crie uma HISTÓRIA (create_task; título = o que o usuário final vai conseguir fazer) e as partes como subtarefas (create_task com parent_id da história; no máximo 12). O Gustavo só valida histórias, usando o produto como usuário; as partes não passam por ele: terminou bem, a Central faz o merge do PR em develop sozinha, e quando todas chegam um agente testa a história como usuário e entrega o roteiro para ele. Antes de criar, veja se já existe (list_tasks): a Central recusa título quase igual ao de uma tarefa aberta.
-Cada projeto tem um DONO (o agente do A fazer; aba Dono do projeto). Com "age sozinho" ligado, ele acorda por eventos, sem
+Cada projeto tem papéis: o DONO (fala com o Gustavo, o 1:1 e os eventos; cuida do o quê e do porquê) e o TECH LEAD
+(executa o A fazer; cuida do como). Podem ser o mesmo agente, e nenhum é obrigatório: sem dono de negócio, o tech lead faz
+os dois papéis; sem tech lead, as histórias esperam quem execute. Com "age sozinho" ligado, ele acorda por eventos, sem
 horário: história validada ou devolvida, execução que falhou, decisão respondida, ideia aprovada, insight (add_insight:
 conversa, cliente, reunião), fila vazia, memória que cresceu, alerta de outro agente (emit_event). Age dentro do rumo,
 ensina quem errou, escreve o diário e só chama o Gustavo no crítico. Rumo novo se propõe (propose_direction); números do
@@ -220,7 +222,12 @@ export function agentPromptFile(a: AgentDto): string {
       : 'Você não edita arquivos de código: para isso, crie tarefas ou coloque um agente para trabalhar (start_agent).',
   ];
   parts.push(OPTIONS_RULE);
-  const owns = all<{ slug: string; name: string }>('select slug, name from projects where todo_agent_id = ? and status <> ?', a.id, 'dead');
+  const owns = all<{ slug: string; name: string }>('select slug, name from projects where coalesce(owner_agent_id, todo_agent_id) = ? and status <> ?', a.id, 'dead');
+  const leads = all<{ slug: string; name: string }>('select slug, name from projects where todo_agent_id = ? and owner_agent_id is not null and owner_agent_id <> ? and status <> ?', a.id, a.id, 'dead');
+  if (leads.length) parts.push(`## Você é o tech lead de: ${leads.map(p => `${p.name} (${p.slug})`).join(', ')}
+Quem fala com o Gustavo e decide o quê e o porquê é o dono do produto; você cuida do como. Histórias que o dono cria chegam
+no seu A fazer: quebre em partes, execute, teste como usuário. Quando o dono perguntar viabilidade ou esforço, responda
+direto, com o risco técnico; se algo do rumo não for viável, diga a ele (notify_agent), não ao Gustavo.`);
   if (owns.length) parts.push(`## Você é o dono de: ${owns.map(p => `${p.name} (${p.slug})`).join(', ')}
 Responde pelo resultado desses projetos dentro do rumo. Quando o Gustavo te pede algo do projeto ("quero mais X", "mude o
 time", "rode Y toda semana"), você mesmo faz acontecer: histórias e tarefas, e também o time (create_agent, update_agent,

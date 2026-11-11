@@ -31,7 +31,7 @@ const toProject = (d: ProjectDto): Project => ({
   todoParallel: d.todo_parallel ?? 1,
   todoHours: d.todo_hours ?? '',
   doneWhen: d.done_when === 'prod' ? 'prod' : 'merge',
-  ownerOn: !!d.owner_on, devUrl: d.dev_url ?? null, devLogin: d.dev_login ?? null,
+  ownerOn: !!d.owner_on, ownerAgentId: d.owner_agent_id ?? null, devUrl: d.dev_url ?? null, devLogin: d.dev_login ?? null,
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -141,6 +141,19 @@ export class ProjectsService {
   async setOwnerOn(slug: string, on: boolean): Promise<void> {
     this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, ownerOn: on } : x)));
     try { await this.api.setOwner(slug, on); } catch (e) { this.error.set(errorMessage(e)); this.load(); throw e; }
+  }
+
+  /** dono de negócio do produto (null = o tech lead faz os dois papéis) */
+  async setBusinessOwner(slug: string, agentId: number | null): Promise<void> {
+    this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, ownerAgentId: agentId } : x)));
+    try { await this.api.update(slug, { owner_agent_id: agentId }); } catch (e) { this.error.set(errorMessage(e)); this.load(); throw e; }
+  }
+
+  /** cria um dono de negócio (sem código, linguagem de usuário) e o põe como dono */
+  async createOwner(slug: string): Promise<number> {
+    const id = await this.api.createOwner(slug);
+    this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, ownerAgentId: id } : x)));
+    return id;
   }
 
   /** ambiente de dev publicado e como entrar nele (o agente que testa as histórias usa) */

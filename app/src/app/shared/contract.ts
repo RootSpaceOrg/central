@@ -52,6 +52,8 @@ export interface ProjectDto {
   done_when: 'merge' | 'prod';
   /** dono acorda sozinho pelos eventos do projeto (1) ou só pega o A fazer (0) */
   owner_on?: number;
+  /** dono de negócio (fala com o Gustavo); null = o tech lead (todo_agent_id) faz os dois papéis */
+  owner_agent_id?: number | null;
   /** ambiente de dev publicado (onde as histórias são testadas como usuário) e como entrar nele */
   dev_url?: string | null;
   dev_login?: string | null;
@@ -62,6 +64,8 @@ export interface CockpitProduct {
   slug: string; name: string; color: string; icon_kind: string; icon_value: string | null; parent_slug: string | null;
   owner: { id: number; name: string; color: string; icon_kind: string; icon_value: string | null } | null;
   owner_on: boolean;
+  /** quem executa (o A fazer): o tech lead; null = ninguém (as histórias esperam) */
+  tech_lead: { id: number; name: string } | null;
   /** working = o dono está numa passada; waiting = espera o Gustavo (decisão ou pedido de 1:1); watching = ligado, atento;
    *  off = dono existe mas não age sozinho; none = sem dono */
   owner_state: 'working' | 'waiting' | 'watching' | 'off' | 'none';
@@ -125,6 +129,7 @@ export interface ProjectPatch {
   todo_agent_id?: number | null;
   todo_parallel?: number;
   todo_hours?: string;
+  owner_agent_id?: number | null;
   dev_url?: string | null;
   dev_login?: string | null;
   done_when?: 'merge' | 'prod';
@@ -364,6 +369,8 @@ export interface GuideDto {
   plan: string | null;
   central_chat: number | null;
   strategist_chat: number | null;
+  /** 1:1: conversa com o tech lead quando ele foi ouvido */
+  tech_chat?: number | null;
   minutes: string | null;
   /** o que o Gustavo disse que quer focar (antes das decisões) */
   focus: string | null;
@@ -1234,6 +1241,10 @@ export interface Api {
   'direction:set': (projectSlug: string, text: string, note: string | null) => DirectionDto;
   'owner:get': (projectSlug: string) => OwnerDto;
   'owner:set': (projectSlug: string, on: boolean) => void;
+  /** cria um dono de negócio para o produto (sem código, linguagem de usuário) e o põe como dono */
+  'owner:create': (projectSlug: string) => number;
+  /** 1:1: o tech lead lê a conversa e diz viabilidade e esforço */
+  'guides:askTech': (id: number, question: string) => void;
   'pulse:get': () => PulseDto;
   'cockpit:get': () => CockpitDto;
   'alerts:resolve': (id: number) => void;

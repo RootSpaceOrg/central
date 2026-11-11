@@ -12,10 +12,12 @@ import { focusOf } from './pulse';
 const DAY = 86_400_000;
 
 function product(p: { slug: string; name: string; color: string; icon_kind: string; icon_value: string | null; parent_slug: string | null;
-  todo_agent_id: number | null; owner_on: number; one_on_one: string | null; one_on_one_at: string | null }): CockpitProduct {
+  todo_agent_id: number | null; owner_agent_id: number | null; owner_on: number; one_on_one: string | null; one_on_one_at: string | null }): CockpitProduct {
   const s = p.slug;
-  const owner = p.todo_agent_id ? get<{ id: number; name: string; color: string; icon_kind: string; icon_value: string | null }>(
-    'select id, name, color, icon_kind, icon_value from agents where id = ?', p.todo_agent_id) ?? null : null;
+  const ownerId = p.owner_agent_id ?? p.todo_agent_id;
+  const owner = ownerId ? get<{ id: number; name: string; color: string; icon_kind: string; icon_value: string | null }>(
+    'select id, name, color, icon_kind, icon_value from agents where id = ?', ownerId) ?? null : null;
+  const tech = p.todo_agent_id ? get<{ id: number; name: string }>('select id, name from agents where id = ?', p.todo_agent_id) ?? null : null;
   const active = get<{ n: number }>(`select count(*) n from runs where project_slug = ? and status in ('queued','preparing','running')`, s)!.n;
   const ownerBusy = owner ? !!get(`select 1 from runs where project_slug = ? and agent_id = ? and status in ('queued','preparing','running')`, s, owner.id) : false;
   const waiting = get<{ n: number }>(`select count(*) n from proposals where project_slug = ? and status = 'proposed'`, s)!.n;
@@ -45,7 +47,7 @@ function product(p: { slug: string; name: string; color: string; icon_kind: stri
   const returned = get<{ n: number }>(`select count(*) n from events where project_slug = ? and kind = 'historia_devolvida' and handled_at is null`, s)!.n;
   return {
     slug: s, name: p.name, color: p.color, icon_kind: p.icon_kind, icon_value: p.icon_value, parent_slug: p.parent_slug,
-    owner, owner_on: !!p.owner_on,
+    owner, owner_on: !!p.owner_on, tech_lead: tech,
     owner_state: !owner ? 'none' : ownerBusy ? 'working' : (waiting || p.one_on_one) ? 'waiting' : p.owner_on ? 'watching' : 'off',
     focus: focusOf(get<{ text: string }>('select text from directions where project_slug = ? order by id desc limit 1', s)?.text ?? null),
     milestone: ms && msCount ? { title: ms.title, target: ms.target, total: msCount.n, done: msCount.done ?? 0 } : null,
@@ -60,10 +62,10 @@ function product(p: { slug: string; name: string; color: string; icon_kind: stri
 
 export function cockpit(): CockpitDto {
   const rows = all<Parameters<typeof product>[0] & { status: string; position: number }>(
-    `select slug, name, color, icon_kind, icon_value, parent_slug, todo_agent_id, owner_on, one_on_one, one_on_one_at, status, position
+    `select slug, name, color, icon_kind, icon_value, parent_slug, todo_agent_id, owner_agent_id, owner_on, one_on_one, one_on_one_at, status, position
      from projects where status in ('active','maintenance') order by position, name`);
   const top = rows.filter(r => !r.parent_slug);
-  const alive = (r: (typeof rows)[number]) => !!r.todo_agent_id || !!get(`select 1 from tasks where project_slug = ? and "column" <> 'done' limit 1`, r.slug)
+  const alive = (r: (typeof rows)[number]) => !!r.todo_agent_id || !!r.owner_agent_id || !!get(`select 1 from tasks where project_slug = ? and "column" <> 'done' limit 1`, r.slug)
     || !!get('select 1 from metrics where project_slug = ? limit 1', r.slug);
   return {
     companies: top.map(c => {
