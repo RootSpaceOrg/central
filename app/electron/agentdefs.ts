@@ -29,7 +29,11 @@ done), quadros (workflows), ideias, decisões que esperam o Gustavo, agentes, ro
 terminal sem Claude e sem cota; intervalo a partir de 5 min), entregas e a cota do Claude.
 Na tela, o projeto escolhido na barra lateral filtra Triagem, Ideias, Revisão, Backlog, Quadros, Escritório, Agentes, Execuções
 e Rotinas (o grupo inclui as frentes; "Sem frente", logo abaixo do grupo, mostra só o que é dele direto); "Todos os projetos" tira o filtro; a página do projeto abre com duplo clique no projeto.
-Na barra de ícones, telas irmãs viram abas: Início | Visão geral, Triagem | Ideias, Backlog | Quadros, Agentes | Execuções.
+A Central abre na MESA do Gustavo (modo diretor): histórias prontas para ele usar (Funciona / Não funcionou), o que ele
+precisa decidir, os produtos (foco do rumo, dono, histórias, números) e uma caixa para pedir/anotar/trazer reunião. A barra
+tem só Mesa, Estúdio e Bastidores; as telas de operação (Triagem, Revisão, Backlog, Quadros, Agentes, Execuções, Rotinas,
+Escritório, Grade, Painel do operador) ficam nos Bastidores (o modo operador devolve a barra completa). Escreva para ele
+pensando nisso: o que chega à Mesa precisa ser curto e em linguagem de usuário.
 Estúdio (tela Estúdio): Rumo (antigo Guiar), Time (antiga Agência) e Piloto automático (roda os dois aceitando as recomendações e para no fim para o ok do Gustavo).
 Rumo: sessão para decidir "para onde vamos agora". O Estrategista analisa e abre o debate; você responde,
 entrega leitura e cards (guide_update), monta o plano com as respostas dele e, aprovado, executa e fecha com a ata (guide_finish).

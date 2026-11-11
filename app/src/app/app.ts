@@ -45,7 +45,10 @@ import { LayoutService } from './shared/services/layout/layout.service';
 import { LiveService } from './shared/services/live/live.service';
 import { SessionsService } from './shared/services/sessions/sessions.service';
 
-type NavItem = { path: string; label: string; icon: IconName; tabs?: { path: string; label: string }[] };
+type NavItem = { path: string; label: string; icon: IconName; tabs?: { path: string; label: string }[]; also?: string[] };
+
+/** telas de operação: no modo diretor ficam nos Bastidores (o ícone dele acende nelas) */
+const BACKSTAGE = ['/bastidores', '/painel', '/visao-geral', '/triagem', '/ideias', '/revisao', '/backlog', '/quadros', '/agentes', '/execucoes', '/rotinas', '/escritorio', '/grade', '/extensoes'];
 
 const GROUPS: { status: ProjectStatus; label: string }[] = [
   { status: 'active', label: 'Ativos' },
@@ -86,8 +89,8 @@ export class App {
   private readonly sessionsService = inject(SessionsService);
 
   /** barra de ícones: telas irmãs ficam juntas num ícone e viram abas no topo da tela (as rotas antigas continuam valendo) */
-  protected readonly nav: NavItem[] = [
-    { path: '/', label: 'Início', icon: 'home', tabs: [{ path: '/', label: 'Início' }, { path: '/visao-geral', label: 'Visão geral' }] },
+  private readonly operatorNav: NavItem[] = [
+    { path: '/', label: 'Mesa', icon: 'desk', tabs: [{ path: '/', label: 'Mesa' }, { path: '/painel', label: 'Painel' }, { path: '/visao-geral', label: 'Visão geral' }] },
     { path: '/triagem', label: 'Triagem e ideias', icon: 'inbox', tabs: [{ path: '/triagem', label: 'Triagem' }, { path: '/ideias', label: 'Ideias' }] },
     { path: '/revisao', label: 'Revisão (entregas esperando o seu olhar)', icon: 'pr' },
     { path: '/estudio', label: 'Estúdio (rumo, time e piloto automático)', icon: 'compass' },
@@ -97,24 +100,40 @@ export class App {
     { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
     { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
   ];
+  /** modo diretor (padrão): a Mesa, o Estúdio e os Bastidores; o resto mora nos Bastidores */
+  private readonly directorNav: NavItem[] = [
+    { path: '/', label: 'Mesa (o que é seu: usar, decidir, seus produtos)', icon: 'desk' },
+    { path: '/estudio', label: 'Estúdio (rumo, time e piloto automático)', icon: 'compass' },
+    { path: '/bastidores', label: 'Bastidores (a operação por dentro)', icon: 'layers', also: BACKSTAGE },
+  ];
+  protected readonly navItems = computed(() => (this.layout.operator() ? this.operatorNav : this.directorNav));
+  /** na Mesa do modo diretor, a lista de projetos sai: os produtos já estão na própria Mesa */
+  protected readonly bareDesk = computed(() => !this.layout.operator() && this.scope.path() === '/');
+  /** o que é do Gustavo (selo da Mesa): histórias para usar, decisões e agentes esperando ele */
+  protected readonly forYou = computed(() => {
+    const byTask = new Map(this.tasks.tasks().map(t => [t.id, t]));
+    const stories = this.deliveries.board().filter(d => d.status === 'review' && d.taskId && (byTask.get(d.taskId)?.subtasks ?? 0) > 0).length;
+    return stories + this.proposals.inbox().length + this.runs.waiting().length;
+  });
   private readonly under = (path: string, tab: string) => (tab === '/' ? path === '/' : path === tab || path.startsWith(tab + '/'));
   /** ícone aceso: a tela atual é ele ou uma das abas dele */
-  protected isOn(n: NavItem): boolean { const p = this.scope.path(); return (n.tabs ?? [n]).some(t => this.under(p, t.path)); }
+  protected isOn(n: NavItem): boolean { const p = this.scope.path(); return [...(n.tabs ?? [n]).map(t => t.path), ...(n.also ?? [])].some(t => this.under(p, t)); }
   protected isHere(tab: string): boolean { return this.under(this.scope.path(), tab); }
   /** abas da tela atual (só quando ela faz parte de um grupo) */
-  protected readonly tabs = computed(() => this.nav.find(n => n.tabs && this.isOn(n))?.tabs ?? null);
+  protected readonly tabs = computed(() => this.navItems().find(n => n.tabs && this.isOn(n))?.tabs ?? null);
   /** última aba aberta de cada grupo: o ícone volta para ela */
   private readonly lastTab = new Map<string, string>();
   private readonly rememberTab = effect(() => {
     const p = this.scope.path();
-    for (const n of this.nav) { const t = n.tabs?.find(x => this.under(p, x.path)); if (t) this.lastTab.set(n.path, t.path); }
+    for (const n of this.navItems()) { const t = n.tabs?.find(x => this.under(p, x.path)); if (t) this.lastTab.set(n.path, t.path); }
   });
-  protected target(n: NavItem): string { return this.isOn(n) ? n.path : this.lastTab.get(n.path) ?? n.path; }
+  protected target(n: NavItem): string { return n.also ? n.path : this.isOn(n) ? n.path : this.lastTab.get(n.path) ?? n.path; }
 
   /** número no ícone da navegação */
   protected badge(path: string): { n: number; tone: string } | null {
     const all = this.runs.runs();
     const triage = this.proposals.inbox().filter(p => this.focus.decision(p)).length + this.ideas.unseen().filter(i => this.focus.idea(i)).length + all.filter(r => needsYou(r, all)).length;
+    if (path === '/' && !this.layout.operator()) { const n = this.forYou(); return n ? { n, tone: 'bg-later text-night' } : null; }
     if (path === '/triagem' && triage) return { n: triage, tone: 'bg-later text-night' };
     if (path === '/ideias' && this.ideas.waiting().length) return { n: this.ideas.waiting().length, tone: 'bg-edge text-text' };
     // revisão: entregas na fila + tarefas em Revisão sem entrega (o mesmo que a tela Revisão lista)

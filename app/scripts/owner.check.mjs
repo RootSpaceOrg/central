@@ -17,7 +17,9 @@ db.exec(\`
   insert into agents (id, name, project_slug) values (6, 'Tech Lead', 'kultivai'), (7, 'Montador', 'kultivai');
   create table projects (slug text primary key, name text, color text default '#fff', status text default 'active', todo_agent_id integer, owner_on integer default 0, position integer default 0);
   insert into projects (slug, name, todo_agent_id) values ('kultivai', 'KultivAi', 6), ('solto', 'Solto', null);
-  create table runs (id integer primary key, project_slug text, prompt text, status text, created_at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')));
+  create table runs (id integer primary key, project_slug text, prompt text, status text, result text, created_at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')));
+  create table directions (id integer primary key, project_slug text, text text);
+  insert into directions (project_slug, text) values ('kultivai', '**Objetivo:** renda.\n\n**Foco agora:**\n1. **Post variado todo dia.**\n   - detalhe');
   create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, parent_id integer, priority integer default 2, position integer default 0,
     repo_path text, proposal_id integer, pr_url text, source text, source_ref text, idea_id integer, milestone_id integer, color text, depends_on text, picked_at text,
     created_at text default '2026-11-01', updated_at text default '2026-11-01');
@@ -28,7 +30,7 @@ db.exec(\`
   create table settings (key text primary key, value text);
   create table ideas (id integer primary key autoincrement, project_slug text, title text, body text, status text default 'new', source text, source_ref text, author text,
     task_id integer, created_at text default '2026-11-01', approved_at text, milestone_id integer, triaged_at text, triage text, seen_at text);
-  create table deliveries (id integer primary key, task_id integer, project_slug text, title text, run_id integer);
+  create table deliveries (id integer primary key, task_id integer, project_slug text, title text, run_id integer, status text);
   create table metrics (id integer primary key autoincrement, project_slug text, name text, value real, unit text, note text, at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')));
   create table events (id integer primary key autoincrement, project_slug text not null, kind text not null, ref text not null, summary text not null,
     urgent integer not null default 0, from_owner integer not null default 0, created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')), handled_at text, pass_run_id integer);
@@ -140,4 +142,5 @@ u.reportMetric('kultivai', 'Posts publicados', 10, 'posts', null);
 u.reportMetric('kultivai', 'Posts publicados', 14, 'posts', 'semana boa');
 const m = u.pulse().projects.find(x => x.slug === 'kultivai').metrics[0];
 ok(m.value === 14 && m.prev === 10, 'métrica guarda a leitura anterior');
+ok(u.pulse().projects.find(x => x.slug === 'kultivai').focus === 'Post variado todo dia.', 'foco do rumo numa linha');
 console.log('owner ok');

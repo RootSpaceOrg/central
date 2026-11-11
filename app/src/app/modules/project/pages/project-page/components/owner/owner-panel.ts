@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import { AgentsService } from '../../../../../../shared/services/agents/agents.service';
 import { ChatService } from '../../../../../../shared/services/chat/chat.service';
+import { LayoutService } from '../../../../../../shared/services/layout/layout.service';
 import { OwnerState, Project } from '../../../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../../../shared/services/projects/projects.service';
 import { RunsService } from '../../../../../../shared/services/runs/runs.service';
@@ -47,7 +48,7 @@ const KIND: Record<string, { label: string; tone: string }> = {
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-3">
                 <h2 id="ow-title" class="mr-auto font-display text-[22px] font-semibold leading-tight">{{ owner()?.name ?? 'Sem dono' }}</h2>
-                @if (owner(); as o) {
+                @if (operator() && owner(); as o) {
                   <button type="button" class="btn btn-sm" (click)="talk(o.id)" title="Peça direto: ele planeja, executa e, se precisar, ajusta o time do projeto">
                     <app-icon name="central" [size]="15" />Pedir ao dono</button>
                 }
@@ -149,6 +150,8 @@ export class OwnerPanel {
   private readonly agents = inject(AgentsService);
   private readonly runs = inject(RunsService);
   private readonly chat = inject(ChatService);
+  /** no modo diretor o "Pedir ao dono" fica no cabeçalho do projeto */
+  protected readonly operator = inject(LayoutService).operator;
 
   /** conversa com o dono, já dizendo de qual projeto é o pedido */
   protected talk(agentId: number): void { this.chat.compose(agentId, `Projeto ${this.project().name}: `); }

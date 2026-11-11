@@ -13,7 +13,7 @@ import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.se
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { WaitingRuns, needsYou } from './components/waiting-runs/waiting-runs';
-import { MeetingImport } from './components/meeting-import/meeting-import';
+import { MeetingImport } from '../../../../shared/components/meeting-import/meeting-import';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';

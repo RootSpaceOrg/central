@@ -23,6 +23,9 @@ import { ReleasePanel } from './components/release/release-panel';
 import { TodoOwner } from './components/todo-owner/todo-owner';
 import { OwnerPanel } from './components/owner/owner-panel';
 import { BoardService } from '../../../../shared/services/board/board.service';
+import { LayoutService } from '../../../../shared/services/layout/layout.service';
+import { AgentsService } from '../../../../shared/services/agents/agents.service';
+import { ChatService } from '../../../../shared/services/chat/chat.service';
 import { Summary } from './components/summary/summary';
 
 type Tab = 'sessoes' | 'rumo' | 'dono' | 'roadmap' | 'backlog' | 'producao' | 'contexto' | 'agentes';
@@ -31,6 +34,8 @@ const TABS = [
   { id: 'roadmap', label: 'Roadmap', icon: 'roadmap' },
   { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'producao', label: 'Produção', icon: 'rocket' }, { id: 'contexto', label: 'Contexto', icon: 'graph' }, { id: 'agentes', label: 'Agentes', icon: 'agent' },
 ] as const;
+
+const DIRECTOR_ORDER: string[] = ['dono', 'rumo', 'roadmap', 'backlog', 'producao', 'sessoes', 'contexto', 'agentes'];
 
 @Component({
   selector: 'app-project-page',
@@ -52,7 +57,16 @@ export class ProjectPage {
   protected readonly project = computed(() => this.projects.bySlug().get(this.slug()) ?? null);
   protected readonly projectRuns = computed(() => this.runs.runs().filter(r => r.projectSlug === this.slug()));
 
-  protected readonly tabs = TABS;
+  private readonly layout = inject(LayoutService);
+  private readonly agents = inject(AgentsService);
+  private readonly chat = inject(ChatService);
+  protected readonly operator = this.layout.operator;
+  /** o dono do projeto (o agente do A fazer) */
+  protected readonly owner = computed(() => this.agents.byId().get(this.project()?.todoAgentId ?? -1) ?? null);
+  protected askOwner(agentId: number, name: string): void { this.chat.compose(agentId, `Projeto ${name}: `); }
+  /** diretor: o que é dele primeiro (dono, rumo, roadmap); operador: a ordem de sempre */
+  protected readonly tabs = computed(() => (this.layout.operator() ? TABS
+    : [...TABS].sort((a, b) => DIRECTOR_ORDER.indexOf(a.id) - DIRECTOR_ORDER.indexOf(b.id))));
   private readonly boards = inject(BoardService);
   /** quadros (workflows) deste projeto */
   protected projectBoards(slug: string) { return this.boards.boards().filter(b => b.projectSlug === slug); }
@@ -74,7 +88,8 @@ export class ProjectPage {
       untracked(() => {
         const aba = (q?.get('aba') === 'resumo' ? 'rumo' : q?.get('aba')) as Tab | null;
         const nova = q?.get('nova') as SessionKind | null;
-        this.tab.set(nova ? 'sessoes' : TABS.some(t => t.id === aba) ? aba! : 'sessoes');
+        // modo diretor: o projeto abre no dono (quem cuida, o que fez, o que espera); operador: nas sessões
+        this.tab.set(nova ? 'sessoes' : TABS.some(t => t.id === aba) ? aba! : this.layout.operator() ? 'sessoes' : 'dono');
         if (nova) {
           this.sessions.open(slug, nova);
           this.router.navigate([], { queryParams: { nova: null }, queryParamsHandling: 'merge', replaceUrl: true });

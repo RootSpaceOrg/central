@@ -89,8 +89,9 @@ export class IdeasService {
     return this.ideas().filter(i => i.projectSlug === slug && (!status || i.status === status));
   }
 
-  async create(title: string, body: string, projectSlug: string | null): Promise<void> {
-    await this.api.create({ title, body: body || null, project_slug: projectSlug });
+  /** devolve o id da ideia criada */
+  async create(title: string, body: string, projectSlug: string | null): Promise<number> {
+    return (await this.api.create({ title, body: body || null, project_slug: projectSlug })).id;
   }
 
   setProject(id: number, projectSlug: string | null): void {

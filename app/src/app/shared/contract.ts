@@ -64,6 +64,8 @@ export interface PulseDto {
   projects: {
     slug: string; name: string; color: string; owner: string | null; owner_on: boolean;
     validated: number; returned: number; stories_open: number; last_pass_at: string | null;
+    /** foco do rumo numa linha, última linha do diário do dono, histórias esperando o Gustavo validar */
+    focus: string | null; diary: string | null; to_validate: number;
     metrics: { name: string; value: number; unit: string | null; at: string; note: string | null; prev: number | null }[];
   }[];
 }

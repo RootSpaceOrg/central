@@ -1,7 +1,9 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
-  { path: '', title: 'Início', loadComponent: () => import('./modules/home/pages/home-page/home-page').then(m => m.HomePage) },
+  { path: '', title: 'Mesa', loadComponent: () => import('./modules/home/pages/desk-page/desk-page').then(m => m.DeskPage) },
+  { path: 'painel', title: 'Painel do operador', loadComponent: () => import('./modules/home/pages/home-page/home-page').then(m => m.HomePage) },
+  { path: 'bastidores', title: 'Bastidores', loadComponent: () => import('./modules/backstage/pages/backstage-page/backstage-page').then(m => m.BackstagePage) },
   {
     path: 'visao-geral',
     title: 'Visão geral',

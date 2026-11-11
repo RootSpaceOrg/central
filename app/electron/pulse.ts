@@ -13,6 +13,20 @@ export function reportMetric(slug: string, name: string, value: number, unit: st
   return `Registrado: ${name} = ${value}${unit ? ` ${unit}` : ''}.`;
 }
 
+/** o foco do rumo numa linha: a seção "Foco agora" (ou a primeira frase do rumo) */
+export function focusOf(text: string | null): string | null {
+  if (!text) return null;
+  const clean = (l: string) => l.replace(/^[-*\d.)\s]+/, '').replace(/\*\*/g, '').trim();
+  const lines = text.split('\n').map(l => l.trim());
+  // "**Foco agora:** texto", "## Foco agora" ou "Foco agora:" seguido de lista
+  const HEAD = /^#*\s*\**\s*foco(\s+agora)?\s*:?\s*\**\s*:?\s*/i;
+  const at = lines.findIndex(l => HEAD.test(l));
+  const next = (from: number) => lines.slice(from).find(l => l && !/^#/.test(l) && !/^\*\*[^*]+:\*\*$/.test(l));
+  const raw = at >= 0 ? (clean(lines[at].replace(HEAD, '')) || clean(next(at + 1) ?? '')) : clean(next(0)?.replace(/^\**\s*objetivo\s*:?\s*\**\s*:?\s*/i, '') ?? '');
+  return raw ? raw.slice(0, 180) : null;
+}
+const firstLine = (s: string) => s.split('\n').map(l => l.trim().replace(/^[-*]\s*/, '').replace(/\*\*/g, '')).find(l => l && !/^#/.test(l))?.slice(0, 200) ?? null;
+
 export function pulse(): PulseDto {
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const count = (action: string, slug?: string) => get<{ n: number }>(
@@ -32,8 +46,12 @@ export function pulse(): PulseDto {
         return { name: n, value: cur.value, unit: cur.unit, at: cur.at, note: cur.note, prev: prev?.value ?? null };
       }).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 4);
       const last = get<{ at: string; status: string }>(`select created_at at, status from runs where project_slug = ? and prompt like ? order by id desc limit 1`, p.slug, `${OWNER_HEAD}%`);
+      const diary = last ? get<{ r: string | null }>(`select result r from runs where project_slug = ? and prompt like ? and result is not null order by id desc limit 1`, p.slug, `${OWNER_HEAD}%`)?.r : null;
       return {
         slug: p.slug, name: p.name, color: p.color, owner: p.owner, owner_on: !!p.owner_on,
+        focus: focusOf(get<{ text: string }>('select text from directions where project_slug = ? order by id desc limit 1', p.slug)?.text ?? null),
+        diary: diary ? firstLine(diary) : null,
+        to_validate: get<{ n: number }>(`select count(*) n from deliveries d join tasks t on t.id = d.task_id where d.status = 'review' and t.project_slug = ? and exists (select 1 from tasks c where c.parent_id = t.id)`, p.slug)!.n,
         validated: count('história: accepted', p.slug), returned: count('história: adjusting', p.slug),
         stories_open: get<{ n: number }>(`select count(*) n from tasks t where t.project_slug = ? and t."column" <> 'done' and exists (select 1 from tasks c where c.parent_id = t.id)`, p.slug)!.n,
         last_pass_at: last?.at ?? null, metrics,
