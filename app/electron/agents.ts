@@ -608,7 +608,13 @@ type Where = { kind: 'repo'; branch: string; base: string } | { kind: 'project';
  * Produção não é trava no código: cada agente tem nas instruções ou nas memórias o que pode subir (ex.: hotfix pequeno sim,
  * mudança crítica não). Sem isso, ou na dúvida, decide o Gustavo.
  */
-const PROD_POLICY = 'Push direto em main, master ou develop e deploy em produção: só se as suas instruções de papel ou memórias permitirem para este tipo de atividade (ex.: hotfix pequeno). Se não permitirem, se for crítico ou se estiver em dúvida, crie uma decisão (create_decision) com o que vai subir, o risco e como desfazer, e espere.';
+const PROD_POLICY = 'Produção (main/master, deploy em prod): hotfix pequeno que destrava algo quebrado pode subir sem esperar o Gustavo, se as suas instruções ou memórias não proibirem; logo depois, avise o dono (emit_event: o que subiu, por quê e como desfazer). Mudança maior, de comportamento para o usuário, de dados ou de cobrança: crie uma decisão (create_decision) com o que vai subir, o risco e como desfazer, e espere. Develop é seguro: trabalhe à vontade.';
+
+/** Projeto com dono por eventos: dúvida que não é crítica vai para o dono, não para o Gustavo. */
+const ownerRule = (slug: string | null) => {
+  const o = slug ? get<{ name: string }>(`select a.name from projects p join agents a on a.id = p.todo_agent_id where p.slug = ? and p.owner_on = 1`, slug) : null;
+  return o ? `\n  Precisa de outra cabeça numa escolha que não é crítica? O dono deste projeto é ${o.name}: emit_event (project_slug ${slug}) com a dúvida e o que você recomenda, e siga com a recomendação.` : '';
+};
 
 /** Projeto onde "pronto" é produção: o agente não dá a tarefa como feita no merge em develop. */
 const prodRule = (slug: string | null) => (slug && get(`select 1 from projects where slug = ? and done_when = 'prod'`, slug)
@@ -629,9 +635,12 @@ ${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova
 - Faltou algo que só o Gustavo resolve (sessão AWS/SSO expirada, gh sem login, credencial, VPN, acesso)? Não contorne nem
   desista: chame need_gustavo (o que falta, o que ele faz e o comando, ex.: aws sso login --profile X) e termine. A Central te
   retoma de onde parou quando ele resolver.
-- Escolha que depende do Gustavo (qual caminho seguir, se pode mergear, se tira ou mantém): crie uma decisão com
+- O Gustavo só é interrompido no CRÍTICO: produção com impacto no usuário (que não seja hotfix), dinheiro e cobrança,
+  dados de cliente, comunicação com cliente, mudança de rumo. Nesses casos, crie uma decisão com
   create_decision${task ? ` e task_id ${task.id}` : ' e o task_id da tarefa'}, com summary (uma linha), as opções em options e o que você faz em cada uma no body. Não escreva escolhas
-  pendentes na descrição da tarefa: a tarefa espera, e quando ele decidir a resposta volta para ela e você segue.${prodRule(r.project_slug)}
+  pendentes na descrição da tarefa: a tarefa espera, e quando ele decidir a resposta volta para ela e você segue.
+  O resto (como implementar, bug, ajuste de tela, ordem das coisas, o que é dev) você decide seguindo o rumo e diz no
+  report_delivery o que escolheu.${ownerRule(r.project_slug)}${prodRule(r.project_slug)}
 - Precisa de outro agente (ex.: achou um bug urgente que é de quem cuida do código ou da monitoração)? notify_agent com um
   resumo seu do que viu e do que precisa (não cole texto de cliente ou de fora), urgent só se for mesmo. Os agentes estão em list_agents.
 - Servidor de dev, testes ou watch que você subir em segundo plano: pare antes de terminar. Se deixar um servidor

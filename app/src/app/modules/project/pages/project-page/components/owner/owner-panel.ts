@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, input, signal } from '@angular/cor
 import { RouterLink } from '@angular/router';
 
 import { AgentsService } from '../../../../../../shared/services/agents/agents.service';
+import { ChatService } from '../../../../../../shared/services/chat/chat.service';
 import { OwnerState, Project } from '../../../../../../shared/services/projects/projects.model';
 import { ProjectsService } from '../../../../../../shared/services/projects/projects.service';
 import { RunsService } from '../../../../../../shared/services/runs/runs.service';
@@ -23,6 +24,8 @@ const KIND: Record<string, { label: string; tone: string }> = {
   fila_vazia: { label: 'Fila vazia', tone: 'text-mute' },
   rumo_atualizado: { label: 'Rumo atualizado', tone: 'text-frost' },
   alerta: { label: 'Alerta', tone: 'text-no' },
+  memoria_cresceu: { label: 'Curadoria da memória', tone: 'text-mute' },
+  dono_ligado: { label: 'Primeira passada', tone: 'text-yes' },
 };
 
 /**
@@ -42,7 +45,13 @@ const KIND: Record<string, { label: string; tone: string }> = {
           <div class="flex flex-wrap items-start gap-4">
             <span class="grid size-12 shrink-0 place-items-center rounded-2xl text-night" [style.background]="p.color"><app-icon name="agent" [size]="24" /></span>
             <div class="min-w-0 flex-1">
-              <h2 id="ow-title" class="font-display text-[22px] font-semibold leading-tight">{{ owner()?.name ?? 'Sem dono' }}</h2>
+              <div class="flex flex-wrap items-center gap-3">
+                <h2 id="ow-title" class="mr-auto font-display text-[22px] font-semibold leading-tight">{{ owner()?.name ?? 'Sem dono' }}</h2>
+                @if (owner(); as o) {
+                  <button type="button" class="btn btn-sm" (click)="talk(o.id)" title="Peça direto: ele planeja, executa e, se precisar, ajusta o time do projeto">
+                    <app-icon name="central" [size]="15" />Pedir ao dono</button>
+                }
+              </div>
               <p class="mt-1 max-w-[62ch] text-[13.5px] leading-relaxed text-mute">
                 O dono responde pelo resultado do projeto dentro do rumo que você aprovou: transforma ideias aprovadas e
                 insights em histórias, conserta o que voltou, ensina quem errou e só te chama no que é crítico.</p>
@@ -139,6 +148,10 @@ export class OwnerPanel {
   private readonly projects = inject(ProjectsService);
   private readonly agents = inject(AgentsService);
   private readonly runs = inject(RunsService);
+  private readonly chat = inject(ChatService);
+
+  /** conversa com o dono, já dizendo de qual projeto é o pedido */
+  protected talk(agentId: number): void { this.chat.compose(agentId, `Projeto ${this.project().name}: `); }
 
   readonly project = input.required<Project>();
   protected readonly state = signal<OwnerState | null>(null);

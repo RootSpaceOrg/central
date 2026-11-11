@@ -18,16 +18,16 @@ const IDLE_EVERY_H = 20;
 
 export type EventKind =
   | 'historia_validada' | 'historia_devolvida' | 'entrega_devolvida' | 'execucao_falhou' | 'decisao_respondida'
-  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu';
+  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado';
 
 const LABEL: Record<EventKind, string> = {
   historia_validada: 'história validada pelo Gustavo', historia_devolvida: 'história DEVOLVIDA pelo Gustavo ("não funcionou")',
   entrega_devolvida: 'entrega devolvida pelo Gustavo (pediu ajuste)', execucao_falhou: 'execução falhou',
   decisao_respondida: 'decisão respondida pelo Gustavo', ideia_aprovada: 'ideia aprovada pelo Gustavo (planejar)',
   insight: 'insight (cliente, conversa ou reunião)', fila_vazia: 'fila do projeto vazia', rumo_atualizado: 'rumo atualizado',
-  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)',
+  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)',
 };
-const URGENT: EventKind[] = ['historia_devolvida', 'alerta'];
+const URGENT: EventKind[] = ['historia_devolvida', 'alerta', 'dono_ligado'];
 
 /** execução que é uma passada do dono (o que ela emite não acorda o dono de novo) */
 export const isOwnerRun = (runId: number | null | undefined) =>
@@ -48,6 +48,7 @@ export function setOwnerOn(slug: string, on: boolean): void {
   const at = new Date().toISOString();
   if (on) run(`update events set handled_at = ? where project_slug = ? and handled_at is null`, at, slug);
   run('update projects set owner_on = ? where slug = ?', on ? 1 : 0, slug);
+  if (on) emitEvent(slug, 'dono_ligado', `ligado:${at}`, 'Primeira passada: organize o projeto para andar sozinho.');
 }
 
 const maxPerDay = (setting: (k: string) => string | null) => Math.max(1, Number(setting('owner:max_per_day')) || MAX_PER_DAY_DEFAULT);
@@ -120,6 +121,38 @@ const counts = (slug: string) => {
   return ['backlog', 'todo', 'doing', 'review', 'dev'].map(k => `${k} ${c.find(x => x.c === k)?.n ?? 0}`).join(', ');
 };
 
+/** só as instruções dos tipos de evento que vieram (o resto é ruído na passada) */
+const GUIDE: [EventKind[], string][] = [
+  [['ideia_aprovada', 'historia_validada', 'decisao_respondida', 'rumo_atualizado', 'alerta', 'insight', 'fila_vazia', 'dono_ligado'],
+    `   - Trabalho dentro do rumo: aja. Trabalho novo é uma história (create_task, título = o que o usuário vai conseguir fazer)
+     com as partes (create_task parent_id) e a história em "todo": o time executa sozinho. Ideia aprovada: planeje assim.`],
+  [['historia_devolvida', 'entrega_devolvida', 'execucao_falhou', 'alerta'],
+    `   - Erro (história devolvida, entrega devolvida, execução que falhou, alerta): descubra a causa (list_deliveries, a
+     execução, a nota do Gustavo), ponha o conserto em andamento (parte nova na história, column todo) e faça quem errou
+     aprender: regra nova nas instruções dele (get_agent, update_agent instructions_append) ou fato do projeto
+     (memory_remember). Se quebrou produção: o primeiro passo é reverter (tarefa prioridade 0 de revert/hotfix).`],
+  [['insight'],
+    `   - Insight: brincadeira, conversa solta ou ruído → ignore. Pequeno e no rumo → aja. Impactante (muda rumo, preço,
+     cobrança, dados de cliente, comunicação com cliente, produção que não é hotfix) → create_idea com triage
+     "precisa do operador — <motivo>". O que pode mudar o rumo: guarde como fato do projeto (memory_remember kind decision);
+     quando os sinais se somarem (vários insights, números, devoluções apontando para o mesmo lado), proponha o rumo novo
+     com propose_direction (o Gustavo aprova ou não). Nunca troque o rumo direto.`],
+  [['fila_vazia'], `   - Fila vazia: puxe o próximo passo do rumo e do marco atual (no máximo 2 histórias).`],
+  [['dono_ligado'],
+    `   - Primeira passada: (a) agrupe o backlog em histórias: tarefas soltas que entregam a mesma coisa ao usuário viram
+     partes de uma história (crie a história e use update_task parent_id; até 12 partes; títulos de usuário); tarefas
+     repetidas: fique com uma e mova as outras para done dizendo "duplicada da #N". (b) Olhe o time (list_agents,
+     list_boards, list_routines): o que está repetido, sem uso ou amarrado a horário sem precisar (ex.: a mesma rotina
+     copiada várias vezes) vira UMA proposta de simplificação (create_decision com o antes e o depois). (c) Ponha o próximo
+     passo do rumo para andar. O limite de 3 histórias novas não vale para agrupar o que já existe.`],
+  [['memoria_cresceu'],
+    `   - Curadoria: a memória do projeto é uma só. Leia a do projeto (memory_recall, limit 30, algumas buscas) e a dos
+     agentes do projeto (list_agent_memories). O que é sobre o projeto e está na memória de um agente:
+     move_memory_to_project. Fatos repetidos ou que se contradizem: fique com o certo e aposente os outros com
+     memory_supersede (motivo + substituto). Nada se apaga: tudo fica com o motivo. Não mexa no que é jeito de trabalhar.`],
+];
+const guide = (kinds: EventKind[]) => GUIDE.filter(([k]) => k.some(x => kinds.includes(x))).map(([, t]) => t).join('\n');
+
 export function ownerPrompt(slug: string, name: string, evs: { kind: EventKind; ref: string; summary: string; created_at: string }[]): string {
   const hhmm = (iso: string) => new Date(iso.endsWith('Z') ? iso : `${iso}Z`).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const decisions = get<{ n: number }>(`select count(*) n from proposals where project_slug = ? and status = 'proposed'`, slug)!.n;
@@ -135,22 +168,7 @@ Leia antes o que precisar: get_direction (rumo), list_milestones, list_tasks, li
 
 O que fazer (só com as ferramentas da Central; nesta passada você não edita código nem roda o produto):
 1. Para cada evento, decida: agir, registrar ou escalar.
-   - Trabalho dentro do rumo: aja. Trabalho novo é uma história (create_task, título = o que o usuário vai conseguir fazer)
-     com as partes (create_task parent_id) e a história em "todo": o time executa sozinho. Ideia aprovada: planeje assim.
-   - Erro (história devolvida, entrega devolvida, execução que falhou): descubra a causa (list_deliveries, a execução, a nota
-     do Gustavo), ponha o conserto em andamento (parte nova na história, column todo) e faça quem errou aprender: regra nova
-     nas instruções dele (get_agent, update_agent instructions_append) ou fato do projeto (memory_remember). Se quebrou
-     produção: o primeiro passo é reverter (tarefa prioridade 0 de revert/hotfix), depois o resto.
-   - Insight: brincadeira, conversa solta ou ruído → ignore. Pequeno e no rumo → aja. Impactante (muda rumo, preço,
-     cobrança, dados de cliente, comunicação com cliente, produção que não é hotfix) → create_idea com triage
-     "precisa do operador — <motivo>". O que pode mudar o rumo: guarde como fato do projeto (memory_remember kind decision);
-     quando os sinais se somarem (vários insights, números, devoluções apontando para o mesmo lado), proponha o rumo novo
-     com propose_direction (o Gustavo aprova ou não). Nunca troque o rumo direto.
-   - Fila vazia: puxe o próximo passo do rumo e do marco atual (no máximo 2 histórias).
-   - Memória cresceu (curadoria): a memória do projeto é uma só. Leia a do projeto (memory_recall, limit 30, algumas buscas)
-     e a dos agentes do projeto (list_agent_memories). O que é sobre o projeto e está na memória de um agente:
-     move_memory_to_project. Fatos repetidos ou que se contradizem: fique com o certo e aposente os outros com
-     memory_supersede (motivo + substituto). Nada se apaga: tudo fica com o motivo. Não mexa no que é jeito de trabalhar.
+${guide(evs.map(e => e.kind))}
 2. Interrompa o Gustavo (create_decision) SÓ no crítico: produção com impacto no usuário que não seja hotfix, dinheiro,
    dados de cliente, comunicação com cliente, mudança de rumo. Mudança de tela, ajuste, bug, dev: decida você.
 3. Time (agentes, quadros, rotinas): mude quando o Gustavo pediu. Por iniciativa sua, proponha com create_decision.

@@ -64,7 +64,11 @@ ok(open() === 1, 'dedupe por tipo + referência');
 // desligado: não acorda; ligar ignora o que já estava pendente
 ok(await o.dispatchOwners(deps()) === 0, 'dono desligado não acorda');
 o.setOwnerOn('kultivai', true);
-ok(open() === 0, 'ligar ignora o passado (não acorda com histórico)');
+ok(open() === 1 && db.prepare("select kind from events where handled_at is null").get().kind === 'dono_ligado', 'ligar ignora o passado e pede a primeira passada');
+await o.dispatchOwners(deps());
+ok(started.length === 1 && started[0].prompt.includes('Primeira passada'), 'primeira passada acorda na hora');
+db.exec("update runs set status = 'succeeded'");
+started = [];
 
 // debounce: evento novo espera juntar; urgente acorda na hora
 o.emitEvent('kultivai', 'ideia_aprovada', 'ideia:9', '#9 Exportar boletim');

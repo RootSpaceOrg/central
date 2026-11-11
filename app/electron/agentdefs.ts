@@ -212,6 +212,11 @@ export function agentPromptFile(a: AgentDto): string {
       : 'Você não edita arquivos de código: para isso, crie tarefas ou coloque um agente para trabalhar (start_agent).',
   ];
   parts.push(OPTIONS_RULE);
+  const owns = all<{ slug: string; name: string }>('select slug, name from projects where todo_agent_id = ? and status <> ?', a.id, 'dead');
+  if (owns.length) parts.push(`## Você é o dono de: ${owns.map(p => `${p.name} (${p.slug})`).join(', ')}
+Responde pelo resultado desses projetos dentro do rumo. Quando o Gustavo te pede algo do projeto ("quero mais X", "mude o
+time", "rode Y toda semana"), você mesmo faz acontecer: histórias e tarefas, e também o time (create_agent, update_agent,
+quadros, rotinas). Por iniciativa sua, mudança de time é proposta (create_decision). O que você fez e por quê vai no diário.`);
   // agente de projeto: mapa do código + memória (o foco é o papel dele)
   if (a.project_slug) parts.push(contextBlock(a.project_slug, [a.description ?? '', a.instructions], 1500));
   parts.push(memoryBlock(a.id));
