@@ -13,6 +13,7 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe, RefsPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
+import { Select, SelectOption } from '../../../../shared/ui/select';
 import { CockpitService } from '../../services/cockpit/cockpit.service';
 import { InstrumentCard } from '../cockpit-page/components/instrument/instrument';
 import { OneOnOne } from './components/one-on-one/one-on-one';
@@ -26,7 +27,7 @@ const SUGGESTIONS = ['Organize o rumo comigo', 'Repense o time para esse rumo', 
  */
 @Component({
   selector: 'app-product-room',
-  imports: [AgoPipe, ChatView, Icon, InstrumentCard, MarkdownPipe, OneOnOne, ProjectAvatar, RefsPipe, RouterLink],
+  imports: [AgoPipe, ChatView, Icon, InstrumentCard, MarkdownPipe, OneOnOne, ProjectAvatar, RefsPipe, RouterLink, Select],
   host: { class: 'grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]' },
   templateUrl: './product-room.html',
 })
@@ -49,6 +50,14 @@ export class ProductRoom {
   /** o tech lead também é o dono (não há dono só de negócio) */
   protected readonly sameAgent = computed(() => !this.project()?.ownerAgentId);
   protected readonly creating = signal(false);
+  /** agentes para os papéis: os do produto primeiro, com rosto */
+  protected readonly agentOptions = computed<SelectOption[]>(() => {
+    const p = this.project();
+    const mine = new Set([p?.slug, p?.parentSlug].filter(Boolean));
+    return this.candidates()
+      .map(a => ({ value: String(a.id), label: a.name, avatar: a, group: mine.has(a.projectSlug ?? '') ? 'Deste produto' : 'Outros', hint: null }))
+      .sort((x, y) => Number(x.group !== 'Deste produto') - Number(y.group !== 'Deste produto'));
+  });
   protected readonly instrument = computed(() => this.cockpit.companies().flatMap(c => c.products).find(p => p.slug === this.slug()) ?? null);
   /** o 1:1 aberto deste produto (ou null) */
   protected readonly guide = computed(() => this.guides.openFor(this.slug(), false, 'dono'));

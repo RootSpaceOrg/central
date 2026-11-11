@@ -20,10 +20,8 @@
           @if (owner(); as o) { <app-project-avatar [project]="o" [size]="34" /> }
           <div class="leading-tight">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-faint">Dono</p>
-            <select class="-ml-1 max-w-[210px] bg-transparent text-[14px] font-semibold outline-none" (change)="setOwner($any($event.target).value)" aria-label="Dono do produto">
-              <option value="" [selected]="sameAgent()">{{ tech() ? 'o tech lead (' + tech()!.name + ')' : 'ninguém' }}</option>
-              @for (a of candidates(); track a.id) { <option [value]="'' + a.id" [selected]="!sameAgent() && a.id === p.ownerAgentId">{{ a.name }}</option> }
-            </select>
+            <app-select class="mt-0.5 block w-[230px]" [compact]="true" [options]="agentOptions()" [value]="p.ownerAgentId ? '' + p.ownerAgentId : ''"
+                        (valueChange)="setOwner($event)" [noneLabel]="tech() ? 'o tech lead (' + tech()!.name + ')' : 'ninguém'" label="Dono do produto" [minWidth]="300" />
             @if (sameAgent() && tech()) {
               <button type="button" class="block text-[11.5px] text-frost hover:underline disabled:opacity-50" [disabled]="creating()" (click)="createOwner()"
                       title="Um agente só de negócio para falar com você; o tech lead fica no técnico">{{ creating() ? 'criando…' : '+ criar um dono de negócio' }}</button>
@@ -33,10 +31,8 @@
         <span class="h-8 w-px bg-edge"></span>
         <div class="leading-tight">
           <p class="text-[11px] font-semibold uppercase tracking-wider text-faint">Tech lead</p>
-          <select class="-ml-1 max-w-[190px] bg-transparent text-[14px] font-semibold outline-none" (change)="setTech($any($event.target).value)" aria-label="Tech lead (quem executa)">
-            <option value="" [selected]="!tech()">ninguém</option>
-            @for (a of candidates(); track a.id) { <option [value]="'' + a.id" [selected]="a.id === p.todoAgentId">{{ a.name }}</option> }
-          </select>
+          <app-select class="mt-0.5 block w-[210px]" [compact]="true" [options]="agentOptions()" [value]="p.todoAgentId ? '' + p.todoAgentId : ''"
+                      (valueChange)="setTech($event)" noneLabel="ninguém" label="Tech lead" [minWidth]="300" />
           @if (!tech()) { <p class="text-[11.5px] text-faint">histórias esperam quem execute</p> }
         </div>
         @if (owner()) {
