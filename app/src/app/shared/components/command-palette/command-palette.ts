@@ -73,7 +73,7 @@ export class CommandPalette {
 
   private readonly commands = computed<Command[]>(() => {
     const go = (url: string) => () => this.router.navigateByUrl(url);
-    const talk = (id: number) => () => { this.chat.selectAgent(id); this.chat.open.set(true); };
+    const talk = (id: number) => () => this.chat.talkTo(id);
     return [
       { section: 'Ações', label: 'Nova tarefa', icon: 'plus', run: () => this.dialogs.newTask() },
       { section: 'Ações', label: 'Mandar tarefa para um agente', icon: 'play', run: () => this.dialogs.newRun() },
@@ -146,9 +146,7 @@ export class CommandPalette {
   private askCentral(text: string): void {
     const c = this.agents.central();
     if (!c) return;
-    this.chat.selectAgent(c.id);
-    this.chat.newChat(c.id);
-    this.chat.open.set(true);
+    this.chat.compose(c.id, '');
     this.chat.send(text);
   }
 

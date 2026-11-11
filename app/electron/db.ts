@@ -271,6 +271,29 @@ db.exec(`
     at           text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
   );
 
+  -- números do produto como dado: combinados no 1:1 ou propostos pelo dono; o dono mede na frequência combinada
+  -- quebrou de verdade (emit_event critical): vermelho no cockpit até alguém resolver
+  create table if not exists alerts (
+    id           integer primary key autoincrement,
+    project_slug text not null,
+    ref          text not null,
+    summary      text not null,
+    created_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    resolved_at  text
+  );
+
+  create table if not exists metric_defs (
+    id           integer primary key autoincrement,
+    project_slug text not null,
+    name         text not null,
+    unit         text,
+    how          text not null,
+    every_hours  integer not null default 24,
+    target       real,
+    active       integer not null default 1,
+    unique (project_slug, name)
+  );
+
   create table if not exists run_procs (
     id         integer primary key autoincrement,
     run_id     integer not null,
@@ -500,7 +523,7 @@ for (const [table, column, type] of [
   ['agents', 'room', "text not null default ''"], ['tasks', 'stage', 'text'], ['runs', 'stage', 'text'], ['runs', 'board_id', 'integer'], ['board_cols', 'color', 'text'], ['tasks', 'color', 'text'], ['proposals', 'task_id', 'integer'], ['projects', 'done_when', "text not null default 'merge'"], ['runs', 'waiting', 'text'], ['agents', 'look', "text not null default ''"],
   ['projects', 'todo_agent_id', 'integer'], ['projects', 'todo_parallel', 'integer not null default 1'], ['projects', 'todo_hours', "text not null default ''"],
   ['ideas', 'triaged_at', 'text'], ['ideas', 'triage', 'text'], ['wa_contacts', 'account', 'text'], ['wa_outbox', 'account', 'text'],
-  ['agents', 'restricted', 'integer not null default 0'], ['chats', 'contact', 'text'], ['tasks', 'depends_on', 'text'], ['proposals', 'summary', 'text'], ['chats', 'add_dirs', 'text'], ['runs', 'grants', 'text'], ['runs', 'board_moved', 'integer not null default 0'], ['routines', 'kind', "text not null default 'agent'"], ['routines', 'shell', "text not null default ''"], ['routines', 'on_fail_agent', 'integer'], ['routines', 'interval_minutes', 'integer'], ['agents', 'add_dirs', 'text'], ['chats', 'allow_tools', 'text'], ['chats', 'yolo', 'integer not null default 0'], ['proposals', 'options', 'text'], ['proposals', 'agent_id', 'integer'], ['proposals', 'origin_chat', 'integer'], ['proposals', 'origin_run', 'integer'], ['guides', 'focus', 'text'], ['guides', 'kind', "text not null default 'rumo'"], ['runs', 'dismissed', 'integer not null default 0'], ['ideas', 'seen_at', 'text'], ['tasks', 'picked_at', 'text'], ['tasks', 'parent_id', 'integer'], ['projects', 'owner_on', 'integer not null default 0'], ['projects', 'dev_url', 'text'], ['projects', 'dev_login', 'text'], ['deliveries', 'video', 'text'],
+  ['agents', 'restricted', 'integer not null default 0'], ['chats', 'contact', 'text'], ['tasks', 'depends_on', 'text'], ['proposals', 'summary', 'text'], ['chats', 'add_dirs', 'text'], ['runs', 'grants', 'text'], ['runs', 'board_moved', 'integer not null default 0'], ['routines', 'kind', "text not null default 'agent'"], ['routines', 'shell', "text not null default ''"], ['routines', 'on_fail_agent', 'integer'], ['routines', 'interval_minutes', 'integer'], ['agents', 'add_dirs', 'text'], ['chats', 'allow_tools', 'text'], ['chats', 'yolo', 'integer not null default 0'], ['proposals', 'options', 'text'], ['proposals', 'agent_id', 'integer'], ['proposals', 'origin_chat', 'integer'], ['proposals', 'origin_run', 'integer'], ['guides', 'focus', 'text'], ['guides', 'kind', "text not null default 'rumo'"], ['runs', 'dismissed', 'integer not null default 0'], ['ideas', 'seen_at', 'text'], ['tasks', 'picked_at', 'text'], ['tasks', 'parent_id', 'integer'], ['projects', 'owner_on', 'integer not null default 0'], ['projects', 'dev_url', 'text'], ['projects', 'dev_login', 'text'], ['deliveries', 'video', 'text'], ['projects', 'one_on_one', 'text'], ['projects', 'one_on_one_at', 'text'],
   ['agents', 'priority', "text not null default 'normal'"], ['runs', 'priority', 'integer not null default 1'],
   ['runs', 'paused', 'text'], ['runs', 'resume', 'text'], ['runs', 'checkpoint', 'text'],
   ['runs', 'parent_run_id', 'integer'], ['runs', 'depth', 'integer not null default 0'], ['runs', 'handoff_from', 'integer'],

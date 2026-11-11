@@ -167,8 +167,7 @@ export class HomePage {
   }
 
   protected talk(agentId: number): void {
-    this.chat.selectAgent(agentId);
-    this.chat.open.set(true);
+    this.chat.talkTo(agentId);
   }
 
   /** conversa sobre o PR em revisão, no projeto */

@@ -13,7 +13,7 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe, RefsPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
-import { Guide, GuideCard, GuidePlanItem, GuidesService } from '../../services/guides/guides.service';
+import { Guide, GuideCard, GuidePlanItem, GuidesService } from '../../../../shared/services/guides/guides.service';
 
 const STEPS = [
   { n: 1, label: 'Retrato' },

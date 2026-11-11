@@ -28,15 +28,17 @@ import { digest, listDeliveries, reviewDelivery, reviewBoard, setVideoDir, video
 // vídeos das entregas: a tela toca por central-media://v/<arquivo> (só a pasta de vídeos da Central)
 protocol.registerSchemesAsPrivileged([{ scheme: 'central-media', privileges: { stream: true, supportFetchAPI: true, standard: true, secure: true } }]);
 import { dispatchTodo, dispatchTriage } from './dispatch';
-import { dispatchOwners, ownerDiary, pendingEvents, setOwnerOn } from './owner';
+import { dispatchOwners, onCriticalAlert, ownerDiary, pendingEvents, resolveAlert, setOwnerOn } from './owner';
 import { listOperatorActions, onDecided, onDirection, onIdea, onReviewed, onTaskMoved } from './operator';
 import { pulse } from './pulse';
+import { cockpit } from './cockpit';
+import './oneonone';
 import { meetingPrompt } from './insights';
 import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
 import { getUsage, usageNow } from './usage';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
 import { analyzeVideo, initMedia, prepareLocal, setSttConfig, sttStatus, transcribeFile } from './media';
-import { inbound as waInbound, testPresence as waPresence, initWhatsApp, chatsStatus, digestListened, listContacts, listGroups, pairAccount, setAccountAgent, setAccountOpen, setChatCfgs, setSender as waSetSender, waStatus } from './whatsapp';
+import { inbound as waInbound, testPresence as waPresence, initWhatsApp, chatsStatus, digestListened, notifyOwners, listContacts, listGroups, pairAccount, setAccountAgent, setAccountOpen, setChatCfgs, setSender as waSetSender, waStatus } from './whatsapp';
 import { releaseStatus, releaseSummary } from './release';
 import { createMemory, deleteMemory, forgetMemory, listMemories, updateMemory } from './memories';
 import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reorderMilestones, updateMilestone } from './roadmap';
@@ -151,6 +153,9 @@ const navigate = (route: string) => send('app:navigate', route);
 const toast = (title: string, body: string, route: string | null, kind: NotifKind = 'system', ok = true) => { if (!CAPTURE) notify(title, body, route, () => win, navigate, kind, ok); };
 // a falha da rotina de comando já avisa como execução (abaixo); não avisa duas vezes
 onRoutineFail(() => {});
+// quebrou de verdade (emit_event critical): Windows + WhatsApp, e o cockpit fica vermelho
+onCriticalAlert((title, body) => { toast(title, body, '/', 'system', false); notifyOwners(`🚨 ${title}
+${body}`); send('projects:changed', null); });
 /** avisa uma vez quando cada execução termina (o tipo decide se avisa: Preferências → Notificações) */
 const notified = new Set<number>();
 const notifiedWaiting = new Set<number>();
@@ -313,6 +318,8 @@ function registerIpc(): void {
   handle('direction:set', (slug, text, note) => { const d = setDirection(slug, text, 'gustavo', note); onDirection(slug, note); changed(); return d; });
   handle('owner:get', slug => ({ on: !!get<{ o: number }>('select owner_on o from projects where slug = ?', slug)?.o, diary: ownerDiary(slug), pending: pendingEvents(slug), actions: listOperatorActions(slug, 30) }));
   handle('pulse:get', () => pulse());
+  handle('cockpit:get', () => cockpit());
+  handle('alerts:resolve', id => { resolveAlert(id); changed(); });
   handle('owner:set', (slug, on) => { setOwnerOn(slug, on); changed(); });
   handle('insights:meeting', async ({ title, text, file, project_slug }) => {
     let body = text?.trim() ?? '';

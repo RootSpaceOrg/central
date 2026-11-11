@@ -215,3 +215,33 @@ a.ref-link:hover { text-decoration-style: solid; }
 .o3-say.o3-talk small { color: #6b5a2a; opacity: 1; }
 @keyframes o3-pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .o3-say.o3-talk { animation: none; } }
+
+
+/* ---------- Cockpit: vivo, mas contido ---------- */
+/* instrumento entrando na tela: sobe e acende, em cascata (--i = posição) */
+@keyframes ck-rise { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+.ck-rise { animation: ck-rise .55s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 55ms); }
+/* a linha de cor no topo do produto: um brilho passa por ela enquanto alguém trabalha */
+.ck-edge { position: absolute; inset: 0 0 auto 0; height: 2px; background: linear-gradient(90deg, transparent, var(--c) 18%, var(--c) 82%, transparent); opacity: .55; }
+@keyframes ck-sheen { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.ck-edge.live::after { content: ''; position: absolute; inset: -1px 0; width: 38%; background: linear-gradient(90deg, transparent, #fff, transparent); opacity: .7; animation: ck-sheen 2.6s ease-in-out infinite; }
+/* aura do produto quando algo pede atenção (alerta) */
+@keyframes ck-alarm { 0%, 100% { box-shadow: 0 0 0 1px rgb(240 113 103 / .55), 0 0 28px -8px rgb(240 113 103 / .55); } 50% { box-shadow: 0 0 0 1px rgb(240 113 103 / .9), 0 0 42px -6px rgb(240 113 103 / .75); } }
+.ck-alarm { animation: ck-alarm 2.2s ease-in-out infinite; }
+/* o anel do dono: girando quando trabalha, respirando quando espera você */
+@keyframes ck-spin { to { transform: rotate(360deg); } }
+.ck-ring-work { animation: ck-spin 3.2s linear infinite; }
+@keyframes ck-breathe { 0%, 100% { opacity: .45; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+.ck-ring-wait { animation: ck-breathe 1.8s ease-in-out infinite; }
+/* algo acabou de acontecer no produto: uma onda sai do cartão */
+@keyframes ck-ping { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 55%, transparent); } to { box-shadow: 0 0 0 18px transparent; } }
+.ck-ping { animation: ck-ping 1.1s ease-out; }
+/* barras do ritmo crescendo */
+@keyframes ck-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.ck-bar { transform-origin: bottom; animation: ck-grow .7s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 30ms + 200ms); }
+/* anel da meta desenhando */
+@keyframes ck-draw { from { stroke-dashoffset: var(--len); } }
+.ck-draw { animation: ck-draw 1.1s cubic-bezier(.2, .8, .2, 1) both; animation-delay: .25s; }
+@media (prefers-reduced-motion: reduce) {
+  .ck-rise, .ck-edge.live::after, .ck-alarm, .ck-ring-work, .ck-ring-wait, .ck-ping, .ck-bar, .ck-draw { animation: none; }
+}

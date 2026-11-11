@@ -11,7 +11,7 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe, RefsPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
-import { Guide, GuidePlanItem, GuidesService, Pilot } from '../../services/guides/guides.service';
+import { Guide, GuidePlanItem, GuidesService, Pilot } from '../../../../shared/services/guides/guides.service';
 
 const KIND: Record<string, string> = {
   rumo: 'rumo', marco: 'marco', tarefa: 'tarefa', ideia: 'ideia', cortar: 'cortar', agente: 'agente', agencia: 'para o Time',

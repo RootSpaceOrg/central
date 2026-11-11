@@ -57,6 +57,28 @@ export interface ProjectDto {
   dev_login?: string | null;
 }
 
+/** Cockpit: produtos por empresa, com os instrumentos de cada um */
+export interface CockpitProduct {
+  slug: string; name: string; color: string; icon_kind: string; icon_value: string | null; parent_slug: string | null;
+  owner: { id: number; name: string; color: string; icon_kind: string; icon_value: string | null } | null;
+  owner_on: boolean;
+  /** working = o dono está numa passada; waiting = espera o Gustavo (decisão ou pedido de 1:1); watching = ligado, atento;
+   *  off = dono existe mas não age sozinho; none = sem dono */
+  owner_state: 'working' | 'waiting' | 'watching' | 'off' | 'none';
+  focus: string | null;
+  milestone: { title: string; target: string | null; total: number; done: number } | null;
+  rhythm: { days: number[]; delivered_7d: number; validated_7d: number; returned_7d: number };
+  metrics: { name: string; unit: string | null; value: number | null; prev: number | null; target: number | null; at: string | null; every_hours: number | null }[];
+  alerts: { id: number; summary: string; at: string }[];
+  returned: number; to_validate: number; decisions: number; active_runs: number; stories_open: number;
+  one_on_one: { why: string; at: string | null } | null;
+  guide_open: number | null;
+  diary: { text: string | null; at: string } | null;
+}
+export interface CockpitDto {
+  companies: { slug: string; name: string; color: string; icon_kind: string; icon_value: string | null; products: CockpitProduct[] }[];
+}
+
 /** a semana da Central: histórias validadas/devolvidas e o resultado de cada produto */
 export interface PulseDto {
   validated: number;
@@ -297,7 +319,7 @@ export interface GuideCard {
 /** Guiar projeto: um item do plano (etapa 3); when = o que o Gustavo escolheu */
 export interface GuidePlanItem {
   id: string;
-  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente' | 'agencia' | 'criar_agente' | 'ajustar_agente' | 'aposentar_agente' | 'quadro' | 'rotina' | 'dono_todo';
+  kind: 'rumo' | 'marco' | 'tarefa' | 'ideia' | 'cortar' | 'agente' | 'agencia' | 'criar_agente' | 'ajustar_agente' | 'aposentar_agente' | 'quadro' | 'rotina' | 'dono_todo' | 'historia' | 'metrica';
   title: string;
   detail?: string;
   /** por quê, em uma linha (a decisão ou o motivo que levou a este item) */
@@ -345,8 +367,8 @@ export interface GuideDto {
   minutes: string | null;
   /** o que o Gustavo disse que quer focar (antes das decisões) */
   focus: string | null;
-  /** rumo = Guiar; agencia = time de agentes */
-  kind: 'rumo' | 'agencia';
+  /** rumo = Guiar; agencia = time de agentes; dono = 1:1 com o dono do produto */
+  kind: 'rumo' | 'agencia' | 'dono';
   created_at: string;
   approved_at: string | null;
   finished_at: string | null;
@@ -1194,7 +1216,7 @@ export interface Api {
   'pilot:approve': (id: number) => void;
   'pilot:feedback': (id: number, text: string) => void;
   'pilot:abandon': (id: number) => void;
-  'guides:start': (projectSlug: string, direct: boolean, focus: string | null, kind: 'rumo' | 'agencia') => GuideDto;
+  'guides:start': (projectSlug: string, direct: boolean, focus: string | null, kind: 'rumo' | 'agencia' | 'dono') => GuideDto;
   'guides:talk': (id: number) => void;
   /** retrato do time ao vivo (tela Agência, sem sessão) */
   'agency:team': (projectSlug: string, direct: boolean) => Record<string, unknown>;
@@ -1213,6 +1235,8 @@ export interface Api {
   'owner:get': (projectSlug: string) => OwnerDto;
   'owner:set': (projectSlug: string, on: boolean) => void;
   'pulse:get': () => PulseDto;
+  'cockpit:get': () => CockpitDto;
+  'alerts:resolve': (id: number) => void;
   /** reunião: texto colado ou arquivo (áudio, vídeo, .txt) escolhido na hora; um agente tira os insights para os donos */
   'insights:meeting': (input: { title: string; text: string | null; file: boolean; project_slug: string | null }) => number | null;
   /** gestor do projeto: lê rumo, ideias aprovadas, backlog e código e organiza o backlog (execução de agente) */

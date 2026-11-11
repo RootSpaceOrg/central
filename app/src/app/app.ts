@@ -90,7 +90,7 @@ export class App {
 
   /** barra de ícones: telas irmãs ficam juntas num ícone e viram abas no topo da tela (as rotas antigas continuam valendo) */
   private readonly operatorNav: NavItem[] = [
-    { path: '/', label: 'Mesa', icon: 'desk', tabs: [{ path: '/', label: 'Mesa' }, { path: '/painel', label: 'Painel' }, { path: '/visao-geral', label: 'Visão geral' }] },
+    { path: '/', label: 'Cockpit', icon: 'desk', tabs: [{ path: '/', label: 'Cockpit' }, { path: '/painel', label: 'Painel' }, { path: '/visao-geral', label: 'Visão geral' }] },
     { path: '/triagem', label: 'Triagem e ideias', icon: 'inbox', tabs: [{ path: '/triagem', label: 'Triagem' }, { path: '/ideias', label: 'Ideias' }] },
     { path: '/revisao', label: 'Revisão (entregas esperando o seu olhar)', icon: 'pr' },
     { path: '/estudio', label: 'Estúdio (rumo, time e piloto automático)', icon: 'compass' },
@@ -107,8 +107,7 @@ export class App {
     const pinned = this.pinnable().filter(n => this.layout.pinned().includes(n.path));
     const lit = new Set(pinned.flatMap(n => (n.tabs ?? [n]).map(t => t.path)));
     return [
-      { path: '/', label: 'Mesa (o que é seu: usar, decidir, seus produtos)', icon: 'desk' },
-      { path: '/estudio', label: 'Estúdio (rumo, time e piloto automático)', icon: 'compass' },
+      { path: '/', label: 'Cockpit (seus produtos, o que é seu e o chefe de gabinete)', icon: 'desk', also: ['/produtos'] },
       ...pinned,
       // os Bastidores acendem nas telas de operação que não estão fixadas
       { path: '/bastidores', label: 'Bastidores (a operação por dentro; botão direito na barra fixa telas aqui)', icon: 'layers', also: BACKSTAGE.filter(p => !lit.has(p)) },
@@ -130,8 +129,10 @@ export class App {
       { label: on ? 'Voltar ao modo diretor (barra enxuta)' : 'Modo operador (todas as telas)', icon: 'layers', run: () => this.layout.setOperator(!on) },
     ]);
   }
-  /** na Mesa do modo diretor, a lista de projetos sai: os produtos já estão na própria Mesa */
-  protected readonly bareDesk = computed(() => !this.layout.operator() && this.scope.path() === '/');
+  /** no cockpit e na sala do produto (modo diretor), a lista de projetos sai: os produtos já estão na tela */
+  protected readonly bareDesk = computed(() => !this.layout.operator() && (this.scope.path() === '/' || this.scope.path().startsWith('/produtos/')));
+  /** no cockpit o chefe de gabinete já mora na coluna: o painel flutuante não abre por cima */
+  protected readonly onCockpit = computed(() => this.scope.path() === '/');
   /** o que é do Gustavo (selo da Mesa): histórias para usar, decisões e agentes esperando ele */
   protected readonly forYou = computed(() => {
     const byTask = new Map(this.tasks.tasks().map(t => [t.id, t]));

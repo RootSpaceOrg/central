@@ -15,7 +15,8 @@ const db = new DatabaseSync(':memory:');
 db.exec(\`
   create table agents (id integer primary key, name text, priority text default 'normal', project_slug text);
   insert into agents (id, name, project_slug) values (6, 'Tech Lead', 'kultivai'), (7, 'Montador', 'kultivai');
-  create table projects (slug text primary key, name text, color text default '#fff', status text default 'active', todo_agent_id integer, owner_on integer default 0, position integer default 0);
+  create table projects (slug text primary key, name text, color text default '#fff', status text default 'active', todo_agent_id integer, owner_on integer default 0, position integer default 0, one_on_one text, one_on_one_at text);
+  create table routines (id integer primary key, name text, project_slug text, enabled integer default 1);
   insert into projects (slug, name, todo_agent_id) values ('kultivai', 'KultivAi', 6), ('solto', 'Solto', null);
   create table runs (id integer primary key, project_slug text, prompt text, status text, result text, created_at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')));
   create table directions (id integer primary key, project_slug text, text text);
@@ -35,14 +36,16 @@ db.exec(\`
   create table events (id integer primary key autoincrement, project_slug text not null, kind text not null, ref text not null, summary text not null,
     urgent integer not null default 0, from_owner integer not null default 0, created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')), handled_at text, pass_run_id integer);
   create unique index events_open on events (project_slug, kind, ref) where handled_at is null;
+  create table metric_defs (id integer primary key autoincrement, project_slug text, name text, unit text, how text, every_hours integer default 24, target real, active integer default 1, unique (project_slug, name));
+  create table alerts (id integer primary key autoincrement, project_slug text, ref text, summary text, created_at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')), resolved_at text);
   create table operator_actions (id integer primary key autoincrement, at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')), action text, target text, project_slug text, context text, reason text);
   insert into tasks (id, project_slug, "column", title) values (1, 'kultivai', 'todo', 'Algo em andamento');
 \`);
 module.exports = { db, now: () => new Date().toISOString(), all: (s, ...a) => db.prepare(s).all(...a), get: (s, ...a) => db.prepare(s).get(...a), run: (s, ...a) => db.prepare(s).run(...a) };`);
 const opts = { bundle: true, platform: 'node', format: 'cjs', logLevel: 'error', plugins: [{ name: 'db', setup: b => b.onResolve({ filter: /^\.\/db$/ }, () => ({ path: stub, external: true })) }] };
-for (const [m, out] of [['owner', 'o'], ['operator', 'p'], ['insights', 'i'], ['pulse', 'u']]) await build({ ...opts, entryPoints: [join(root, `electron/${m}.ts`)], outfile: join(dir, `${out}.js`) });
+for (const [m, out] of [['owner', 'o'], ['operator', 'p'], ['insights', 'i'], ['pulse', 'u'], ['metrics', 'm']]) await build({ ...opts, entryPoints: [join(root, `electron/${m}.ts`)], outfile: join(dir, `${out}.js`) });
 const req = createRequire(import.meta.url);
-const [o, p, ins, u] = ['o', 'p', 'i', 'u'].map(x => req(join(dir, `${x}.js`)));
+const [o, p, ins, u, mt] = ['o', 'p', 'i', 'u', 'm'].map(x => req(join(dir, `${x}.js`)));
 const { db } = req(stub);
 const ok = (c, m) => { if (!c) throw new Error(m); };
 const open = () => db.prepare('select count(*) n from events where handled_at is null').get().n;
@@ -143,4 +146,27 @@ u.reportMetric('kultivai', 'Posts publicados', 14, 'posts', 'semana boa');
 const m = u.pulse().projects.find(x => x.slug === 'kultivai').metrics[0];
 ok(m.value === 14 && m.prev === 10, 'métrica guarda a leitura anterior');
 ok(u.pulse().projects.find(x => x.slug === 'kultivai').focus === 'Post variado todo dia.', 'foco do rumo numa linha');
+// número combinado (sem deploy): vencido, vira evento para o dono medir; medido, só de novo no próximo intervalo
+ok(/Combinei/.test(mt.defineMetric('kultivai', { name: 'Assinantes', unit: null, how: 'painel Stone > assinaturas ativas', every_hours: 24, target: 300 })), 'combina número');
+ok(/Atualizei/.test(mt.defineMetric('kultivai', { name: 'Assinantes', how: 'painel Stone', every_hours: 12, target: 300 })), 'mesmo nome atualiza');
+ok(mt.dueMetrics('kultivai').some(d => d.name === 'Assinantes'), 'nunca medido: vencido');
+db.exec("update events set handled_at = 'x'; update runs set status = 'succeeded'");
+await o.dispatchOwners(deps());
+ok(db.prepare("select count(*) n from events where kind = 'medir'").get().n === 1, 'vencido: evento para medir');
+u.reportMetric('kultivai', 'Assinantes', 120, null, null);
+ok(!mt.dueMetrics('kultivai').some(d => d.name === 'Assinantes'), 'medido agora: não vence');
+let err = ''; try { mt.defineMetric('kultivai', { name: 'X', how: '' }); } catch (e) { err = e.message; } ok(/como medir/.test(err), 'precisa dizer de onde vem');
+
+// quebrou de verdade: avisa uma vez por referência (Windows/WhatsApp), fica até resolver
+const sent = [];
+o.onCriticalAlert((t, b) => sent.push(t));
+o.criticalAlert('kultivai', 'Cobrança falhando para todos', 'stone-500');
+o.criticalAlert('kultivai', 'Cobrança falhando para todos', 'stone-500');
+ok(sent.length === 1 && db.prepare("select count(*) n from alerts where resolved_at is null").get().n === 1, 'alerta crítico uma vez');
+o.resolveAlert(db.prepare('select id from alerts').get().id);
+ok(db.prepare("select count(*) n from alerts where resolved_at is null").get().n === 0, 'resolvido sai do cockpit');
+
+// pedido de 1:1 fica no produto
+mt.requestOneOnOne('kultivai', 'Repensar o time da Linha');
+ok(db.prepare("select one_on_one from projects where slug = 'kultivai'").get().one_on_one === 'Repensar o time da Linha', 'pedido de 1:1');
 console.log('owner ok');

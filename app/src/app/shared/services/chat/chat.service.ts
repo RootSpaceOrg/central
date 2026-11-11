@@ -1,4 +1,5 @@
 import { Injectable, WritableSignal, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { ChatDto, ChatMessageDto, ChatRole } from '../../contract';
 import { AgentsService } from '../agents/agents.service';
@@ -143,7 +144,17 @@ export class ChatSession {
  */
 @Injectable({ providedIn: 'root' })
 export class ChatService extends ChatSession {
+  /** painel lateral (Ctrl+J) e a coluna do cockpit: o chefe de gabinete */
   readonly open = signal(false);
+  /**
+   * O chefe de gabinete: a conversa do painel e do cockpit. É SEMPRE a Central (abrir conversa com outro agente não troca
+   * o painel: ela vai para a tela Agentes, e a de um dono para a sala do produto).
+   */
+  readonly chief: ChatSession;
+  readonly chiefChats = computed(() => { const c = this.agents.central()?.id; return this.chats().filter(x => x.agentId === c && !x.projectSlug); });
+  /** rascunho para a conversa da tela Agentes (com outro agente) */
+  readonly agentDraft = signal<string | null>(null);
+  private readonly router = inject(Router);
   readonly chats = signal<Chat[]>([]);
   /** texto para pré-preencher a caixa de mensagem (ex.: contexto de uma tarefa) */
   readonly draft = signal<string | null>(null);
@@ -177,11 +188,31 @@ export class ChatService extends ChatSession {
       // terminou, ou é uma conversa que a lista ainda não conhece (aberta pelo MCP, triagem, outro lugar)
       if (!busy || !this.chats().some(c => c.id === chat_id)) this.loadChats();
     });
+    this.chief = this.spawn(null);
     this.loadChats();
     this.ready = Promise.all([this.settings.get('chat:last'), this.api.list(null)]).then(([v, list]) => {
       this.chats.set(list.map(toChat));
       try { if (v) this.last = { agentId: null, chatId: null, byAgent: {}, ...JSON.parse(v) }; } catch { /* valor antigo */ }
     }, () => {});
+  }
+
+  /** o chefe de gabinete abre na última conversa com a Central (ou numa nova) */
+  async restoreChief(): Promise<void> {
+    await this.ready;
+    if (this.chief.current()) return;
+    const c = this.agents.central()?.id;
+    const seen = c ? this.last.byAgent[c] : undefined;
+    const id = seen && this.chats().some(x => x.id === seen) ? seen : this.chiefChats()[0]?.id ?? null;
+    this.chief.select(id);
+  }
+
+  private isCentral(agentId: number): boolean { return agentId === this.agents.central()?.id; }
+
+  /** conversa com um agente: a Central abre no chefe de gabinete; os outros na tela Agentes */
+  talkTo(agentId: number): void {
+    if (this.isCentral(agentId)) { this.restoreChief(); this.open.set(true); return; }
+    this.selectAgent(agentId);
+    this.router.navigate(['/agentes'], { queryParams: { agente: agentId } });
   }
 
   /** Abre onde parou: a última conversa (ou o último agente); sem histórico, a Central. Não troca o que já está aberto. */
@@ -240,11 +271,21 @@ export class ChatService extends ChatSession {
     if (chat && !chat.projectSlug) this.remember(chat.agentId, chat.id);
   }
 
-  /** Abre o painel numa conversa nova com o agente, com o texto já escrito para o Gustavo completar. */
-  compose(agentId: number, text: string): void {
+  /**
+   * Conversa nova com o agente, com o texto já escrito para o Gustavo completar. Central: no chefe de gabinete; dono de
+   * um produto: na sala do produto (1:1); outro agente: na tela Agentes.
+   */
+  compose(agentId: number, text: string, ownerOf?: string | null): void {
+    if (this.isCentral(agentId)) {
+      this.chief.newChat(agentId);
+      this.draft.set(text);
+      this.open.set(true);
+      return;
+    }
+    if (ownerOf) { this.router.navigate(['/produtos', ownerOf], { queryParams: { pedir: text || ' ' } }); return; }
     this.newChat(agentId);
-    this.draft.set(text);
-    this.open.set(true);
+    this.agentDraft.set(text);
+    this.router.navigate(['/agentes'], { queryParams: { agente: agentId } });
   }
 
   /**
@@ -274,10 +315,12 @@ export class ChatService extends ChatSession {
     return [...list].reverse().find(m => m.role === 'assistant')?.text ?? null;
   }
 
-  /** Abre uma conversa no painel lateral (Ctrl+J). */
+  /** Abre uma conversa: da Central, no chefe de gabinete; de outro agente, na tela Agentes. */
   openInPanel(chatId: number): void {
+    const c = this.chats().find(x => x.id === chatId);
+    if (!c || this.isCentral(c.agentId)) { this.chief.select(chatId); this.open.set(true); return; }
     this.select(chatId);
-    this.open.set(true);
+    this.router.navigate(['/agentes'], { queryParams: { agente: c.agentId, conversa: chatId } });
   }
 
   /** Continua a sessão de uma execução já terminada. Devolve o id da conversa. */

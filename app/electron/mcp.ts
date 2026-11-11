@@ -15,9 +15,10 @@ import { z } from 'zod';
 
 import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
-import { emitEvent } from './owner';
+import { criticalAlert, emitEvent } from './owner';
 import { addInsight } from './insights';
 import { reportMetric } from './pulse';
+import { defineMetric, listMetricDefs, requestOneOnOne } from './metrics';
 import { listOperatorActions } from './operator';
 import { agentSend, notifyOwners } from './whatsapp';
 import { analyzeVideo, transcribeFile } from './media';
@@ -233,7 +234,21 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('emit_event', 'Avisa o dono de um projeto de algo que pede ação (erro em produção, métrica que mudou, cliente reclamando). Ele acorda e decide. Não use para o que você mesmo resolve.', {
     project_slug: z.string(), summary: z.string().describe('o que aconteceu e onde ver (uma ou duas frases)'),
     ref: z.string().optional().describe('identificador para não avisar duas vezes a mesma coisa (ex.: id do alarme)'),
-  }, a => { emitEvent(a.project_slug, 'alerta', a.ref ?? a.summary.slice(0, 80), a.summary, caller?.kind === 'run' ? caller.id : null); return 'Dono avisado.'; });
+    critical: z.boolean().optional().describe('true SÓ se quebrou de verdade para o usuário (produção fora, cobrança falhando, dados em risco): o Gustavo é avisado também no WhatsApp'),
+  }, a => {
+    emitEvent(a.project_slug, 'alerta', a.ref ?? a.summary.slice(0, 80), a.summary, caller?.kind === 'run' ? caller.id : null);
+    if (a.critical) criticalAlert(a.project_slug, a.summary, a.ref ?? a.summary.slice(0, 80));
+    return a.critical ? 'Dono avisado; o Gustavo também (cockpit, Windows e WhatsApp).' : 'Dono avisado.';
+  });
+  tool('define_metric', 'Combina um número do produto que o Gustavo acompanha no cockpit (sem deploy): nome, unidade, de onde vem e como medir, de quanto em quanto tempo e a meta. Mesmo nome = atualiza. A Central te acorda quando for hora de medir.', {
+    project_slug: z.string(), name: z.string(), unit: z.string().optional(), how: z.string().describe('de onde vem o número e como medir (consulta, painel, API, script)'),
+    every_hours: z.number().int().min(1).optional().describe('de quanto em quanto tempo medir (padrão 24)'), target: z.number().optional().describe('meta, se houver'),
+    active: z.boolean().optional().describe('false = parar de medir'),
+  }, a => defineMetric(a.project_slug, a), h.projects);
+  tool('list_metrics', 'Os números combinados de um projeto (definição, meta, última medida).', { project_slug: z.string() }, a => listMetricDefs(a.project_slug));
+  tool('request_one_on_one', 'Dono pede um 1:1 com o Gustavo (aparece no cockpit, no seu produto). Use quando precisar dele para algo que não cabe numa decisão: rumo, time, uma escolha grande.', {
+    project_slug: z.string(), why: z.string().describe('o assunto em uma linha'),
+  }, a => requestOneOnOne(a.project_slug, a.why), h.projects);
   tool('report_metric', 'Registra um número do resultado do produto (ex.: escolas ativas, posts publicados na semana, assinantes, erros em prod). O Gustavo acompanha no Início; registre os números que o rumo persegue sempre que medir.', {
     project_slug: z.string(), name: z.string().describe('nome curto e estável (o mesmo a cada medida, ex.: "Escolas ativas")'),
     value: z.number(), unit: z.string().optional().describe('ex.: %, R$, posts'), note: z.string().optional().describe('de onde veio o número / o que explica a mudança'),
@@ -302,7 +317,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
       recommended: z.number().int().optional(), strategist: z.string().optional(), central: z.string().optional(),
     })).optional(),
     plan: z.array(z.object({
-      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente', 'agencia', 'criar_agente', 'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'dono_todo']), title: z.string(), detail: z.string().optional(),
+      id: z.string(), kind: z.enum(['rumo', 'marco', 'tarefa', 'ideia', 'cortar', 'agente', 'agencia', 'criar_agente', 'ajustar_agente', 'aposentar_agente', 'quadro', 'rotina', 'dono_todo', 'historia', 'metrica']), title: z.string(), detail: z.string().optional(),
       why: z.string().optional().describe('por quê, em uma linha: a decisão ou o motivo que levou a este item'),
       agent: z.string().optional(), when: z.enum(['agora', 'backlog', 'depois']),
     })).optional(),

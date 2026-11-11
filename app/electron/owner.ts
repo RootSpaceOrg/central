@@ -7,6 +7,7 @@
  * no máximo N passadas por dia, uma por vez, e o que o próprio dono emite não o acorda de novo.
  */
 import { all, get, run } from './db';
+import { dueMetrics } from './metrics';
 import { PRIORITY_OF, Priority, canStart } from './governor';
 
 export const OWNER_HEAD = '[dono]';
@@ -18,14 +19,14 @@ const IDLE_EVERY_H = 20;
 
 export type EventKind =
   | 'historia_validada' | 'historia_devolvida' | 'entrega_devolvida' | 'execucao_falhou' | 'decisao_respondida'
-  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado';
+  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado' | 'medir';
 
 const LABEL: Record<EventKind, string> = {
   historia_validada: 'história validada pelo Gustavo', historia_devolvida: 'história DEVOLVIDA pelo Gustavo ("não funcionou")',
   entrega_devolvida: 'entrega devolvida pelo Gustavo (pediu ajuste)', execucao_falhou: 'execução falhou',
   decisao_respondida: 'decisão respondida pelo Gustavo', ideia_aprovada: 'ideia aprovada pelo Gustavo (planejar)',
   insight: 'insight (cliente, conversa ou reunião)', fila_vazia: 'fila do projeto vazia', rumo_atualizado: 'rumo atualizado',
-  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)',
+  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)', medir: 'hora de medir os números combinados',
 };
 const URGENT: EventKind[] = ['historia_devolvida', 'alerta', 'dono_ligado'];
 
@@ -43,11 +44,27 @@ export function emitEvent(slug: string | null | undefined, kind: EventKind, ref:
     slug, kind, ref, summary.replace(/\s+/g, ' ').trim().slice(0, 600), URGENT.includes(kind) ? 1 : 0, isOwnerRun(fromRun) ? 1 : 0);
 }
 
+/** quem mostra o alerta crítico fora da Central (WhatsApp, Windows): o main liga */
+let alertOut: (title: string, body: string) => void = () => {};
+export const onCriticalAlert = (fn: typeof alertOut) => { alertOut = fn; };
+
+/** quebrou de verdade: fica no cockpit (vermelho) e sai para o Gustavo (Windows e WhatsApp), uma vez por referência */
+export function criticalAlert(slug: string, summary: string, ref: string): void {
+  if (!get('select 1 from projects where slug = ?', slug)) return;
+  if (get(`select 1 from alerts where project_slug = ? and ref = ? and resolved_at is null`, slug, ref)) return;
+  run('insert into alerts (project_slug, ref, summary) values (?,?,?)', slug, ref, summary.slice(0, 600));
+  const name = get<{ name: string }>('select name from projects where slug = ?', slug)?.name ?? slug;
+  alertOut(`${name}: algo quebrou`, summary.slice(0, 300));
+}
+export const resolveAlert = (id: number) => run('update alerts set resolved_at = ? where id = ?', new Date().toISOString(), id);
+
 /** liga/desliga o dono por eventos. Ligar marca o que já estava pendente como visto (não acorda com o passado). */
 export function setOwnerOn(slug: string, on: boolean): void {
   const at = new Date().toISOString();
   if (on) run(`update events set handled_at = ? where project_slug = ? and handled_at is null`, at, slug);
   run('update projects set owner_on = ? where slug = ?', on ? 1 : 0, slug);
+  // o dono cuida do backlog por evento: as revisões por horário do antigo Time (Agência) param, para não serem dois
+  if (on) run(`update routines set enabled = 0 where project_slug = ? and name in ('Agência: backlog do dia', 'Agência: revisão da semana')`, slug);
   if (on) emitEvent(slug, 'dono_ligado', `ligado:${at}`, 'Primeira passada: organize o projeto para andar sozinho.');
 }
 
@@ -76,6 +93,7 @@ export async function dispatchOwners(deps: OwnerDeps): Promise<number> {
     run(`update events set handled_at = ? where project_slug = ? and handled_at is null and from_owner = 1`, iso, o.slug);
     idleCheck(o.slug, now);
     memoryCheck(o.slug, deps);
+    metricsCheck(o.slug, now);
     const evs = all<{ id: number; kind: EventKind; ref: string; summary: string; urgent: number; created_at: string }>(
       `select id, kind, ref, summary, urgent, created_at from events where project_slug = ? and handled_at is null order by id limit 30`, o.slug);
     if (!evs.length) continue;
@@ -101,6 +119,13 @@ function idleCheck(slug: string, now: Date): void {
   const last = get<{ at: string }>(`select max(created_at) at from events where project_slug = ? and kind = 'fila_vazia'`, slug)?.at;
   if (last && now.getTime() - Date.parse(last.endsWith('Z') ? last : `${last}Z`) < IDLE_EVERY_H * 3_600_000) return;
   emitEvent(slug, 'fila_vazia', now.toISOString().slice(0, 13), 'Nada em A fazer, fazendo ou revisão: o time está parado.');
+}
+
+/** números combinados vencidos: o dono mede (um evento por rodada de medida) */
+function metricsCheck(slug: string, now: Date): void {
+  const due = dueMetrics(slug, now.getTime());
+  if (due.length) emitEvent(slug, 'medir', `medir:${due.map(d => d.id).join(',')}:${now.toISOString().slice(0, 13)}`,
+    `Medir: ${due.map(d => `${d.name} (${d.how.slice(0, 120)})`).join('; ')}.`);
 }
 
 /** a cada CURATE_EVERY registros novos (fatos do projeto + memórias dos agentes dele), o dono faz uma curadoria */
@@ -138,6 +163,8 @@ const GUIDE: [EventKind[], string][] = [
      quando os sinais se somarem (vários insights, números, devoluções apontando para o mesmo lado), proponha o rumo novo
      com propose_direction (o Gustavo aprova ou não). Nunca troque o rumo direto.`],
   [['fila_vazia'], `   - Fila vazia: puxe o próximo passo do rumo e do marco atual (no máximo 2 histórias).`],
+  [['medir'], `   - Medir: para cada número da lista, busque o valor de onde foi combinado (list_metrics mostra como) e registre com
+     report_metric (mesmo nome). Não conseguiu medir? Diga no diário por quê e o que falta (acesso, consulta).`],
   [['dono_ligado'],
     `   - Primeira passada: (a) agrupe o backlog em histórias: tarefas soltas que entregam a mesma coisa ao usuário viram
      partes de uma história (crie a história e use update_task parent_id; até 12 partes; títulos de usuário); tarefas
@@ -173,7 +200,10 @@ ${guide(evs.map(e => e.kind))}
    dados de cliente, comunicação com cliente, mudança de rumo. Mudança de tela, ajuste, bug, dev: decida você.
 3. Time (agentes, quadros, rotinas): mude quando o Gustavo pediu. Por iniciativa sua, proponha com create_decision.
 4. Limites: no máximo 3 histórias novas por passada; antes de criar, confira se já existe (list_tasks).
-Mediu algum número do produto (uso, receita, publicados, erros)? report_metric: é o que o Gustavo acompanha no Início.
+Números do produto: os combinados estão em list_metrics; mediu, registre com report_metric (é o que o Gustavo vê no
+cockpit). Se o rumo pede um número que ninguém mede, combine com define_metric (nome, de onde vem, frequência, meta).
+Precisa do Gustavo para algo grande (rumo, time, uma escolha que não cabe numa decisão)? request_one_on_one: ele vê no
+cockpit e abre o 1:1 com você.
 Antes de decidir algo parecido com o que ele já decidiu, veja o critério dele: operator_history.
 Termine com o DIÁRIO (é o que o Gustavo lê): até 5 linhas "o que fiz e por quê" e, para cada erro, um post-mortem de 3
 linhas (o que houve, por quê, o que mudou). Não chame report_delivery.`;

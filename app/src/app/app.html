@@ -206,7 +206,7 @@
 <app-turn-dialog />
 <app-update-dialog />
 <app-project-edit-dialog />
-<app-central-chat />
+@if (!onCockpit()) { <app-central-chat /> }
 <app-context-menu />
 <app-settings-dialog />
 <app-command-palette />

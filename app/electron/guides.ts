@@ -11,6 +11,7 @@ import { saveMessage, sendChat } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
 import { getDirection } from './direction';
 import { releaseStatus } from './release';
+import { emitEvent } from './owner';
 
 type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) => void;
 export interface GuideDeps { notify: Notify; changed: () => void; /** piloto automático pronto (aviso no sistema) */ notifyReady?: (slug: string) => void }
@@ -41,6 +42,10 @@ export interface GuideProfile {
   reply: (g: GuideDto, said: string) => string;
   plan: (g: GuideDto, cards: GuideCard[]) => string;
   execute: (g: GuideDto, cards: GuideCard[], plan: GuidePlanItem[]) => string;
+  /** quem fala com o Gustavo na conversa (padrão: a Central). No 1:1 é o dono do produto. */
+  voice?: (g: GuideDto) => number;
+  /** com voz própria: a sessão abre direto com ela (sem a análise do especialista antes) */
+  opening?: (g: GuideDto) => string;
 }
 const profiles = new Map<string, GuideProfile>();
 export function registerProfile(kind: string, p: GuideProfile): void { profiles.set(kind, p); }
@@ -191,7 +196,7 @@ Depois diga aqui, em 2-3 linhas, o que fez.`;
 
 /** manda para a Central sem mostrar a instrução na tela (a conversa mostra só o debate e as respostas) */
 function toCentral(g: GuideDto, text: string, d: GuideDeps): void {
-  const central = centralAgent().id;
+  const central = profileOf(g).voice?.(g) ?? centralAgent().id;
   if (!g.central_chat) {
     const id = sendChat(null, central, text, d.notify, d.changed, null, MODEL, true);
     run('update guides set central_chat = ? where id = ?', id, g.id);
@@ -208,6 +213,13 @@ export async function startGuide(slug: string, direct: boolean, focus: string | 
   const snap = await prof.snapshot(slug, direct);
   const id = Number(run(`insert into guides (project_slug, direct, snapshot, phase, focus, kind) values (?,?,?, 'analysis', ?, ?)`, slug, direct ? 1 : 0, JSON.stringify(snap, null, 1), focus?.trim() || null, kind).lastInsertRowid);
   const g = getGuide(id)!;
+  // voz própria (1:1 com o dono): ele abre a conversa direto, com a pauta
+  if (prof.opening) {
+    run(`update guides set phase = 'reply' where id = ?`, id);
+    toCentral(g, prof.opening(g), d);
+    d.changed();
+    return getGuide(id)!;
+  }
   const sid = sendChat(null, prof.specialist(), prof.analysis(g), d.notify, d.changed, null, MODEL);
   run('update guides set strategist_chat = ? where id = ?', sid, id);
   run('update chats set title = ? where id = ?', `${prof.label} (especialista): ${String(snap.project)}`, sid);
@@ -233,7 +245,7 @@ export function guideIdle(chatId: number, d: GuideDeps): void {
       run(`update guides set phase = 'reply' where id = ?`, g.id);
       if (g.central_chat) {
         saveMessage(g.central_chat, 'peer', peer, d.notify);
-        toCentral(g, `[Sessão #${g.id}] O especialista (${profileOf(g).label}) respondeu ao Gustavo:
+        toCentral(g, `[Sessão #${g.id}] O ${profileOf(g).voice ? 'estrategista' : `especialista (${profileOf(g).label})`} respondeu ao Gustavo:
 
 ${last}
 
@@ -254,14 +266,17 @@ export function askStrategist(id: number, question: string, d: GuideDeps): void 
   if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
   const recent = g.central_chat ? all<{ role: string; text: string }>(`select role, text from chat_messages where chat_id = ? and role in ('user','assistant') order by id desc limit 6`, g.central_chat).reverse() : [];
   run(`update guides set phase = 'consult' where id = ?`, id);
-  sendChat(g.strategist_chat, profileOf(g).specialist(), `[Sessão #${id}] O Gustavo quer sua opinião${question.trim() ? `: ${question.trim()}` : ' sobre o ponto atual'}.
+  const who = profileOf(g).voice ? 'Dono' : 'Central';
+  const sid = sendChat(g.strategist_chat, profileOf(g).specialist(), `[Sessão #${id}] O Gustavo quer sua opinião${question.trim() ? `: ${question.trim()}` : ' sobre o ponto atual'}.
 Conversa recente (Gustavo e Central):
-${recent.map(m => `${m.role === 'user' ? 'Gustavo' : 'Central'}: ${m.text.slice(0, 1200)}`).join('\n\n') || '(nada ainda)'}
+${recent.map(m => `${m.role === 'user' ? 'Gustavo' : who}: ${m.text.slice(0, 1200)}`).join('\n\n') || '(nada ainda)'}
 
 Cards de agora:
 ${cardsText(parse<GuideCard>(g.cards))}
 
 Responda direto, em até ~200 palavras. Não crie nem mude nada.`, d.notify, d.changed, null, MODEL);
+  // primeira consulta (o 1:1 não abre com o especialista): guarda a conversa para a resposta voltar ao debate
+  if (!g.strategist_chat) run('update guides set strategist_chat = ? where id = ?', sid, id);
   d.changed();
 }
 
@@ -349,6 +364,8 @@ export function finishGuide(id: number, minutes: string): string {
   const g = getGuide(id);
   if (!g) throw new Error('Sessão não encontrada.');
   run(`update guides set status = 'done', minutes = ?, finished_at = ? where id = ?`, minutes.trim(), now(), id);
+  // sessão de rumo ou de time fechada (fora do 1:1): o dono precisa saber o que mudou
+  if (g.kind !== 'dono') emitEvent(g.project_slug, 'rumo_atualizado', `guia:${id}`, `Sessão de ${profileOf(g).label} #${id} fechada. Ata: ${minutes.replace(/\s+/g, ' ').slice(0, 400)}`);
   guidesChanged();
   setTimeout(() => finishHook(id), 0);
   return 'Sessão fechada com a ata.';

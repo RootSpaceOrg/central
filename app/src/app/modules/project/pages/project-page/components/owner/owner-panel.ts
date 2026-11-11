@@ -154,7 +154,7 @@ export class OwnerPanel {
   protected readonly operator = inject(LayoutService).operator;
 
   /** conversa com o dono, já dizendo de qual projeto é o pedido */
-  protected talk(agentId: number): void { this.chat.compose(agentId, `Projeto ${this.project().name}: `); }
+  protected talk(agentId: number): void { this.chat.compose(agentId, '', this.project().slug); }
 
   readonly project = input.required<Project>();
   protected readonly state = signal<OwnerState | null>(null);

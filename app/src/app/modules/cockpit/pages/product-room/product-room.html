@@ -1,0 +1,123 @@
+@if (project(); as p) {
+  <!-- quem é, para onde vai, quem cuida -->
+  <header class="relative overflow-hidden border-b border-edge px-8 pt-5 pb-5" [style.--c]="p.color">
+    <span class="pointer-events-none absolute -top-32 -left-24 size-80 rounded-full opacity-[0.08] blur-3xl" [style.background]="p.color" aria-hidden="true"></span>
+    <div class="relative flex flex-wrap items-center gap-x-6 gap-y-3">
+      <a routerLink="/" class="flex items-center gap-1.5 text-[12.5px] text-faint hover:text-text"><app-icon name="back" [size]="13" />Cockpit</a>
+      @if (company(); as c) { <span class="text-[12.5px] text-faint">/ {{ c.name }}</span> }
+    </div>
+    <div class="relative mt-3 flex flex-wrap items-center gap-x-8 gap-y-4">
+      <div class="flex min-w-0 flex-1 items-center gap-4">
+        <app-project-avatar [project]="p" [size]="52" />
+        <div class="min-w-0">
+          <h1 class="truncate font-display text-[30px] font-bold leading-tight tracking-tight">{{ p.name }}</h1>
+          @if (instrument()?.focus; as f) { <p class="mt-0.5 line-clamp-1 max-w-[80ch] text-[14px] text-mute" [title]="f">{{ f }}</p> }
+        </div>
+      </div>
+      <!-- o dono -->
+      <div class="flex items-center gap-3 rounded-2xl border border-edge bg-panel/80 px-4 py-2.5">
+        @if (owner(); as o) {
+          <app-project-avatar [project]="o" [size]="34" />
+          <div class="leading-tight">
+            <p class="text-[11px] font-semibold uppercase tracking-wider text-faint">Dono</p>
+            <select class="-ml-1 bg-transparent text-[14px] font-semibold outline-none" [value]="'' + o.id" (change)="setOwner($any($event.target).value)" aria-label="Dono do produto">
+              @for (a of candidates(); track a.id) { <option [value]="'' + a.id" [selected]="a.id === o.id">{{ a.name }}</option> }
+            </select>
+          </div>
+          <span class="mx-1 h-8 w-px bg-edge"></span>
+          <button type="button" role="switch" [attr.aria-checked]="p.ownerOn" (click)="toggleOwner()" class="flex items-center gap-2.5 text-left">
+            <span class="relative h-5 w-9 shrink-0 rounded-full transition-colors" [class]="p.ownerOn ? 'bg-yes' : 'bg-edge'">
+              <span class="absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform" [class.translate-x-4]="p.ownerOn"></span></span>
+            <span class="text-[12.5px] leading-tight"><b class="block">{{ p.ownerOn ? 'Age sozinho' : 'Parado' }}</b><span class="text-faint">{{ p.ownerOn ? 'pelos eventos' : 'só o que você pede' }}</span></span>
+          </button>
+        } @else {
+          <p class="text-[13px] text-mute">Sem dono.</p>
+          <select class="field !w-52 !py-1.5 text-[13px]" (change)="setOwner($any($event.target).value)" aria-label="Escolher o dono">
+            <option value="">Escolher o dono…</option>
+            @for (a of candidates(); track a.id) { <option [value]="'' + a.id">{{ a.name }}</option> }
+          </select>
+        }
+      </div>
+      <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm btn-ghost" title="Backlog, roadmap, sessões, produção, contexto"><app-icon name="layers" [size]="14" />Bastidores do produto</a>
+    </div>
+  </header>
+
+  <div class="grid min-h-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_460px]">
+    <main class="min-h-0 overflow-y-auto">
+      <div class="mx-auto max-w-[920px] px-8 pt-7 pb-24">
+        <div class="flex items-center gap-3">
+          <h2 class="font-display text-[24px] font-semibold">1:1 com {{ owner()?.name ?? 'o dono' }}</h2>
+          @if (guide(); as g) { <span class="text-[12.5px] text-faint">aberto {{ g.createdAt | ago }}</span> }
+        </div>
+
+        @if (guide(); as g) {
+          <app-one-on-one class="mt-4 block" [guide]="g" [busy]="talking()" />
+        } @else {
+          <!-- começar: o que você quer trazer -->
+          @if (instrument()?.oneOnOne; as r) {
+            <p class="mt-4 rounded-2xl border border-[#B48CFF]/40 bg-[#B48CFF]/[0.07] px-5 py-3 text-[14px]"><b class="text-[#C6A6FF]">{{ owner()?.name }} pediu este 1:1:</b> {{ r.why }}</p>
+          }
+          <section class="mt-4 rounded-3xl border border-edge bg-panel p-6">
+            <p class="text-[14px] leading-relaxed text-mute">O dono chega com a pauta (o que fez, números, o que vem, o que precisa de você). Traga o que quiser: uma
+              organização de rumo ou de time, uma demanda nova. Ele responde com <b class="text-text">caminhos em cards</b>; você escolhe e vê
+              <b class="text-text">o que vai ser feito na prática</b> antes de aprovar.</p>
+            <textarea class="field mt-4 h-28 resize-y text-[14.5px] leading-relaxed" [placeholder]="'O que você quer trazer para ' + (owner()?.name ?? 'o dono') + '? (opcional)'"
+                      aria-label="Assunto do 1:1" [value]="focus()" (input)="focus.set($any($event.target).value)" (keydown.control.enter)="start()"></textarea>
+            <div class="mt-2.5 flex flex-wrap gap-1.5">
+              @for (s of suggestions; track s) { <button type="button" class="rounded-full border border-edge px-3 py-1 text-[12.5px] text-mute hover:border-faint hover:text-text" (click)="add(s)">{{ s }}</button> }
+            </div>
+            <div class="mt-5 flex items-center gap-3">
+              <span class="flex-1 text-[12px] text-faint">{{ owner() ? '' : 'Escolha o dono acima para abrir o 1:1.' }}</span>
+              <button type="button" class="btn btn-primary px-5" [disabled]="!owner() || starting()" (click)="start()"><app-icon name="central" [size]="15" />{{ starting() ? 'Chamando…' : 'Abrir o 1:1' }}</button>
+            </div>
+          </section>
+          @if (past().length) {
+            <section class="mt-8" aria-label="1:1 anteriores">
+              <h3 class="text-[11px] font-bold uppercase tracking-wider text-faint">1:1 anteriores</h3>
+              @for (g of past(); track g.id) {
+                <details class="mt-2 rounded-2xl border border-edge bg-panel px-5 py-3">
+                  <summary class="cursor-pointer text-[13.5px] font-semibold">{{ g.focus || 'Pauta do dono' }} <span class="font-normal text-faint">· {{ g.finishedAt | ago }}</span></summary>
+                  @if (g.minutes) { <div class="md mt-2 text-[13.5px] leading-relaxed selectable" [innerHTML]="g.minutes | refs | markdown"></div> }
+                </details>
+              }
+            </section>
+          }
+        }
+
+        <!-- instrumentos e diário -->
+        <section class="mt-10 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" aria-label="Instrumentos e diário">
+          @if (instrument(); as i) { <app-instrument [product]="i" /> }
+          <div class="rounded-[22px] border border-edge bg-panel p-5">
+            <h3 class="font-semibold">Diário do dono</h3>
+            <ul class="mt-3 space-y-3">
+              @for (d of (info()?.diary ?? []).slice(0, 5); track d.runId) {
+                <li class="text-[12.5px] leading-snug">
+                  <p class="text-faint">{{ d.at | ago }} · {{ d.title }}</p>
+                  @if (d.diary) { <div class="md mt-0.5 line-clamp-4 text-mute" [innerHTML]="d.diary | markdown"></div> }
+                </li>
+              } @empty { <li class="text-[12.5px] text-faint">{{ p.ownerOn ? 'Ainda nenhuma passada.' : 'Ligue "Age sozinho" para o dono trabalhar pelos eventos.' }}</li> }
+            </ul>
+            @if (info()?.pending?.length) { <p class="mt-3 text-[12px] text-later">{{ info()!.pending.length }} {{ info()!.pending.length === 1 ? 'evento esperando' : 'eventos esperando' }} o dono</p> }
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- conversa com o dono -->
+    <aside class="hidden min-h-0 flex-col border-l border-edge bg-panel/60 xl:flex" aria-label="Conversa com o dono">
+      <header class="flex items-center gap-3 border-b border-edge px-5 py-3.5">
+        @if (owner(); as o) {
+          <span class="relative"><app-project-avatar [project]="o" [size]="30" />
+            @if (talking()) { <span class="pulse absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-yes ring-2 ring-panel"></span> }</span>
+          <div class="min-w-0 flex-1 leading-tight">
+            <p class="font-semibold">{{ o.name }}</p>
+            <p class="text-[11.5px] text-faint">{{ guide() ? 'no 1:1 com você' : 'dono de ' + p.name }}</p>
+          </div>
+        } @else { <p class="text-[13px] text-mute">Escolha o dono para conversar.</p> }
+      </header>
+      @if (owner()) { <app-chat-view class="min-h-0 flex-1" [compact]="true" [session]="session" /> }
+    </aside>
+  </div>
+} @else {
+  <div class="grid h-full place-items-center text-mute">{{ projects.loaded() ? 'Produto não encontrado.' : 'Carregando…' }}</div>
+}

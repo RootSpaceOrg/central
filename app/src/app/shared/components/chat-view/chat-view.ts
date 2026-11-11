@@ -210,9 +210,17 @@ export class ChatView implements OnDestroy {
       untracked(() => { if (this.atBottom) requestAnimationFrame(() => this.toBottom()); });
     });
     effect(() => {
-      // o rascunho abre o painel lateral: só ele consome (a tela Agentes tem outro ChatView)
+      // tela Agentes (sem sessão própria, não compacta): o rascunho de conversa com outro agente
+      const draft = this.service.agentDraft();
+      if (draft === null || this.compact() || this.session()) return;
+      this.setText(draft);
+      this.service.agentDraft.set(null);
+      queueMicrotask(() => this.input()?.nativeElement.focus());
+    });
+    effect(() => {
+      // o rascunho do chefe de gabinete (painel ou coluna do cockpit): só quem mostra o chefe consome
       const draft = this.service.draft();
-      if (draft === null || !this.compact()) return;
+      if (draft === null || !this.compact() || this.session() !== this.service.chief) return;
       this.setText(draft);
       this.service.draft.set(null);
       queueMicrotask(() => { const el = this.input()?.nativeElement; el?.focus(); el?.setSelectionRange(draft.length, draft.length); });

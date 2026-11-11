@@ -63,7 +63,7 @@ export class ProjectPage {
   protected readonly operator = this.layout.operator;
   /** o dono do projeto (o agente do A fazer) */
   protected readonly owner = computed(() => this.agents.byId().get(this.project()?.todoAgentId ?? -1) ?? null);
-  protected askOwner(agentId: number, name: string): void { this.chat.compose(agentId, `Projeto ${name}: `); }
+  protected askOwner(agentId: number, _name: string): void { this.chat.compose(agentId, '', this.project()?.slug ?? null); }
   /** diretor: o que é dele primeiro (dono, rumo, roadmap); operador: a ordem de sempre */
   protected readonly tabs = computed(() => (this.layout.operator() ? TABS
     : [...TABS].sort((a, b) => DIRECTOR_ORDER.indexOf(a.id) - DIRECTOR_ORDER.indexOf(b.id))));

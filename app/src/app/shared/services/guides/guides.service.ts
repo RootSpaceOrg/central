@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import { GuideCard, GuideDto, GuidePlanItem, PilotDto } from '../../../../shared/contract';
-import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.service';
+import { GuideCard, GuideDto, GuidePlanItem, PilotDto } from '../../contract';
+import { IpcService, errorMessage } from '../ipc/ipc.service';
 
 export type { GuideCard, GuidePlanItem };
 
@@ -36,7 +36,7 @@ export interface Guide {
   strategistChat: number | null;
   minutes: string | null;
   focus: string | null;
-  kind: 'rumo' | 'agencia';
+  kind: 'rumo' | 'agencia' | 'dono';
   createdAt: Date;
   approvedAt: Date | null;
   finishedAt: Date | null;

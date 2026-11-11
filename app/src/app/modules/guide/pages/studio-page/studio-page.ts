@@ -8,7 +8,7 @@ import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon, IconName } from '../../../../shared/ui/icon';
 import { MarkdownPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
-import { Guide, GuidesService } from '../../services/guides/guides.service';
+import { Guide, GuidesService } from '../../../../shared/services/guides/guides.service';
 
 interface Tool {
   id: 'rumo' | 'time' | 'piloto';
