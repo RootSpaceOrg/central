@@ -24,7 +24,7 @@ export interface Proposal {
 }
 
 export const RISK_LABEL: Record<RiskTier, string> = { 0: 'risco baixo', 1: 'risco médio', 2: 'risco alto' };
-export const SOURCE_LABEL: Record<string, string> = { manual: 'anotado por você', memory: 'das suas notas', pr: 'PR aberto' };
+export const SOURCE_LABEL: Record<string, string> = { manual: 'anotado por você', memory: 'das suas notas', pr: 'PR aberto', rumo: 'rumo proposto pelo dono', insight: 'insight' };
 
 /** Texto pronto para mandar a proposta a um agente. */
 export function proposalPrompt(p: Proposal): string {

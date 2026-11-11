@@ -104,6 +104,12 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
 
           @if (it.kind === 'delivery') {
             @let d = it.d;
+            @if (d.video) {
+              <section class="mt-6" aria-label="Vídeo do fluxo">
+                <h3 class="mb-2 flex items-center gap-2 text-[13px] font-semibold text-mute"><app-icon name="play" [size]="14" />O agente usando o fluxo</h3>
+                <video class="w-full rounded-2xl border border-edge bg-black" [src]="d.video" controls preload="metadata"></video>
+              </section>
+            }
             @if (d.howToTest) {
               <section class="mt-6 rounded-2xl border border-frost/40 bg-frost/5 px-5 py-4" aria-labelledby="rv-test">
                 <h3 id="rv-test" class="flex items-center gap-2 font-semibold text-frost"><app-icon name="check" [size]="16" />{{ it.task?.subtasks ? 'Teste como usuário' : 'Como testar' }}</h3>

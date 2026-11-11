@@ -31,7 +31,18 @@ export interface Project {
   todoHours: string;
   /** pronto = PR mergeado ('merge') ou em produção ('prod', com a coluna Em dev) */
   doneWhen: 'merge' | 'prod';
+  /** o dono (o agente do A fazer) acorda sozinho pelos eventos do projeto */
+  ownerOn: boolean;
+  /** dev publicado e como entrar (o teste de usuário das histórias usa) */
+  devUrl: string | null;
+  devLogin: string | null;
 }
+
+/** uma passada do dono: o diário (o que fez e por quê) */
+export interface OwnerPass { runId: number; status: string; at: Date; title: string; diary: string | null }
+export interface OwnerEvent { id: number; kind: string; summary: string; at: Date }
+export interface OperatorAction { id: number; at: Date; action: string; target: string; context: string | null; reason: string | null }
+export interface OwnerState { on: boolean; diary: OwnerPass[]; pending: OwnerEvent[]; actions: OperatorAction[] }
 
 export interface Repo {
   path: string;

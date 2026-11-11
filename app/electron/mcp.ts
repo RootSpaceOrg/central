@@ -15,6 +15,10 @@ import { z } from 'zod';
 
 import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
+import { emitEvent } from './owner';
+import { addInsight } from './insights';
+import { reportMetric } from './pulse';
+import { listOperatorActions } from './operator';
 import { agentSend, notifyOwners } from './whatsapp';
 import { analyzeVideo, transcribeFile } from './media';
 import { RESTRICTED_CENTRAL, createAgent, deleteAgent, getAgent, listAgents, updateAgent } from './agentdefs';
@@ -22,7 +26,7 @@ import {
   createIdea, createProposal, createTask, decide, linkDecision, similarTask, deleteProposal, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
-import { get, run } from './db';
+import { all, get, run } from './db';
 import { addColumn, createBoard, deleteBoard, listBoards, patchColumn, updateBoard, resolveBoard, resolveStage, setStage, stagesOf } from './board';
 import { digest, listDeliveries, reportDelivery } from './deliveries';
 import { releaseStatus } from './release';
@@ -132,6 +136,8 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     icon_kind: z.enum(['letter', 'emoji', 'lucide']).optional(), icon_value: z.string().optional().describe('emoji ou nome de ícone Lucide em kebab-case'),
     folder: z.string().optional(), parent_slug: z.string().nullable().optional().describe('projeto de cima (frente); null = solta'),
     todo_agent_id: z.number().int().nullable().optional().describe('agente que puxa o A fazer do projeto (dono do A fazer); null = ninguém'),
+    dev_url: z.string().nullable().optional().describe('link do ambiente de dev publicado (onde as histórias são testadas)'),
+    dev_login: z.string().nullable().optional().describe('como entrar no dev (conta de teste; nunca a senha em texto: diga onde ela está)'),
   }, ({ slug, ...patch }) => { updateProject(slug, patch); if (patch.folder) syncProjects(slug, h.projects); }, h.projects);
   tool('delete_project', 'Remove um projeto da Central (a pasta e os repositórios continuam no disco). Só use se o Gustavo pediu explicitamente.', {
     slug: z.string(), confirm: z.literal(true).describe('precisa ser true'),
@@ -224,6 +230,20 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     status: ideaStatus.optional(), project_slug: z.string().optional(),
   }, a => listIdeas().filter(i => (a.status ? i.status === a.status : ['new', 'approved'].includes(i.status)) && (!a.project_slug || i.project_slug === a.project_slug))
     .map(i => ({ id: i.id, project: i.project_slug, status: i.status, title: i.title, body: i.body?.slice(0, 300), author: i.author, tasks: i.tasks, tasks_done: i.tasks_done })));
+  tool('emit_event', 'Avisa o dono de um projeto de algo que pede ação (erro em produção, métrica que mudou, cliente reclamando). Ele acorda e decide. Não use para o que você mesmo resolve.', {
+    project_slug: z.string(), summary: z.string().describe('o que aconteceu e onde ver (uma ou duas frases)'),
+    ref: z.string().optional().describe('identificador para não avisar duas vezes a mesma coisa (ex.: id do alarme)'),
+  }, a => { emitEvent(a.project_slug, 'alerta', a.ref ?? a.summary.slice(0, 80), a.summary, caller?.kind === 'run' ? caller.id : null); return 'Dono avisado.'; });
+  tool('report_metric', 'Registra um número do resultado do produto (ex.: escolas ativas, posts publicados na semana, assinantes, erros em prod). O Gustavo acompanha no Início; registre os números que o rumo persegue sempre que medir.', {
+    project_slug: z.string(), name: z.string().describe('nome curto e estável (o mesmo a cada medida, ex.: "Escolas ativas")'),
+    value: z.number(), unit: z.string().optional().describe('ex.: %, R$, posts'), note: z.string().optional().describe('de onde veio o número / o que explica a mudança'),
+  }, a => reportMetric(a.project_slug, a.name, a.value, a.unit ?? null, a.note ?? null));
+  tool('operator_history', 'O que o Gustavo (operador) fez e por quê: decisões, histórias validadas ou devolvidas, ideias, rumo. Use para entender o critério dele antes de decidir algo parecido.', {
+    project_slug: z.string().optional(), limit: z.number().int().max(200).optional(),
+  }, a => listOperatorActions(a.project_slug ?? null, a.limit ?? 50));
+  tool('add_insight', 'Registra um insight para o dono do projeto (pedido ou reclamação de cliente, trecho de reunião, ideia de conversa). O dono decide se é ruído, se age ou se leva ao Gustavo.', {
+    project_slug: z.string(), text: z.string().describe('o insight, com quem disse e onde (conversa, reunião, data)'),
+  }, a => addInsight(a.project_slug, a.text, caller?.kind === 'run' ? caller.id : null, getAgent(who ?? -1)?.name ?? 'agente'), h.backlog);
   tool('create_idea', 'Sugere uma ideia (vai para a triagem do Gustavo; só vira backlog depois que ele aprovar). milestone_id liga ao marco do roadmap que ela serve.', {
     title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), milestone_id: z.number().int().optional(),
   }, a => createIdea({ title: a.title, body: a.body ?? null, project_slug: a.project_slug ?? null, source: 'central', author: 'agente', milestone_id: a.milestone_id ?? null }), h.backlog);
@@ -244,7 +264,18 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   // ---------- rumo do projeto e gestor ----------
   tool('get_direction', 'Rumo atual do projeto (para onde vamos: objetivo, foco do momento, o que não fazer), definido pelo Gustavo.', { project_slug: z.string() }, a =>
     getDirection(a.project_slug) ?? 'Este projeto ainda não tem rumo escrito.');
-  tool('update_direction', 'Atualiza o rumo do projeto (nova versão; a anterior fica no histórico). Só quando o Gustavo pediu ou quando o que você viu deixou o rumo desatualizado; explique o motivo em note.', {
+  tool('propose_direction', 'Propõe um rumo novo para o projeto (vira uma decisão do Gustavo; aprovada, o rumo é trocado por este texto). Use quando insights, dados ou o que você viu pedem mudar o rumo.', {
+    project_slug: z.string(), text: z.string().describe('rumo completo em markdown curto: Objetivo, Foco agora, Não fazer, Próximos marcos'),
+    why: z.string().describe('o que mudou e de onde veio (insights, números, conversa), em 2 a 4 linhas'),
+  }, a => {
+    const p = createProposal({ project_slug: a.project_slug, title: `Mudar o rumo de ${a.project_slug}`, summary: a.why.split('\n')[0],
+      body: `${a.why}\n\n---\n\n**Rumo proposto:**\n\n${a.text}`, next_action: 'Aprovar troca o rumo do projeto por este texto (o atual fica no histórico).',
+      tier: 2, source: 'rumo', agent_id: who, origin: caller });
+    run('update proposals set options = ? where id = ?', JSON.stringify(['Aprovar o rumo novo', 'Manter o rumo atual']), p.id);
+    run('insert or replace into settings (key, value) values (?, ?)', `rumo:proposta:${p.id}`, a.text);
+    return `Proposta registrada (decisão #${p.id}). Aprovada, o rumo muda.`;
+  }, () => { h.backlog(); h.projects(); });
+  tool('update_direction', 'Troca o rumo do projeto direto (a versão anterior fica no histórico). SÓ quando o Gustavo pediu explicitamente esta mudança; por iniciativa sua, use propose_direction.', {
     project_slug: z.string(), text: z.string().describe('rumo completo em markdown curto: Objetivo, Foco agora, Não fazer, Próximos marcos'), note: z.string().describe('por que mudou'),
   }, a => setDirection(a.project_slug, a.text, 'agente', a.note), h.projects);
   const horizon = z.enum(['now', 'next', 'later', 'done']).describe('now = Agora, next = Próximo, later = Depois, done = Feito');
@@ -511,8 +542,31 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
     text: z.string().max(400), kind: z.enum(['preferencia', 'fato', 'decisao', 'pessoa', 'como_fazer']),
     para: z.enum(['mim', 'todos']).describe('mim = sobre o SEU trabalho/papel (ex.: regras dos seus posts, do seu suporte); todos = sobre o Gustavo em geral ou algo que outros agentes também precisam (preferências gerais, clientes, decisões entre projetos). Na dúvida, mim.'),
   }, a => {
+    // memória única por projeto: o que um agente de projeto aprende (fato, decisão, como fazer) é do projeto, não dele;
+    // a memória do agente fica para o jeito de trabalhar (preferências, correções do Gustavo sobre o trabalho dele)
+    const mine = me ? getAgent(me) : null;
+    const FACT = { fato: 'fact', decisao: 'decision', como_fazer: 'howto' } as const;
+    if (a.para === 'mim' && mine?.project_slug && a.kind in FACT) {
+      const f = createFact({ project_slug: mine.project_slug, kind: FACT[a.kind as keyof typeof FACT], text: a.text, source_kind: 'agent', source_ref: caller ? `${caller.kind} #${caller.id}` : null, author: mine.name });
+      return `Guardado na memória do projeto ${mine.project_slug} (fato #${f.id}): é lá que o time todo do projeto lê.`;
+    }
     const m = createMemory({ agent_id: a.para === 'mim' && me ? me : null, kind: a.kind, text: a.text, author: 'agente', source: caller ? `${caller.kind} #${caller.id}` : null });
     return `Guardado (#${m.id}, ${m.agent_id ? 'sua' : 'de todos'}).`;
+  }, h.agents);
+  tool('list_agent_memories', 'Curadoria: as memórias dos agentes de um projeto (o que cada um guardou para si), para levar à memória do projeto o que é do projeto.', {
+    project_slug: z.string(),
+  }, a => all<{ id: number; agent: string; kind: string; text: string; created_at: string }>(
+    `select m.id, g.name agent, m.kind, m.text, m.created_at from memories m join agents g on g.id = m.agent_id
+     where m.status = 'active' and g.project_slug = ? order by g.name, m.id`, a.project_slug));
+  tool('move_memory_to_project', 'Curadoria: leva uma memória de agente para a memória do projeto (vira fato do projeto; a do agente é aposentada, com o motivo). Use para o que é sobre o projeto e não sobre o jeito de trabalhar do agente.', {
+    memory_id: z.number().int(), project_slug: z.string(), kind: z.enum(['decision', 'convention', 'gotcha', 'fact', 'howto']),
+    text: z.string().max(400).optional().describe('texto reescrito (padrão: o original)'),
+  }, a => {
+    const m = get<{ text: string; status: string }>('select text, status from memories where id = ?', a.memory_id);
+    if (!m || m.status !== 'active') return 'Memória não encontrada (ou já aposentada).';
+    const f = createFact({ project_slug: a.project_slug, kind: a.kind, text: (a.text ?? m.text).slice(0, 400), source_kind: 'agent', source_ref: `memória #${a.memory_id}`, author: 'curadoria' });
+    forgetMemory(a.memory_id, `levada para a memória do projeto (fato #${f.id})`, 'curadoria');
+    return `Virou o fato #${f.id} do projeto.`;
   }, h.agents);
   tool('recall', 'Procura na sua memória e na de todos os agentes (o prompt já traz as principais; use para buscar algo específico).', { query: z.string().optional() },
     a => recallMemories(me, a.query ?? ''));
@@ -541,7 +595,8 @@ precisar entrar, use notify_agent; se depender do Gustavo, create_decision.`;
       why: z.string().optional().describe('por que assim'),
       how_to_test: z.string().optional().describe('como o Gustavo confere em 1 minuto'),
       risks: z.string().optional().describe('o que ficou de fora, dúvidas, riscos'),
-    }, a => { reportDelivery(caller.id, a); return 'Entrega registrada.'; }, h.backlog);
+      video: z.string().optional().describe('caminho de um vídeo (.webm/.mp4) do fluxo funcionando, gravado por você (ex.: Playwright recordVideo); aparece na Revisão'),
+    }, a => { reportDelivery(caller.id, a); return a.video ? 'Entrega registrada, com o vídeo.' : 'Entrega registrada.'; }, h.backlog);
   }
 
   // ---------- status ao vivo (só quando a sessão foi aberta pela Central e sabemos quem chama) ----------

@@ -261,10 +261,16 @@ export function codeMap(project: string, focus: string[] = [], budget = 2000, re
 }
 
 /** Bloco que vai no prompt dos agentes e sessões do projeto: mapa + memória + como usar as ferramentas. */
+/**
+ * O que vai no prompt de um agente do projeto: rumo e a memória do projeto que combina com a tarefa. O mapa do código só com
+ * a preferência ligada: medido em 11/11/2026, as ferramentas de código apareciam em ~1% das execuções e o mapa custava
+ * 1.500–2.000 tokens em todas (continua em code_map/code_search e na tela Contexto).
+ */
 export function contextBlock(project: string, focus: string[], mapBudget: number): string {
   const rumo = directionBlock(project);
   let map = '';
-  try { map = codeMap(project, focus, mapBudget); } catch { /* índice ainda não existe */ }
+  const withMap = get<{ value: string }>(`select value from settings where key = 'context:map_in_prompt'`)?.value === '1';
+  if (withMap) try { map = codeMap(project, focus, mapBudget); } catch { /* índice ainda não existe */ }
   const facts = listFacts(project, false).filter(f => f.status === 'active');
   const text = focus.join(' ').toLowerCase();
   const chosen = [...facts.filter(f => f.pinned), ...facts.filter(f => !f.pinned && text && words(f.text).split(' ').some(w => w.length > 4 && text.includes(w)))]
@@ -275,8 +281,7 @@ export function contextBlock(project: string, focus: string[], mapBudget: number
     rumo,
     map ? `## Mapa do código (índice da Central, ${st?.files ?? '?'} arquivos, ${st?.indexed_at?.slice(0, 16).replace('T', ' ') ?? ''})\n${map}` : '',
     chosen.length ? `## Memória do projeto\n${chosen.map(f => `- [${f.kind} #${f.id}] ${f.text}${f.links.length ? ` → ${f.links.slice(0, 2).map(short).join(', ')}` : ''}`).join('\n')}` : '',
-    'Antes de Grep/Glob amplos, use as ferramentas da Central: code_search, code_symbol, code_neighbors, code_impact e code_map (mais detalhe).\n'
-      + 'Registre com memory_remember só fatos duráveis que o código não mostra (decisões, convenções, armadilhas).',
+    'Registre com memory_remember só fatos duráveis que o código não mostra (decisões, convenções, armadilhas). Viu um fato acima que ficou errado: memory_supersede.',
   ].filter(Boolean).join('\n\n');
 }
 

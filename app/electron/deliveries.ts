@@ -5,6 +5,8 @@
  */
 import { deliveryReviewed } from './leftovers';
 import { execFile } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { extname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { DeliveryDto, DigestDto } from '../src/app/shared/contract';
@@ -31,7 +33,26 @@ export const reviewBoard = () =>
      order by d.id desc limit 300`).map(fromRow);
 
 /** O agente conta a entrega (pode chamar mais de uma vez: a última vale). */
-export function reportDelivery(runId: number, i: { title: string; what: string; why?: string; how_to_test?: string; risks?: string }): void {
+/** pasta dos vídeos das entregas (servidos à tela pelo protocolo central-media://) */
+let videoDir = '';
+export const setVideoDir = (dir: string) => { videoDir = dir; };
+export const videoPath = (name: string) => (videoDir && /^[\w.-]+$/.test(name) ? join(videoDir, name) : null);
+
+/** copia o vídeo que o agente gravou para a pasta da Central e liga à entrega (a cópia sobrevive ao worktree) */
+function attachVideo(runId: number, src: string): string {
+  if (!videoDir) throw new Error('Pasta de vídeos indisponível.');
+  if (!existsSync(src)) throw new Error(`Vídeo não encontrado: ${src}`);
+  const ext = extname(src).toLowerCase();
+  if (!['.webm', '.mp4', '.gif'].includes(ext)) throw new Error('Vídeo em .webm, .mp4 ou .gif.');
+  if (statSync(src).size > 200 * 1024 * 1024) throw new Error('Vídeo grande demais (até 200 MB): grave só o fluxo.');
+  mkdirSync(videoDir, { recursive: true });
+  const name = `run-${runId}-${Date.now()}${ext}`;
+  copyFileSync(src, join(videoDir, name));
+  run('update deliveries set video = ? where run_id = ?', name, runId);
+  return name;
+}
+
+export function reportDelivery(runId: number, i: { title: string; what: string; why?: string; how_to_test?: string; risks?: string; video?: string }): void {
   const r = get<{ project_slug: string | null; agent_id: number | null; task_id: number | null }>('select project_slug, agent_id, task_id from runs where id = ?', runId);
   if (!r) throw new Error('Execução não encontrada.');
   const cur = get<{ id: number }>('select id from deliveries where run_id = ?', runId);
@@ -39,6 +60,7 @@ export function reportDelivery(runId: number, i: { title: string; what: string; 
   if (cur) run('update deliveries set title = ?, what = ?, why = ?, how_to_test = ?, risks = ?, explained = 1 where id = ?', ...fields, cur.id);
   else run(`insert into deliveries (run_id, project_slug, agent_id, task_id, title, what, why, how_to_test, risks, explained, status)
     values (?,?,?,?,?,?,?,?,?,1,'pending')`, runId, r.project_slug, r.agent_id, r.task_id, ...fields);
+  if (i.video?.trim()) attachVideo(runId, i.video.trim());
 }
 
 /** Fim da execução: garante a nota, mede o diff e decide se vai para revisão. */

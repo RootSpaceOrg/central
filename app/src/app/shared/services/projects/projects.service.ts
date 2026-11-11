@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { CloneProgressDto, GithubRepoDto, ProjectDto, RepoDto } from '../../contract';
 import { errorMessage } from '../ipc/ipc.service';
 import { ProjectsApiService } from './projects-api.service';
-import { NewProject, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
+import { NewProject, OwnerState, Project, ProjectEdit, ProjectStatus, Repo } from './projects.model';
 
 const toProject = (d: ProjectDto): Project => ({
   slug: d.slug,
@@ -31,6 +31,7 @@ const toProject = (d: ProjectDto): Project => ({
   todoParallel: d.todo_parallel ?? 1,
   todoHours: d.todo_hours ?? '',
   doneWhen: d.done_when === 'prod' ? 'prod' : 'merge',
+  ownerOn: !!d.owner_on, devUrl: d.dev_url ?? null, devLogin: d.dev_login ?? null,
 });
 
 /** git@github.com:o/r.git | https://github.com/o/r.git → https://github.com/o/r */
@@ -125,6 +126,29 @@ export class ProjectsService {
   }
 
   /** Responsável pelo "A fazer": agente, quantas por vez, horário. Lança o erro para a tela mostrar. */
+  /** o dono: diário das passadas e o que está esperando ele */
+  async owner(slug: string): Promise<OwnerState> {
+    const d = await this.api.owner(slug);
+    const utc = (s: string) => new Date(s.endsWith('Z') ? s : `${s}Z`);
+    return {
+      on: d.on,
+      diary: d.diary.map(x => ({ runId: x.id, status: x.status, at: utc(x.created_at), title: x.prompt.split('\n')[0].replace(/^\[dono\]\s*/, ''), diary: x.result })),
+      pending: d.pending.map(e => ({ id: e.id, kind: e.kind, summary: e.summary, at: utc(e.created_at) })),
+      actions: d.actions.map(a => ({ ...a, at: utc(a.at) })),
+    };
+  }
+
+  async setOwnerOn(slug: string, on: boolean): Promise<void> {
+    this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, ownerOn: on } : x)));
+    try { await this.api.setOwner(slug, on); } catch (e) { this.error.set(errorMessage(e)); this.load(); throw e; }
+  }
+
+  /** ambiente de dev publicado e como entrar nele (o agente que testa as histórias usa) */
+  async setDev(slug: string, devUrl: string | null, devLogin: string | null): Promise<void> {
+    await this.api.update(slug, { dev_url: devUrl, dev_login: devLogin });
+    this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, devUrl, devLogin } : x)));
+  }
+
   async setTodoOwner(slug: string, patch: { agentId?: number | null; parallel?: number; hours?: string }): Promise<void> {
     const p = this.bySlug().get(slug);
     if (p) this.projects.update(list => list.map(x => (x.slug === slug ? { ...x, todoAgentId: patch.agentId === undefined ? x.todoAgentId : patch.agentId,

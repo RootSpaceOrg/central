@@ -23,5 +23,7 @@ export class ProjectsApiService {
   openExternal(url: string) { return this.ipc.invoke('shell:external', url); }
   githubRepos() { return this.ipc.invoke('github:repos'); }
   clone(fullName: string, folder: string) { return this.ipc.invoke('github:clone', fullName, folder); }
+  owner(slug: string) { return this.ipc.invoke('owner:get', slug); }
+  setOwner(slug: string, on: boolean) { return this.ipc.invoke('owner:set', slug, on); }
   onCloneProgress(cb: (p: CloneProgressDto) => void) { return this.ipc.on('clone:progress', cb); }
 }

@@ -50,6 +50,31 @@ export interface ProjectDto {
   todo_hours: string;
   /** quando uma tarefa está pronta: 'merge' (PR mergeado) ou 'prod' (chegou em main); com 'prod' existe a coluna Em dev */
   done_when: 'merge' | 'prod';
+  /** dono acorda sozinho pelos eventos do projeto (1) ou só pega o A fazer (0) */
+  owner_on?: number;
+  /** ambiente de dev publicado (onde as histórias são testadas como usuário) e como entrar nele */
+  dev_url?: string | null;
+  dev_login?: string | null;
+}
+
+/** a semana da Central: histórias validadas/devolvidas e o resultado de cada produto */
+export interface PulseDto {
+  validated: number;
+  returned: number;
+  projects: {
+    slug: string; name: string; color: string; owner: string | null; owner_on: boolean;
+    validated: number; returned: number; stories_open: number; last_pass_at: string | null;
+    metrics: { name: string; value: number; unit: string | null; at: string; note: string | null; prev: number | null }[];
+  }[];
+}
+
+/** dono do projeto: passadas recentes (o diário) e eventos esperando */
+export interface OwnerDto {
+  on: boolean;
+  diary: { id: number; status: string; created_at: string; finished_at: string | null; prompt: string; result: string | null }[];
+  pending: { id: number; kind: string; summary: string; created_at: string }[];
+  /** o que o Gustavo fez neste projeto (registro do operador) */
+  actions: { id: number; at: string; action: string; target: string; context: string | null; reason: string | null }[];
 }
 
 export interface NewProjectInput {
@@ -76,6 +101,8 @@ export interface ProjectPatch {
   todo_agent_id?: number | null;
   todo_parallel?: number;
   todo_hours?: string;
+  dev_url?: string | null;
+  dev_login?: string | null;
   done_when?: 'merge' | 'prod';
 }
 
@@ -742,6 +769,8 @@ export interface ReleaseRepoDto {
 export type DeliveryStatus = 'pending' | 'review' | 'info' | 'accepted' | 'adjusting' | 'discarded' | 'paused';
 
 export interface DeliveryDto {
+  /** vídeo do fluxo gravado pelo agente (arquivo na pasta da Central; a tela toca por central-media://v/<arquivo>) */
+  video?: string | null;
   id: number;
   run_id: number;
   project_slug: string | null;
@@ -1179,6 +1208,11 @@ export interface Api {
   'guides:abandon': (id: number) => void;
   'direction:history': (projectSlug: string) => DirectionDto[];
   'direction:set': (projectSlug: string, text: string, note: string | null) => DirectionDto;
+  'owner:get': (projectSlug: string) => OwnerDto;
+  'owner:set': (projectSlug: string, on: boolean) => void;
+  'pulse:get': () => PulseDto;
+  /** reunião: texto colado ou arquivo (áudio, vídeo, .txt) escolhido na hora; um agente tira os insights para os donos */
+  'insights:meeting': (input: { title: string; text: string | null; file: boolean; project_slug: string | null }) => number | null;
   /** gestor do projeto: lê rumo, ideias aprovadas, backlog e código e organiza o backlog (execução de agente) */
   'backlog:plan': (projectSlug: string, request: string | null) => RunDto;
   'ideas:promote': (id: number, projectSlug: string) => TaskDto;

@@ -7,6 +7,7 @@
  */
 import type { DirectionDto, RunDto } from '../src/app/shared/contract';
 import { Emit, startRun } from './agents';
+import { onDecided } from './backlog';
 import { all, get, run } from './db';
 import { SIZE_BUDGET } from './routines';
 import { boardBlock, boardsOfProject } from './board';
@@ -41,6 +42,15 @@ export function directionBlock(slug: string): string {
     boardBlock(boardsOfProject(slug)),
   ].filter(Boolean).join('\n\n');
 }
+
+// decisão de rumo (propose_direction): aprovada, o rumo vira o texto proposto
+onDecided((p, verdict) => {
+  if (p.source !== 'rumo' || !p.project_slug) return false;
+  const text = get<{ value: string }>('select value from settings where key = ?', `rumo:proposta:${p.id}`)?.value;
+  if (verdict === 'approve' && text) setDirection(p.project_slug, text, 'gustavo', `aprovou a proposta #${p.id}`);
+  run('delete from settings where key = ?', `rumo:proposta:${p.id}`);
+  return true;
+});
 
 const PLAN_MARK = '[gestor:planejar]';
 

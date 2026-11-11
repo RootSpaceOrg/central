@@ -1,4 +1,5 @@
-import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, shell } from 'electron';
+import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -22,8 +23,15 @@ import { closeSession, createSession, listSessions, updateSession } from './sess
 import { importClaudeSession, listClaudeSessions } from './claude-import';
 import { claimOf, listActivity, onActivity } from './activity';
 import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, setStage, stagesOf, updateBoard } from './board';
-import { digest, listDeliveries, reviewDelivery, reviewBoard } from './deliveries';
+import { digest, listDeliveries, reviewDelivery, reviewBoard, setVideoDir, videoPath } from './deliveries';
+
+// vídeos das entregas: a tela toca por central-media://v/<arquivo> (só a pasta de vídeos da Central)
+protocol.registerSchemesAsPrivileged([{ scheme: 'central-media', privileges: { stream: true, supportFetchAPI: true, standard: true, secure: true } }]);
 import { dispatchTodo, dispatchTriage } from './dispatch';
+import { dispatchOwners, ownerDiary, pendingEvents, setOwnerOn } from './owner';
+import { listOperatorActions, onDecided, onDirection, onIdea, onReviewed, onTaskMoved } from './operator';
+import { pulse } from './pulse';
+import { meetingPrompt } from './insights';
 import { brakeLabel, getLimits, readUsage, setLimits } from './governor';
 import { getUsage, usageNow } from './usage';
 import { callExtension, installExtension, listExtensions, onExtensionsChange, setExtensionEnabled, startInstalled, stopAllExtensions, uninstallExtension } from './extensions';
@@ -39,7 +47,7 @@ import { abandonGuide, answerCard, approvePlan, askStrategist, guideIdle, listGu
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
-import { createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
+import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
 import { createProject, deleteProject, listProjects, listRepos, recent, reorderProjects, syncProjects, updateProject } from './projects';
@@ -109,6 +117,11 @@ const dispatchNow = () => {
     quota, setting: getSetting, setSetting, claimed: id => !!claimOf(id),
     start: ({ small, ...input }) => startRun({ ...input, budget_usd: small ? SIZE_BUDGET.small : SIZE_BUDGET.large, proposal_id: null }, emitRun),
   }).catch(() => {});
+  // dono do projeto: acorda com os eventos (história devolvida, falha, decisão, ideia aprovada, insight, fila vazia)
+  dispatchOwners({
+    quota, setting: getSetting, setSetting,
+    start: input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun).id,
+  }).then(n => { if (n) send('backlog:changed', null); }, () => {});
   // agente de triagem: lê as ideias novas e deixa uma recomendação (gatilho em Triagem)
   dispatchTriage({
     quota, setting: getSetting,
@@ -217,7 +230,7 @@ function registerIpc(): void {
 
   handle('proposals:list', statuses => listProposals(statuses));
   handle('proposals:create', input => { const p = createProposal(input); changed(); return p; });
-  handle('proposals:decide', (id, verdict, reason) => { decide(id, verdict, reason); backlogChanged(); changed(); });
+  handle('proposals:decide', (id, verdict, reason) => { decide(id, verdict, reason); onDecided(id, verdict, reason); backlogChanged(); changed(); });
   handle('proposals:delete', id => { deleteProposal(id); backlogChanged(); changed(); });
   // Direcionar para quem pediu: na mesma sessão que criou a decisão. null = não dá (a tela abre uma conversa nova)
   handle('proposals:steer', (id, agentId, text) => {
@@ -274,14 +287,14 @@ function registerIpc(): void {
 
   handle('ideas:list', () => listIdeas());
   handle('ideas:create', input => { const i = createIdea(input); backlogChanged(); return i; });
-  handle('ideas:update', (id, patch) => { updateIdea(id, patch); backlogChanged(); });
+  handle('ideas:update', (id, patch) => { updateIdea(id, patch); onIdea(id, patch.status); backlogChanged(); });
   handle('ideas:seen', ids => { for (const id of ids) run(`update ideas set seen_at = ? where id = ? and seen_at is null`, new Date().toISOString(), id); backlogChanged(); });
   handle('ideas:promote', (id, slug) => { const t = promoteIdea(id, slug); backlogChanged(); return t; });
   handle('ideas:import', async () => { const r = await importPending(); backlogChanged(); return r; });
 
   handle('tasks:list', slug => listTasks(slug));
   handle('tasks:create', input => { const t = createTask(input); backlogChanged(); return t; });
-  handle('tasks:update', (id, patch) => { updateTask(id, patch); backlogChanged(); });
+  handle('tasks:update', (id, patch) => { updateTask(id, patch); onTaskMoved(id, patch.column); backlogChanged(); });
   handle('tasks:delete', id => { deleteTask(id); backlogChanged(); });
 
   handle('turns:list', () => listTurns());
@@ -297,7 +310,29 @@ function registerIpc(): void {
   handle('routines:list', () => listRoutines());
   handle('direction:get', slug => getDirection(slug));
   handle('direction:history', slug => directionHistory(slug));
-  handle('direction:set', (slug, text, note) => { const d = setDirection(slug, text, 'gustavo', note); changed(); return d; });
+  handle('direction:set', (slug, text, note) => { const d = setDirection(slug, text, 'gustavo', note); onDirection(slug, note); changed(); return d; });
+  handle('owner:get', slug => ({ on: !!get<{ o: number }>('select owner_on o from projects where slug = ?', slug)?.o, diary: ownerDiary(slug), pending: pendingEvents(slug), actions: listOperatorActions(slug, 30) }));
+  handle('pulse:get', () => pulse());
+  handle('owner:set', (slug, on) => { setOwnerOn(slug, on); changed(); });
+  handle('insights:meeting', async ({ title, text, file, project_slug }) => {
+    let body = text?.trim() ?? '';
+    if (file) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Reunião: áudio, vídeo ou texto', properties: ['openFile'],
+        filters: [{ name: 'Reunião', extensions: ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'webm', 'mp4', 'mov', 'mkv', 'txt', 'md', 'vtt', 'srt'] }] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const path = r.filePaths[0];
+      if (/\.(txt|md|vtt|srt)$/i.test(path)) body = readFileSync(path, 'utf8');
+      else {
+        if (!sttStatus().ready) throw new Error('Para áudio e vídeo, instale e prepare a extensão Transcrição (Extensões). Texto colado funciona sem ela.');
+        body = (await transcribeFile(path)).text;
+      }
+    }
+    if (!body) throw new Error('Cole a transcrição ou escolha um arquivo.');
+    const agent = centralAgent();
+    const r = startRun({ project_slug: project_slug ?? null, agent_id: agent.id, repo_path: null, prompt: meetingPrompt(title.trim() || 'Reunião', body, project_slug ?? null),
+      permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun);
+    return r.id;
+  });
   handle('backlog:plan', (slug, request) => planBacklog(slug, request, emitRun));
   handle('routines:create', input => { const r = createRoutine(input); routinesChanged(); return r; });
   handle('routines:update', (id, patch) => { updateRoutine(id, patch); routinesChanged(); });
@@ -375,9 +410,10 @@ function registerIpc(): void {
   handle('boards:remove', (taskId, boardId) => { removeFromBoard(taskId, boardId); backlogChanged(); });
   handle('deliveries:list', (since, status) => listDeliveries(since, status));
   handle('deliveries:board', () => reviewBoard());
-  handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); backlogChanged(); });
+  handle('deliveries:review', (id, action, note) => { reviewDelivery(id, action, note); onReviewed(id, action, note); backlogChanged(); });
   // pedir ajuste: a própria execução roda de novo (mesma sessão); sem sessão guardada, a tela usa a conversa (caminho antigo)
   handle('deliveries:adjust', (id, text) => {
+    onReviewed(id, 'adjusting', text);
     const d = get<{ run_id: number; session: string | null }>('select d.run_id, r.session_id session from deliveries d join runs r on r.id = d.run_id where d.id = ?', id);
     if (!d) throw new Error('Entrega não encontrada.');
     if (!d.session) return false;
@@ -565,6 +601,11 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  setVideoDir(join(app.getPath('userData'), 'videos'));
+  protocol.handle('central-media', req => {
+    const file = videoPath(decodeURIComponent(new URL(req.url).pathname.replace(/^\//, '')));
+    return file && existsSync(file) ? net.fetch(pathToFileURL(file).toString()) : new Response('não encontrado', { status: 404 });
+  });
   seedAgents();
   seedAgentsV2();
   registerIpc();

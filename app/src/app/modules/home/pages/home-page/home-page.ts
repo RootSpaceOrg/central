@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { WeekPulse } from './components/week-pulse/week-pulse';
 import { Welcome } from './components/welcome/welcome';
 import { Router, RouterLink } from '@angular/router';
 
@@ -35,7 +36,7 @@ import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
  */
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, AwayDigest, DeliveryCard, Welcome],
+  imports: [RouterLink, Icon, AgoPipe, ProjectAvatar, AwayDigest, DeliveryCard, Welcome, WeekPulse],
   templateUrl: './home-page.html',
   host: { class: 'block h-full overflow-y-auto' },
 })

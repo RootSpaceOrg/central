@@ -15,6 +15,7 @@ import { commandShell } from './workspace';
 import { killTree, treeSpawn } from './proc';
 import { closeDelivery } from './deliveries';
 import { childFinished, isStory, openChildren, parentOf } from './stories';
+import { OWNER_HEAD, emitEvent } from './owner';
 import { mcpConfigPath } from './mcp-config';
 import { memoryBlock } from './memories';
 import { getUsage, usageNow } from './usage';
@@ -279,6 +280,12 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
     // história: o teste de usuário terminou; se ele achou consertos (subtarefas novas), a história segue em andamento
     else if (isStory(task)) moveTaskForRun(task, status !== 'succeeded' ? 'todo' : openChildren(task) ? 'doing' : 'review', pr);
     else moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
+  }
+  // falhou: notícia para o dono do projeto (menos as passadas dele e as execuções curtas da Central)
+  if (status === 'failed') {
+    const f = get<{ project_slug: string | null; prompt: string }>('select project_slug, prompt from runs where id = ?', id);
+    if (f && !f.prompt.startsWith(OWNER_HEAD) && !/^\[(responsável|escuta|gestor|história)/.test(f.prompt))
+      emitEvent(f.project_slug, 'execucao_falhou', `execucao:${id}`, `#${id}${task ? ` (tarefa #${task})` : ''} ${f.prompt.split('\n')[0].slice(0, 120)} — ${(result ?? 'sem resultado').replace(/\s+/g, ' ').slice(0, 300)}`);
   }
   procs.delete(id);
   // nota de entrega: garante, mede o diff e decide se vai para a revisão

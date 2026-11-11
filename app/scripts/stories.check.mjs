@@ -15,7 +15,7 @@ const db = new DatabaseSync(':memory:');
 db.exec(\`
   create table agents (id integer primary key, permission text, name text, builtin integer default 0, priority text default 'normal');
   insert into agents (id, permission, name) values (6, 'full', 'Tech');
-  create table projects (slug text primary key, name text, status text, todo_agent_id integer, todo_parallel integer, todo_hours text, folder text, done_when text not null default 'merge');
+  create table projects (slug text primary key, name text, status text, todo_agent_id integer, todo_parallel integer, todo_hours text, folder text, done_when text not null default 'merge', dev_url text, dev_login text);
   insert into projects (slug, name, status, todo_agent_id, todo_parallel, todo_hours) values ('kultivai', 'KultivAi', 'active', 6, 3, '');
   create table repos (path text, name text, project_slug text, remote text);
   create table runs (id integer primary key, project_slug text, agent_id integer, task_id integer, status text, finished_at text, stage text, waiting text,

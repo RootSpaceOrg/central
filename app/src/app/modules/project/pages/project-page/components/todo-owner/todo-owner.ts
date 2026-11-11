@@ -17,15 +17,15 @@ import { Select, SelectOption } from '../../../../../../shared/ui/select';
   template: `
     @let p = project();
     <app-icon name="agent" [size]="15" class="text-mute" />
-    <span class="text-mute">Responsável pelo A fazer</span>
+    <span class="text-mute">Dono do projeto</span>
     <app-select class="w-56" [compact]="true" [options]="candidates()" [value]="p.todoAgentId ? '' + p.todoAgentId : ''" (valueChange)="setAgent($event)"
-                label="Responsável pelo A fazer" />
+                label="Dono do projeto" />
     @if (p.todoAgentId) {
       <span class="text-mute">até</span>
       <app-select class="w-16" [compact]="true" [options]="parallels" [value]="'' + p.todoParallel" (valueChange)="save({ parallel: +$event })"
                   label="Quantas por vez" [minWidth]="80" />
       <span class="text-mute">por vez, das</span>
-      <input class="field !w-24 !py-1 text-center text-[13px]" placeholder="qualquer hora" aria-label="Horário (ex.: 08-22)" [value]="p.todoHours"
+      <input class="field !w-24 !py-1 text-center text-[13px]" placeholder="sempre" aria-label="Horário (ex.: 08-22)" [value]="p.todoHours"
              (change)="save({ hours: $any($event.target).value.trim() })" title="Ex.: 08-22, ou 22-06 para a madrugada. Vazio = qualquer hora." />
       <span class="text-faint" title="Tarefa em A fazer vira uma execução dele, ligada à tarefa, com nota de entrega e revisão. Não dispara com a cota da sessão acima de 80%.">ⓘ</span>
     }

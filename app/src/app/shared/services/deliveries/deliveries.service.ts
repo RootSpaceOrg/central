@@ -18,6 +18,8 @@ export interface Delivery {
   what: string;
   why: string | null;
   howToTest: string | null;
+  /** vídeo do fluxo (url que a tela toca) */
+  video: string | null;
   risks: string | null;
   /** o agente contou; false = a Central montou do resultado */
   explained: boolean;
@@ -48,7 +50,7 @@ export interface Digest {
 
 const toModel = (d: DeliveryDto): Delivery => ({
   id: d.id, runId: d.run_id, projectSlug: d.project_slug, projectName: d.project_name, agentId: d.agent_id, agentName: d.agent_name,
-  taskId: d.task_id, title: d.title, what: d.what, why: d.why, howToTest: d.how_to_test, risks: d.risks, explained: d.explained,
+  taskId: d.task_id, title: d.title, what: d.what, why: d.why, howToTest: d.how_to_test, video: d.video ? `central-media://v/${encodeURIComponent(d.video)}` : null, risks: d.risks, explained: d.explained,
   failed: d.outcome === 'failed', prUrl: d.pr_url, files: d.files, additions: d.additions, deletions: d.deletions, diffStat: d.diff_stat,
   status: d.status, reviewNote: d.review_note, at: new Date(d.created_at),
 });

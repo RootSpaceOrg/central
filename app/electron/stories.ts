@@ -74,7 +74,8 @@ export function storiesToTest(since: string) {
      order by t.priority, t.id`, since);
 }
 
-export function storyPrompt(s: { id: number; title: string; body: string | null }): string {
+export function storyPrompt(s: { id: number; title: string; body: string | null; project_slug?: string | null }): string {
+  const env = s.project_slug ? get<{ url: string | null; login: string | null }>('select dev_url url, dev_login login from projects where slug = ?', s.project_slug) : null;
   const kids = all<{ id: number; title: string; how: string | null }>(
     `select c.id, c.title, (select d.how_to_test from deliveries d where d.task_id = c.id order by d.id desc limit 1) how
      from tasks c where c.parent_id = ? order by c.id`, s.id);
@@ -87,13 +88,16 @@ ${kids.map(k => `- #${k.id} ${k.title}${k.how ? `\n  como testar (do agente): ${
 
 O Gustavo NÃO revisa as partes: ele só vai usar o produto como usuário final, seguindo o roteiro que você deixar. É você quem
 garante que funciona. Não peça para ele olhar código, PR, log ou console.
-1. Confira se tudo chegou no ambiente de dev (o deploy de develop terminou). Sem ambiente de dev publicado, suba local apontando
-   para dev e deixe rodando para ele (diga a porta).
+1. Confira se tudo chegou no ambiente de dev (o deploy de develop terminou). ${env?.url ? `Dev publicado: ${env.url}${env.login ? ` (como entrar: ${env.login})` : ''}.` : 'Este projeto não tem o link do dev publicado na Central: descubra (repositório, memória do projeto) e, se achar, registre com update_project dev_url; sem dev publicado, suba local apontando para dev e deixe rodando para ele (diga a porta).'}
+   O teste do Gustavo precisa de dados que façam sentido (escola, turma, posts…): se faltar, crie no dev antes.
 2. Use o produto como o usuário final faria, de ponta a ponta: o caminho principal e os 2 ou 3 desvios mais prováveis.
 3. Achou algo quebrado, confuso ou faltando para a história fazer sentido para quem usa? Não conserte aqui: crie uma subtarefa
    por problema (create_task com parent_id ${s.id}, column todo; no body, o que fez, o que viu e o que esperava) e termine
    sem report_delivery. A Central faz as subtarefas e te chama de novo.
-4. Tudo funcionando: report_delivery com
+4. Grave um vídeo curto do caminho principal funcionando, do jeito mais simples que der: Playwright com recordVideo
+   (npx playwright, chromium, viewport de celular se o produto é de celular), sem narração, até ~1 minuto. Se não der para
+   gravar em 10 minutos, siga sem vídeo e diga por quê nos riscos.
+5. Tudo funcionando: report_delivery com video (caminho do .webm/.mp4) e
    - title: o que o usuário consegue fazer agora, em frase de usuário
    - what: o que mudou para quem usa, em 2 a 4 linhas (sem arquivos, PRs, componentes nem subtarefas)
    - how_to_test: roteiro de usuário em até 7 passos numerados: onde abrir (link completo), com qual conta ou perfil, o que

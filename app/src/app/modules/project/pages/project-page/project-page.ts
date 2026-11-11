@@ -21,19 +21,20 @@ import { CODE_TAB } from '../../../../shared/services/sessions/sessions.service'
 import { RoadmapTab } from './components/roadmap/roadmap-tab';
 import { ReleasePanel } from './components/release/release-panel';
 import { TodoOwner } from './components/todo-owner/todo-owner';
+import { OwnerPanel } from './components/owner/owner-panel';
 import { BoardService } from '../../../../shared/services/board/board.service';
 import { Summary } from './components/summary/summary';
 
-type Tab = 'sessoes' | 'rumo' | 'roadmap' | 'backlog' | 'producao' | 'contexto' | 'agentes';
+type Tab = 'sessoes' | 'rumo' | 'dono' | 'roadmap' | 'backlog' | 'producao' | 'contexto' | 'agentes';
 const TABS = [
-  { id: 'sessoes', label: 'Sessões', icon: 'terminal' }, { id: 'rumo', label: 'Rumo', icon: 'flag' },
+  { id: 'sessoes', label: 'Sessões', icon: 'terminal' }, { id: 'rumo', label: 'Rumo', icon: 'flag' }, { id: 'dono', label: 'Dono', icon: 'agent' },
   { id: 'roadmap', label: 'Roadmap', icon: 'roadmap' },
   { id: 'backlog', label: 'Backlog', icon: 'kanban' }, { id: 'producao', label: 'Produção', icon: 'rocket' }, { id: 'contexto', label: 'Contexto', icon: 'graph' }, { id: 'agentes', label: 'Agentes', icon: 'agent' },
 ] as const;
 
 @Component({
   selector: 'app-project-page',
-  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar, ContextView, RoadmapTab, ReleasePanel, TodoOwner],
+  imports: [RouterLink, Icon, AgoPipe, Summary, ProjectSessions, KanbanBoard, ProjectAvatar, ContextView, RoadmapTab, ReleasePanel, TodoOwner, OwnerPanel],
   templateUrl: './project-page.html',
   host: { class: 'flex h-full min-h-0 flex-col' },
 })

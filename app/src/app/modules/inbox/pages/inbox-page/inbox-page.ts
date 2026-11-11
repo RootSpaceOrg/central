@@ -13,6 +13,7 @@ import { IpcService, errorMessage } from '../../../../shared/services/ipc/ipc.se
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { ScopeService, markProjects } from '../../../../shared/services/scope/scope.service';
 import { WaitingRuns, needsYou } from './components/waiting-runs/waiting-runs';
+import { MeetingImport } from './components/meeting-import/meeting-import';
 import { Proposal, RISK_LABEL, SOURCE_LABEL, Verdict } from '../../../../shared/services/proposals/proposals.model';
 import { ProposalsService } from '../../../../shared/services/proposals/proposals.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
@@ -70,7 +71,7 @@ export function oneLine(md: string | null): string {
  */
 @Component({
   selector: 'app-inbox-page',
-  imports: [Icon, RouterLink, ProjectSelect, AgentSelect, ProjectAvatar, AgoPipe, MarkdownPipe, WaitingRuns],
+  imports: [Icon, RouterLink, ProjectSelect, AgentSelect, ProjectAvatar, AgoPipe, MarkdownPipe, WaitingRuns, MeetingImport],
   templateUrl: './inbox-page.html',
   host: { class: 'block h-full overflow-y-auto', '(document:keydown)': 'onKey($event)' },
 })
