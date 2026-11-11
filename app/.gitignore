@@ -43,3 +43,6 @@ __screenshots__/
 .DS_Store
 Thumbs.db
 dist-ext/
+
+# pastas temporarias dos scripts/*.check.mjs que falharam
+/.*-check-*/

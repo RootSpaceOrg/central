@@ -18,7 +18,7 @@ import { Icon } from '../../../../shared/ui/icon';
     <div class="flex items-end gap-4">
       <div class="mr-auto">
         <h1 class="font-display text-[34px] font-bold leading-tight tracking-tight">Backlog</h1>
-        <p class="mt-1 text-mute">{{ open() }} tarefas abertas{{ project() ? ' em ' + project()!.name : ' em todos os projetos' }}. Arraste entre as colunas.</p>
+        <p class="mt-1 text-mute">{{ open() }} tarefas e histórias abertas{{ project() ? ' em ' + project()!.name : ' em todos os projetos' }}. Arraste entre as colunas.</p>
       </div>
       <button type="button" class="btn" (click)="dialogs.newTurn({ projectSlug: slug() })"><app-icon name="night" [size]="18" />Deixar evoluindo</button>
       <button type="button" class="btn btn-primary" (click)="dialogs.newTask({ projectSlug: slug() })"><app-icon name="plus" [size]="18" />Nova tarefa</button>
@@ -46,7 +46,7 @@ export class BacklogPage {
   protected readonly scope = inject(ScopeService);
   protected readonly slug = computed(() => this.query()?.get('projeto') || null);
   protected readonly project = computed(() => (this.slug() ? this.projects.bySlug().get(this.slug()!) ?? null : null));
-  protected readonly open = computed(() => this.tasks.tasks().filter(t =>
+  protected readonly open = computed(() => this.tasks.tasks().filter(t => !t.parentId &&
     t.column !== 'done' && (this.slug() ? this.scope.matches(t.projectSlug) : !!t.projectSlug && this.projects.bySlug().get(t.projectSlug)?.status !== 'dead')).length);
 
 }

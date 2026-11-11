@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 
 import type { DeliveryDto, DigestDto } from '../src/app/shared/contract';
 import { all, get, now, run } from './db';
+import { isStory, openChildren, parentOf } from './stories';
 
 const execFileP = promisify(execFile);
 
@@ -65,9 +66,12 @@ export async function closeDelivery(runId: number): Promise<void> {
   }
   const code = files > 0 || !!r.pr_url;
   const waiting = !!get<{ w: string | null }>('select waiting w from runs where id = ?', runId)?.w;
+  // parte de história: só registro (o Gustavo valida a história). História: vai para ele só quando o teste de usuário fechar
+  const role = r.task_id ? (parentOf(r.task_id) ? 'part' : isStory(r.task_id) ? 'story' : null) : null;
+  const status = waiting ? 'paused' : role === 'part' ? 'info' : role === 'story' ? (openChildren(r.task_id!) ? 'info' : 'review') : code ? 'review' : 'info';
   run(`update deliveries set outcome = ?, pr_url = ?, files = ?, additions = ?, deletions = ?, diff_stat = ?,
        status = case when status = 'pending' then ? else status end where run_id = ?`,
-    r.status, r.pr_url, files, additions, deletions, stat, waiting ? 'paused' : code ? 'review' : 'info', runId);
+    r.status, r.pr_url, files, additions, deletions, stat, status, runId);
 }
 
 /** Ajuste terminou: volta para a revisão e mede o diff de novo. */
@@ -77,7 +81,8 @@ export async function reopenDelivery(runId: number): Promise<void> {
   // retomada de uma espera: a tarefa que ficou em "fazendo" segue o caminho normal
   const t = get<{ task_id: number | null; status: string }>('select d.task_id, r.status from deliveries d join runs r on r.id = d.run_id where d.run_id = ?', runId);
   if (t?.task_id && !get<{ w: string | null }>('select waiting w from runs where id = ?', runId)?.w) {
-    run(`update tasks set "column" = ?, updated_at = ? where id = ? and "column" = 'doing'`, t.status === 'failed' ? 'todo' : 'review', now(), t.task_id);
+    run(`update tasks set "column" = ?, updated_at = ? where id = ? and "column" = 'doing'
+      and not exists (select 1 from tasks c where c.parent_id = tasks.id and c."column" not in ('dev','done'))`, t.status === 'failed' ? 'todo' : 'review', now(), t.task_id);
   }
 }
 

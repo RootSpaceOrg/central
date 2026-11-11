@@ -58,6 +58,13 @@ export class TaskDialog {
   protected readonly priority = signal<TaskPriority>(2);
   /** "#21, #22" */
   protected readonly deps = signal('');
+  /** "#120": história de que é parte */
+  protected readonly parent = signal('');
+  protected readonly parts = computed(() => { const t = this.editing(); return t?.subtasks ? this.tasks.tasks().filter(x => x.parentId === t.id).sort((a, b) => a.id - b.id) : []; });
+  protected readonly story = computed(() => { const p = this.editing()?.parentId; return p ? this.tasks.tasks().find(x => x.id === p) ?? null : null; });
+  protected label(c: TaskColumn): string { return COLUMNS.find(x => x.id === c)?.label ?? c; }
+  /** abre outra tarefa (parte ou história) no lugar desta */
+  protected open(id: number): void { this.close(); setTimeout(() => this.dialogs.editTask(id)); }
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -88,6 +95,7 @@ export class TaskDialog {
       projectSlug: this.projectSlug(), repoPath: this.repoPath() || null, title: this.title().trim(), body: this.body().trim(),
       column: this.column(), priority: this.priority(),
       dependsOn: [...this.deps().matchAll(/\d+/g)].map(m => Number(m[0])),
+      parentId: Number(/\d+/.exec(this.parent())?.[0]) || null,
     };
     try {
       const t = this.editing();
@@ -145,10 +153,10 @@ export class TaskDialog {
     this.busy.set(false);
     const t = this.editing();
     if (t) {
-      this.title.set(t.title); this.body.set(t.body ?? ''); this.column.set(t.column); this.priority.set(t.priority); this.deps.set(t.dependsOn.map(id => `#${id}`).join(', '));
+      this.title.set(t.title); this.body.set(t.body ?? ''); this.column.set(t.column); this.priority.set(t.priority); this.deps.set(t.dependsOn.map(id => `#${id}`).join(', ')); this.parent.set(t.parentId ? `#${t.parentId}` : '');
       this.selectProject(t.projectSlug ?? '', t.repoPath ?? '');
     } else if (s.mode === 'create') {
-      this.title.set(s.title ?? ''); this.body.set(s.body ?? ''); this.column.set(s.column ?? 'backlog'); this.priority.set(2); this.deps.set('');
+      this.title.set(s.title ?? ''); this.body.set(s.body ?? ''); this.column.set(s.column ?? 'backlog'); this.priority.set(2); this.deps.set(''); this.parent.set('');
       this.selectProject(s.projectSlug ?? this.projects.defaultSlug());
     }
   }

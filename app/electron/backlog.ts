@@ -164,7 +164,9 @@ export function promoteIdea(id: number, projectSlug: string): TaskDto {
 
 const TASK_SELECT = `
   select t.id, t.project_slug, t.repo_path, t.title, t.body, t."column", t.color, t.priority, t.position, t.pr_url, t.depends_on,
-         t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at,
+         t.proposal_id, t.idea_id, t.milestone_id, t.created_at, t.updated_at, t.parent_id,
+         (select count(*) from tasks c where c.parent_id = t.id) subtasks,
+         (select count(*) from tasks c where c.parent_id = t.id and c."column" in ('dev','done')) subtasks_done,
          r.id run_id, r.status run_status
   from tasks t
   left join runs r on r.id = (select max(id) from runs where task_id = t.id)`;
@@ -198,9 +200,40 @@ function dependsOn(id: number | null, deps: number[] | null | undefined): string
   return list.length ? JSON.stringify(list) : null;
 }
 
+/** subtarefas por história: acima disso, a história está grande demais para o Gustavo validar de uma vez */
+export const MAX_SUBTASKS = 12;
+
+/** Confere a história de uma subtarefa (um nível só, mesmo projeto, até MAX_SUBTASKS). Devolve a coluna da história. */
+function checkParent(parentId: number, slug: string | null, selfId: number | null): string {
+  const p = get<{ project_slug: string | null; parent_id: number | null; column: string }>('select project_slug, parent_id, "column" from tasks where id = ?', parentId);
+  if (!p) throw new Error(`História #${parentId} não existe.`);
+  if (p.parent_id) throw new Error(`#${parentId} já é subtarefa da #${p.parent_id}: use a #${p.parent_id} como história.`);
+  if (selfId && (parentId === selfId || get('select 1 from tasks where parent_id = ?', selfId))) throw new Error('Uma história não pode virar subtarefa.');
+  if (slug && p.project_slug && slug !== p.project_slug) throw new Error(`A história #${parentId} é de outro projeto (${p.project_slug}).`);
+  const n = get<{ n: number }>('select count(*) n from tasks where parent_id = ? and id <> ?', parentId, selfId ?? 0)!.n;
+  if (n >= MAX_SUBTASKS) throw new Error(`A história #${parentId} já tem ${n} subtarefas: grande demais para validar de uma vez. Crie outra história para o resto (ou pergunte ao Gustavo com create_decision).`);
+  return p.column;
+}
+
+const words = (s: string) => new Set(s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 4));
+/** tarefa aberta do projeto com quase o mesmo título (evita o mesmo bug cadastrado várias vezes) */
+export function similarTask(slug: string | null, title: string): { id: number; title: string } | null {
+  const mine = words(title);
+  if (!slug || mine.size < 3) return null;
+  for (const t of all<{ id: number; title: string }>(`select id, title from tasks where project_slug = ? and "column" <> 'done'`, slug)) {
+    const other = words(t.title);
+    const shared = [...mine].filter(w => other.has(w)).length;
+    if (shared / (mine.size + other.size - shared) >= 0.6) return t;
+  }
+  return null;
+}
+
 export function createTask(input: NewTaskInput & { board_id?: number | null; stage?: string | null; proposal_id?: number | null; idea_id?: number | null; milestone_id?: number | null; pr_url?: string | null; source?: string; source_ref?: string }): TaskDto {
   const title = input.title?.trim();
   if (!title) throw new Error('Dê um título à tarefa.');
+  // parte de uma história já em andamento entra pronta para começar
+  const parentCol = input.parent_id ? checkParent(input.parent_id, input.project_slug, null) : null;
+  if (parentCol && ['todo', 'doing'].includes(parentCol) && (!input.column || input.column === 'backlog')) input = { ...input, column: 'todo' };
   if (input.project_slug ? !get('select 1 from projects where slug = ?', input.project_slug) : !input.board_id) throw new Error('Escolha um projeto (ou crie a tarefa num quadro).');
   if (input.board_id && !resolveBoard(input.board_id)) throw new Error('Quadro não encontrado.');
   const column = COLUMNS.includes(input.column) ? input.column : 'backlog';
@@ -212,6 +245,11 @@ export function createTask(input: NewTaskInput & { board_id?: number | null; sta
     input.proposal_id ?? null, input.pr_url ?? null, input.source ?? null, input.source_ref ?? null);
   const id = Number(lastInsertRowid);
   if (input.depends_on?.length) run('update tasks set depends_on = ? where id = ?', dependsOn(id, input.depends_on), id);
+  if (input.parent_id) {
+    run('update tasks set parent_id = ? where id = ?', input.parent_id, id);
+    // a história reabre se ganhou uma parte nova (ex.: conserto achado no teste de usuário)
+    run(`update tasks set "column" = 'doing', updated_at = ? where id = ? and "column" in ('review','done')`, now(), input.parent_id);
+  }
   // pedido feito num quadro: já entra na coluna dele (a primeira, ou a pedida)
   if (input.board_id) {
     const stage = (input.stage && resolveStage(input.board_id, input.stage)) || get<{ k: string }>('select key k from board_cols where board_id = ? order by position limit 1', input.board_id)?.k;
@@ -235,6 +273,10 @@ export function updateTask(id: number, input: TaskPatch): void {
   if (patch.color !== undefined && patch.color !== null && !/^#[0-9a-fA-F]{6}$/.test(patch.color)) throw new Error('Cor inválida.');
   if (patch.repo_path !== undefined) patch.repo_path = taskRepo(patch.project_slug ?? task.project_slug, patch.repo_path);
   if (patch.depends_on !== undefined) run('update tasks set depends_on = ?, updated_at = ? where id = ?', dependsOn(id, patch.depends_on), now(), id);
+  if (patch.parent_id !== undefined) {
+    if (patch.parent_id) checkParent(patch.parent_id, patch.project_slug ?? task.project_slug, id);
+    run('update tasks set parent_id = ?, updated_at = ? where id = ?', patch.parent_id || null, now(), id);
+  }
   const simple = (['title', 'body', 'project_slug', 'repo_path', 'priority', 'milestone_id', 'color'] as const).filter(k => k in patch && patch[k] !== undefined);
   if (simple.length) {
     run(`update tasks set ${simple.map(k => `${k} = ?`).join(', ')}, updated_at = ? where id = ?`,
@@ -252,6 +294,9 @@ export function updateTask(id: number, input: TaskPatch): void {
       run('update tasks set "column" = ?, updated_at = ? where id = ?', column, now(), id);
       run('commit');
     } catch (e) { run('rollback'); throw e; }
+    if (patch.column) closeReviews(id, column);
+    // história em A fazer: as partes dela também (quem pega é o responsável, uma a uma)
+    if (column === 'todo') run(`update tasks set "column" = 'todo', updated_at = ? where parent_id = ? and "column" = 'backlog'`, now(), id);
   }
   syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', id)?.i ?? null);
 }
@@ -263,8 +308,16 @@ export function deleteTask(id: number): void {
 }
 
 /** Chamado pelos agentes: a tarefa anda no quadro conforme a execução. */
+/** chegou em develop ou foi feita (merge, ou você moveu): a entrega dela sai da fila de revisão (antes ficava lá para sempre) */
+function closeReviews(taskId: number, column: TaskColumn): void {
+  if (column === 'done' || column === 'dev') run(`update deliveries set status = 'accepted', reviewed_at = ? where task_id = ? and status = 'review'`, now(), taskId);
+}
+
 export function moveTaskForRun(taskId: number, column: TaskColumn, prUrl: string | null = null): void {
   run(`update tasks set "column" = ?, pr_url = coalesce(?, pr_url), updated_at = ? where id = ?`, column, prUrl, now(), taskId);
+  closeReviews(taskId, column);
+  // parte começou: a história está em andamento
+  if (column === 'doing') run(`update tasks set "column" = 'doing', updated_at = ? where id = (select parent_id from tasks where id = ?) and "column" in ('backlog','todo')`, now(), taskId);
   syncIdeaProgress(get<{ i: number | null }>('select idea_id i from tasks where id = ?', taskId)?.i ?? null);
 }
 

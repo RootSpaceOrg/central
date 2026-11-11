@@ -27,6 +27,25 @@
                [value]="title()" (input)="title.set($any($event.target).value)">
         <textarea class="field min-h-[22rem] flex-1 resize-y leading-relaxed @3xl:min-h-[28rem]" placeholder="Contexto, critério de pronto, links. Um agente lê isto."
                   aria-label="Descrição" [value]="body()" (input)="body.set($any($event.target).value)"></textarea>
+        @if (editing(); as t) {
+          @if (parts().length) {
+            <section aria-label="Partes da história" class="rounded-2xl border border-edge bg-night/40 px-4 py-3">
+              <p class="text-[13px] font-semibold">Partes desta história · {{ t.subtasksDone }}/{{ t.subtasks }} em develop</p>
+              <p class="mt-0.5 text-[12px] text-faint">Não precisa abrir: a Central faz o merge de cada parte e, quando todas chegarem, um agente testa como usuário e te entrega o roteiro.</p>
+              <ul class="mt-2 space-y-1">
+                @for (p of parts(); track p.id) {
+                  <li><button type="button" class="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-[13px] hover:bg-raise" (click)="open(p.id)">
+                    <span class="w-16 shrink-0 text-[11.5px]" [class]="p.column === 'done' || p.column === 'dev' ? 'text-yes' : p.column === 'doing' ? 'text-later' : 'text-faint'">{{ label(p.column) }}</span>
+                    <span class="min-w-0 flex-1 truncate" [class.line-through]="p.column === 'done'">{{ p.title }}</span>
+                    <span class="text-faint">#{{ p.id }}</span></button></li>
+                }
+              </ul>
+            </section>
+          } @else if (t.parentId) {
+            <p class="text-[13px] text-mute">Parte da história <button type="button" class="text-frost hover:underline" (click)="open(t.parentId)">#{{ t.parentId }} {{ story()?.title }}</button>:
+              você não precisa revisar; vale o teste da história.</p>
+          }
+        }
       </div>
 
       <aside class="space-y-4 border-t border-edge bg-night/40 px-6 py-5 @3xl:border-t-0 @3xl:border-l" aria-label="Propriedades">
@@ -57,6 +76,13 @@
           <input class="field" placeholder="ex.: #21, #22" [value]="deps()" (input)="deps.set($any($event.target).value)" aria-label="Tarefas que precisam ser entregues antes">
           <span class="mt-1 block text-[11.5px] leading-snug text-faint">Vazio = pode começar a qualquer hora. Com dependências, só é puxada quando elas estiverem em Revisão, Em dev ou Feito.</span>
         </label>
+        @if (!parts().length) {
+          <label class="block">
+            <span class="mb-1.5 block text-[12.5px] font-semibold text-mute">Parte da história</span>
+            <input class="field" placeholder="ex.: #120" [value]="parent()" (input)="parent.set($any($event.target).value)" aria-label="História de que esta tarefa é parte">
+            <span class="mt-1 block text-[11.5px] leading-snug text-faint">Parte não vai para a sua revisão: você valida só a história, como usuário.</span>
+          </label>
+        }
 
         @if (editing(); as t) {
           <div>

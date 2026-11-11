@@ -31,6 +31,10 @@
             <p class="text-[14px] leading-snug" [class.line-through]="t.column === 'done'">{{ t.title }}</p>
 
             <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+              @if (t.subtasks) {
+                <span class="flex items-center gap-1.5 rounded-full bg-frost/12 px-2 py-0.5 font-semibold text-frost" [title]="'História: ' + t.subtasks + ' partes; você só valida a história, como usuário'">
+                  <app-icon name="workflow" [size]="12" />História · {{ t.subtasksDone }}/{{ t.subtasks }}</span>
+              }
               @if (t.priority !== 2) {
                 <span class="flex items-center gap-1 {{ priority[t.priority].tone }}"><app-icon name="flag" [size]="13" />{{ priority[t.priority].label }}</span>
               }

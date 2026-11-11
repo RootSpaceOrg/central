@@ -19,7 +19,7 @@ import { agentSend, notifyOwners } from './whatsapp';
 import { analyzeVideo, transcribeFile } from './media';
 import { RESTRICTED_CENTRAL, createAgent, deleteAgent, getAgent, listAgents, updateAgent } from './agentdefs';
 import {
-  createIdea, createProposal, createTask, decide, linkDecision, deleteProposal, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
+  createIdea, createProposal, createTask, decide, linkDecision, similarTask, deleteProposal, deleteTask, importPending, listIdeas, listProposals, listTasks, promoteIdea,
   getSetting, setSetting, updateIdea, updateTask,
 } from './backlog';
 import { get, run } from './db';
@@ -139,19 +139,26 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
 
   // ---------- tarefas ----------
   tool('list_tasks', 'Lista tarefas do backlog. Filtros opcionais por projeto e coluna.', { project_slug: z.string().optional(), column: column.optional() }, a =>
-    listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, boards: placements(t.id), priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status })));
-  tool('create_task', 'Cria tarefa no backlog de um projeto (ou direto num quadro: board + stage; aí o projeto é opcional). priority: 0 prioritária, 1 alta, 2 normal, 3 baixa.', {
+    listTasks(a.project_slug ?? null).filter(t => !a.column || t.column === a.column).map(t => ({ id: t.id, project: t.project_slug, title: t.title, body: t.body?.slice(0, 300), column: t.column, boards: placements(t.id), priority: t.priority, repo: t.repo_path, pr: t.pr_url, agent: t.run_status, story: t.parent_id ?? undefined, parts: t.subtasks ? `${t.subtasks_done}/${t.subtasks}` : undefined })));
+  tool('create_task', 'Cria tarefa (ou história: a tarefa-mãe; as partes vêm com parent_id) no backlog de um projeto (ou direto num quadro: board + stage; aí o projeto é opcional). priority: 0 prioritária, 1 alta, 2 normal, 3 baixa.', {
     depends_on: z.array(z.number().int()).optional().describe('ids das tarefas que precisam ser entregues antes desta (o responsável só puxa quando elas estiverem em Revisão, Em dev ou Feito)'),
     project_slug: z.string().optional(), board: z.union([z.number().int(), z.string()]).optional().describe('quadro onde o pedido entra (id ou nome)'),
     stage: z.string().optional().describe('coluna do quadro (padrão: a primeira)'), title: z.string(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     repo_path: z.string().optional().describe('caminho do repositório, se já souber onde o trabalho acontece'),
     idea_id: z.number().int().optional().describe('ideia aprovada de onde a tarefa nasceu (a ideia passa para "em andamento")'),
     milestone_id: z.number().int().optional().describe('marco do roadmap que a tarefa avança'),
-  }, a => createTask({ project_slug: a.project_slug ?? null, board_id: a.board !== undefined ? resolveBoard(a.board) : null, stage: a.stage ?? null, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}`, depends_on: a.depends_on }), h.backlog);
+    parent_id: z.number().int().optional().describe('história de que esta tarefa é parte (o Gustavo não revisa a parte; a Central faz o merge em develop)'),
+    distinct: z.boolean().optional().describe('true = você conferiu e não é a mesma coisa que a tarefa de título parecido'),
+  }, a => {
+    const twin = a.distinct ? null : similarTask(a.project_slug ?? null, a.title);
+    if (twin) throw new Error(`Parece a tarefa #${twin.id} ("${twin.title}"), que já está aberta. Se for a mesma coisa, use essa (update_task); se for outra, crie de novo com distinct: true.`);
+    return createTask({ parent_id: a.parent_id ?? null, project_slug: a.project_slug ?? null, board_id: a.board !== undefined ? resolveBoard(a.board) : null, stage: a.stage ?? null, repo_path: a.repo_path ?? null, title: a.title, body: a.body ?? null, column: a.column ?? 'backlog', priority: (a.priority ?? 2) as 0 | 1 | 2 | 3, idea_id: a.idea_id ?? null, milestone_id: a.milestone_id ?? null, source: 'central', source_ref: `${Date.now()}-${Math.random()}`, depends_on: a.depends_on });
+  }, h.backlog);
   tool('update_task', 'Edita ou move uma tarefa (coluna, prioridade, título, descrição, projeto, repositório).', {
     depends_on: z.array(z.number().int()).optional().describe('tarefas que precisam ser entregues antes desta ([] limpa)'),
     id: z.number().int(), title: z.string().optional(), body: z.string().optional(), column: column.optional(), priority: z.number().int().min(0).max(3).optional(),
     project_slug: z.string().optional(), repo_path: z.string().optional(), milestone_id: z.number().int().optional(),
+    parent_id: z.number().int().nullable().optional().describe('põe a tarefa numa história (null tira)'),
   }, ({ id, ...patch }) => updateTask(id, { ...patch, priority: patch.priority as 0 | 1 | 2 | 3 | undefined, position: patch.column ? 0 : undefined }), h.backlog);
 
   // ---------- quadros (workflows): independentes de projeto; uma tarefa pode estar em vários ----------

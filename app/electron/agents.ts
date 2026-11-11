@@ -14,6 +14,7 @@ import { Grant, blockedDirs, grantsFrom, safeGrant } from './permissions';
 import { commandShell } from './workspace';
 import { killTree, treeSpawn } from './proc';
 import { closeDelivery } from './deliveries';
+import { childFinished, isStory, openChildren, parentOf } from './stories';
 import { mcpConfigPath } from './mcp-config';
 import { memoryBlock } from './memories';
 import { getUsage, usageNow } from './usage';
@@ -264,6 +265,8 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
   const waiting = !!get<{ w: string | null }>('select waiting w from runs where id = ?', id)?.w;
   const asking = task ? !!get(`select 1 from proposals where task_id = ? and status = 'proposed'`, task) : false;
   const at = get<{ s: string | null; b: number | null }>('select stage s, board_id b from runs where id = ?', id);
+  // parte de uma história: a Central faz o merge em develop depois da nota de entrega (o Gustavo não revisa partes)
+  let child = false;
   if (task && !waiting && !asking) {
     if (at?.s && at.b) {
       // etapa de um quadro: terminou bem → próxima coluna (a escolhida ou a seguinte); não terminou → fica na etapa
@@ -272,11 +275,16 @@ function finish(id: number, status: 'succeeded' | 'failed' | 'killed', result: s
       const moved = !!get<{ m: number }>('select board_moved m from runs where id = ?', id)?.m;
       const next = status === 'succeeded' && !moved ? nextStage(at.b, at.s) : null;
       if (next) setStage(task, at.b, next);
-    } else moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
+    } else if (parentOf(task)) child = true;
+    // história: o teste de usuário terminou; se ele achou consertos (subtarefas novas), a história segue em andamento
+    else if (isStory(task)) moveTaskForRun(task, status !== 'succeeded' ? 'todo' : openChildren(task) ? 'doing' : 'review', pr);
+    else moveTaskForRun(task, status === 'succeeded' ? 'review' : 'todo', pr);
   }
   procs.delete(id);
   // nota de entrega: garante, mede o diff e decide se vai para a revisão
-  closeDelivery(id).catch(() => {}).finally(() => emit.changed());
+  closeDelivery(id).catch(() => {})
+    .then(() => (child && task ? childFinished(id, task, status === 'succeeded', pr) : undefined)).catch(() => {})
+    .finally(() => emit.changed());
   emit.changed();
   pump(emit);
 }
@@ -601,10 +609,11 @@ const prodRule = (slug: string | null) => (slug && get(`select 1 from projects w
   : '');
 
 function framePrompt(r: RunDto, where: Where): string {
-  const task = r.task_id ? get<{ id: number; title: string }>('select id, title from tasks where id = ?', r.task_id) : null;
+  const task = r.task_id ? get<{ id: number; title: string; parent_id: number | null }>('select id, title, parent_id from tasks where id = ?', r.task_id) : null;
   const central = `## Central
 Você tem as ferramentas \`central\` (MCP) da Central do Gustavo, onde vivem projetos, backlog, ideias e decisões. Use-as para deixar o backlog verdadeiro:
-${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova essa tarefa: a Central faz isso quando você terminar.\n` : ''}- O que ficou faltando ou o que você descobriu e vale fazer: crie tarefa no backlog ${r.project_slug ? `do projeto "${r.project_slug}"` : 'do projeto certo'} (create_task, coluna backlog) ou ideia (create_idea).
+${task ? `- Esta execução é a tarefa #${task.id} ("${task.title}"). Não mova essa tarefa: a Central faz isso quando você terminar.\n` : ''}${task?.parent_id ? `- Ela é parte da história #${task.parent_id}. O Gustavo não revisa partes: quando você terminar, a Central faz o merge do seu PR em develop sozinha.\n  Abra o PR para develop só com os testes passando e sem quebrar o que já existe. O report_delivery fica de registro e guia quem testa a história.\n` : ''}- Trabalho que vira mais de uma tarefa: crie uma HISTÓRIA (create_task; título = o que o usuário final vai conseguir fazer) e as partes como subtarefas (create_task com parent_id da história; no máximo 12). O Gustavo só valida histórias, usando o produto como usuário; as partes não passam por ele: terminou bem, a Central faz o merge do PR em develop sozinha, e quando todas chegam um agente testa a história como usuário e entrega o roteiro para ele. Antes de criar, veja se já existe (list_tasks): a Central recusa título quase igual ao de uma tarefa aberta.
+- O que ficou faltando ou o que você descobriu e vale fazer: crie tarefa no backlog ${r.project_slug ? `do projeto "${r.project_slug}"` : 'do projeto certo'} (create_task, coluna backlog) ou ideia (create_idea).
 - O que depende de uma decisão do Gustavo: crie uma decisão (create_decision) com o próximo passo sugerido.
 - Não exclua nada pela Central.
 - Comece declarando seu plano na lista de tarefas (TaskCreate, 3 a 6 passos) e marque cada um (TaskUpdate) ao avançar:

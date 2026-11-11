@@ -65,8 +65,11 @@ ${approved.map(i => `- #${i.id} ${i.title}${i.tasks ? ` (já tem ${i.tasks} tare
 
 O que fazer, nesta ordem:
 1. Leia o backlog do projeto (list_tasks), as ideias (list_ideas), a memória (memory_recall) e, se precisar, o código (code_map, code_search).
-2. Para cada ideia aprovada sem tarefas: quebre em tarefas pequenas (cada uma cabe num PR) com create_task, passando idea_id,
-   repo_path (caminho completo do repositório) e um corpo com o que fazer e como saber que terminou.
+2. Para cada ideia aprovada sem tarefas: crie UMA história (create_task com idea_id; título = o que o usuário final vai conseguir
+   fazer; corpo = como ele vai testar, como usuário) e quebre em subtarefas pequenas (cada uma cabe num PR) com create_task
+   parent_id da história, idea_id, repo_path (caminho completo do repositório) e um corpo com o que fazer e como saber que
+   terminou. O Gustavo só valida a história; as partes a Central mergeia em develop sozinha. Tarefas soltas parecidas que já
+   existem: ponha na história certa (update_task parent_id) em vez de criar outras.
 3. Reordene pelo rumo: o que avança o foco atual vai para "todo" (A fazer) com prioridade alta; o resto fica em "backlog".
    Roadmap: ligue cada tarefa ao marco que ela avança (milestone_id). Se faltar um marco claro para o que o rumo pede, crie (create_milestone,
    horizonte now/next/later) e mova marcos concluídos para done.

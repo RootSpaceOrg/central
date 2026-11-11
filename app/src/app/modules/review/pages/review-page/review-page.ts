@@ -75,7 +75,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
           <!-- decidir: fica no topo, fixo ao rolar -->
           <div class="sticky top-0 z-10 -mx-10 mt-4 border-b border-edge bg-night/95 px-10 py-3 backdrop-blur">
             @if (adjusting()) {
-              <textarea id="rv-adjust" class="field mb-2 h-24 w-full resize-y text-[14px]" placeholder="O que ajustar. A mesma execução roda de novo, na mesma sessão, e a entrega volta para cá atualizada (Ctrl+Enter manda)."
+              <textarea id="rv-adjust" class="field mb-2 h-24 w-full resize-y text-[14px]" [placeholder]="it.task?.subtasks ? 'O que você fez e o que viu (ou o que esperava ver). O agente conserta, testa de novo como usuário e a história volta para cá (Ctrl+Enter manda).' : 'O que ajustar. A mesma execução roda de novo, na mesma sessão, e a entrega volta para cá atualizada (Ctrl+Enter manda).'"
                         aria-label="Ajuste pedido" [value]="note()" (input)="note.set($any($event.target).value)" (keydown.control.enter)="adjust(it)" (keydown.escape)="adjusting.set(false)"></textarea>
             }
             <div class="flex flex-wrap items-center gap-2">
@@ -84,9 +84,9 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
                   <button type="button" class="btn btn-primary" [disabled]="!note().trim() || busy()" (click)="adjust(it)"><app-icon name="send" [size]="14" />Mandar para o agente</button>
                   <button type="button" class="btn btn-ghost" (click)="adjusting.set(false)">Cancelar</button>
                 } @else {
-                  <button type="button" class="btn !border-yes !bg-yes !text-night" (click)="approve(it)" title="Revisado: a tarefa vai para Feito (o merge do PR, se faltar, você faz no GitHub)">
-                    <app-icon name="check" [size]="15" />Aprovar <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
-                  <button type="button" class="btn" (click)="openAdjust()">Pedir ajuste <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
+                  <button type="button" class="btn !border-yes !bg-yes !text-night" (click)="approve(it)" [title]="it.task?.subtasks ? 'Usei e funciona: a história vai para Feito' : 'Revisado: a tarefa vai para Feito (o merge do PR, se faltar, você faz no GitHub)'">
+                    <app-icon name="check" [size]="15" />{{ it.task?.subtasks ? 'Funciona' : 'Aprovar' }} <kbd class="ml-1 text-xs opacity-70">A</kbd></button>
+                  <button type="button" class="btn" (click)="openAdjust()">{{ it.task?.subtasks ? 'Não funcionou' : 'Pedir ajuste' }} <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
                   <button type="button" class="btn btn-ghost text-mute" (click)="discard(it)">Descartar</button>
                 }
               } @else {
@@ -106,7 +106,8 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
             @let d = it.d;
             @if (d.howToTest) {
               <section class="mt-6 rounded-2xl border border-frost/40 bg-frost/5 px-5 py-4" aria-labelledby="rv-test">
-                <h3 id="rv-test" class="flex items-center gap-2 font-semibold text-frost"><app-icon name="check" [size]="16" />Como testar</h3>
+                <h3 id="rv-test" class="flex items-center gap-2 font-semibold text-frost"><app-icon name="check" [size]="16" />{{ it.task?.subtasks ? 'Teste como usuário' : 'Como testar' }}</h3>
+                @if (it.task?.subtasks) { <p class="mt-1 text-[12.5px] text-mute">História com {{ it.task!.subtasks }} partes, já mergeadas em develop e testadas pelo agente. Siga o roteiro como quem usa o produto.</p> }
                 <div class="md mt-2 text-[14.5px] selectable" [innerHTML]="d.howToTest | markdown"></div>
               </section>
             } @else {

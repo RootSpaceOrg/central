@@ -6,6 +6,7 @@
  */
 import { all, get, run } from './db';
 import { PRIORITY_OF, Priority, canStart } from './governor';
+import { STORY_HEAD, storiesToTest, storyPrompt } from './stories';
 
 const RETRY_AFTER_H = 12;
 
@@ -98,6 +99,8 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
          and not exists (select 1 from runs r where r.task_id = t.id and (r.status in ('queued','preparing','running') or (r.status = 'failed' and r.finished_at > ?)))
          and not exists (select 1 from json_each(coalesce(t.depends_on, '[]')) d join tasks p on p.id = d.value where p."column" not in ('review','dev','done'))
          and not exists (select 1 from proposals p where p.task_id = t.id and p.status = 'proposed')
+         -- história não é feita direto: andam as partes; ela vira teste de usuário quando todas chegarem em develop
+         and not exists (select 1 from tasks c where c.parent_id = t.id)
        order by t.picked_at is null, t.priority, t.position, t.id`, o.slug, since)
       // tarefa que uma conversa disse estar fazendo (set_status) já tem dono
       .filter(t => !deps.claimed?.(t.id));
@@ -125,6 +128,17 @@ export async function dispatchTodo(deps: DispatchDeps): Promise<number> {
       `select id, title, depends_on from tasks where project_slug = ? and "column" = 'todo' and depends_on is not null and id not in (${ids})`, o.slug);
     deps.start({ project_slug: o.slug, agent_id: o.agent, repo_path: null, permission: 'edits', task_id: null, small: true, prompt: pickPrompt(o.slug, rest, waiting) });
     started++;
+  }
+  // histórias com todas as partes em develop: o responsável do projeto usa o produto como usuário e prepara o roteiro do
+  // Gustavo (um teste por projeto de cada vez)
+  for (const s of storiesToTest(new Date(now.getTime() - RETRY_AFTER_H * 3_600_000).toISOString())) {
+    const o = owners.find(x => x.slug === s.project_slug);
+    if (!o || !withinHours(o.hours, now) || !allowed(o.priority)) continue;
+    if (get(`select 1 from runs where project_slug = ? and prompt like ? and status in ('queued','preparing','running')`, s.project_slug, `${STORY_HEAD}%`)) continue;
+    try {
+      deps.start({ project_slug: s.project_slug, agent_id: o.agent, repo_path: s.repo_path, prompt: storyPrompt(s), permission: o.permission, task_id: s.id });
+      started++;
+    } catch (e) { stuck(s.id, s.project_slug, (e as Error).message); }
   }
   for (const s of stages) {
     if (!withinHours(s.hours, now) || !allowed(s.priority)) continue;

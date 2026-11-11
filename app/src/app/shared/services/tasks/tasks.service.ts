@@ -26,6 +26,11 @@ export interface Task {
   updatedAt: Date;
   /** tarefas que precisam ser entregues antes desta */
   dependsOn: number[];
+  /** história de que é parte (o Gustavo não revisa partes) */
+  parentId: number | null;
+  /** partes, se for história (0 = tarefa comum), e quantas já chegaram em develop */
+  subtasks: number;
+  subtasksDone: number;
 }
 
 export interface TaskDraft {
@@ -36,6 +41,7 @@ export interface TaskDraft {
   column: TaskColumn;
   priority: TaskPriority;
   dependsOn?: number[];
+  parentId?: number | null;
 }
 
 export const COLUMNS: { id: TaskColumn; label: string; hint: string }[] = [
@@ -58,6 +64,7 @@ const toModel = (d: TaskDto): Task => ({
   id: d.id, projectSlug: d.project_slug, repoPath: d.repo_path, title: d.title, body: d.body, column: d.column, color: d.color ?? null,
   priority: d.priority, position: d.position, prUrl: d.pr_url, proposalId: d.proposal_id, ideaId: d.idea_id,
   runId: d.run_id, runStatus: d.run_status, updatedAt: new Date(d.updated_at),
+  parentId: d.parent_id ?? null, subtasks: d.subtasks ?? 0, subtasksDone: d.subtasks_done ?? 0,
   dependsOn: (() => { try { return d.depends_on ? (JSON.parse(d.depends_on) as number[]) : []; } catch { return []; } })(),
 });
 
@@ -97,13 +104,13 @@ export class TasksService {
   async create(d: TaskDraft): Promise<void> {
     await this.api.create({
       project_slug: d.projectSlug, repo_path: d.repoPath, title: d.title, body: d.body || null, column: d.column, priority: d.priority,
-      depends_on: d.dependsOn ?? [],
+      depends_on: d.dependsOn ?? [], parent_id: d.parentId ?? null,
     });
   }
 
   async save(id: number, d: TaskDraft): Promise<void> {
     // pedido solto de um quadro continua sem projeto se você não escolher um
-    await this.api.update(id, { project_slug: d.projectSlug || undefined, repo_path: d.repoPath, title: d.title, body: d.body || null, priority: d.priority, depends_on: d.dependsOn ?? [] });
+    await this.api.update(id, { project_slug: d.projectSlug || undefined, repo_path: d.repoPath, title: d.title, body: d.body || null, priority: d.priority, depends_on: d.dependsOn ?? [], parent_id: d.parentId ?? null });
     if (this.tasks().find(t => t.id === id)?.column !== d.column) await this.api.update(id, { column: d.column, position: 0 });
   }
 

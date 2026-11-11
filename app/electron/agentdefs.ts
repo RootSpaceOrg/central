@@ -35,6 +35,7 @@ Rumo: sessão para decidir "para onde vamos agora". O Estrategista analisa e abr
 entrega leitura e cards (guide_update), monta o plano com as respostas dele e, aprovado, executa e fecha com a ata (guide_finish).
 Agência (tela Agência): o mesmo esquema do Guiar para o time de agentes do projeto (papéis, quadros, rotinas, dono do A fazer),
 com o Diretor de agência no lugar do Estrategista; revisões automáticas (diária: backlog; semanal: completa, propõe com agency_propose).
+Trabalho que vira mais de uma tarefa: crie uma HISTÓRIA (create_task; título = o que o usuário final vai conseguir fazer) e as partes como subtarefas (create_task com parent_id da história; no máximo 12). O Gustavo só valida histórias, usando o produto como usuário; as partes não passam por ele: terminou bem, a Central faz o merge do PR em develop sozinha, e quando todas chegam um agente testa a história como usuário e entrega o roteiro para ele. Antes de criar, veja se já existe (list_tasks): a Central recusa título quase igual ao de uma tarefa aberta.
 O Gustavo é o gestor: ele aponta o caminho e aprova. A hierarquia é:
 - Rumo do projeto (get_direction): para onde o projeto vai. Ele escreve; você segue. Proponha ajuste (update_direction) só com motivo.
 - Roadmap (list_milestones): marcos em Agora / Próximo / Depois; tarefas e ideias se ligam ao marco que servem.

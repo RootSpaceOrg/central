@@ -33,6 +33,7 @@ db.exec(\`
   insert into agents (id, permission, name, builtin) values (1, 'edits', 'Central', 1);
   alter table tasks add column depends_on text;
   alter table tasks add column picked_at text;
+  alter table tasks add column parent_id integer;
   create table ideas (id integer primary key, title text, body text, project_slug text, status text, author text, triaged_at text);
   insert into ideas (id, title, body, project_slug, status, author) values (1, 'Solta', 'texto', null, 'new', 'gustavo'),
     (2, 'Com projeto', null, 'kultivai', 'new', 'gustavo'), (3, 'De agente', null, null, 'new', 'agente'), (4, 'Velha', null, null, 'approved', 'gustavo');

@@ -65,7 +65,8 @@ export class KanbanBoard {
     const slug = this.projectSlug();
     const living = new Set(this.projects.living().map(p => p.slug));
     const bySlug = this.projects.bySlug();
-    const visible = this.tasks.tasks().filter(t => (slug ? t.projectSlug === slug || (this.frentes() && !!t.projectSlug && bySlug.get(t.projectSlug)?.parentSlug === slug) : !!t.projectSlug && living.has(t.projectSlug)));
+    // partes de história não aparecem: andam sozinhas e o Gustavo vê só a história (o cartão mostra o progresso)
+    const visible = this.tasks.tasks().filter(t => !t.parentId).filter(t => (slug ? t.projectSlug === slug || (this.frentes() && !!t.projectSlug && bySlug.get(t.projectSlug)?.parentSlug === slug) : !!t.projectSlug && living.has(t.projectSlug)));
     const sorted = [...visible].sort((a, b) => a.position - b.position || a.priority - b.priority);
     return Object.fromEntries(COLUMNS.map(c => [c.id, sorted.filter(t => t.column === c.id)])) as Record<string, Task[]>;
   });

@@ -372,6 +372,11 @@ export interface TaskDto {
   color?: string | null;
   /** JSON com ids das tarefas que precisam ser entregues antes desta (ex.: "[21,22]") */
   depends_on?: string | null;
+  /** história de que esta tarefa é parte (null = tarefa solta ou a própria história) */
+  parent_id?: number | null;
+  /** partes desta história (0 = não é história) e quantas já chegaram em develop */
+  subtasks?: number;
+  subtasks_done?: number;
 }
 
 /** Uma coluna de um quadro (workflow). */
@@ -423,6 +428,8 @@ export interface NewTaskInput {
   priority: TaskPriority;
   /** tarefas que precisam ser entregues antes desta */
   depends_on?: number[];
+  /** parte de uma história (o Gustavo não revisa a parte: só a história, como usuário) */
+  parent_id?: number | null;
 }
 
 export interface TaskPatch {
@@ -439,6 +446,8 @@ export interface TaskPatch {
   color?: string | null;
   /** tarefas que precisam ser entregues antes desta ([] = nenhuma) */
   depends_on?: number[];
+  /** história de que é parte (null = solta) */
+  parent_id?: number | null;
 }
 
 export interface ImportResultDto {
