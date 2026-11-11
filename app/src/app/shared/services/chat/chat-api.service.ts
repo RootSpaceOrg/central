@@ -12,6 +12,8 @@ export class ChatApiService {
   send(chatId: number | null, agentId: number, text: string, projectSlug: string | null = null, options: ChatOptions | null = null) {
     return this.ipc.invoke('chat:send', chatId, agentId, text, projectSlug, options);
   }
+  setChief(chatId: number | null) { return this.ipc.invoke('chief:set', chatId); }
+  onChiefChanged(cb: (chatId: number) => void) { return this.ipc.on('chief:changed', cb); }
   fromRun(runId: number) { return this.ipc.invoke('chat:fromRun', runId); }
   rename(chatId: number, title: string) { return this.ipc.invoke('chat:rename', chatId, title); }
   stop(chatId: number) { return this.ipc.invoke('chat:stop', chatId); }

@@ -48,6 +48,7 @@ function product(p: { slug: string; name: string; color: string; icon_kind: stri
   return {
     slug: s, name: p.name, color: p.color, icon_kind: p.icon_kind, icon_value: p.icon_value, parent_slug: p.parent_slug,
     owner, owner_on: !!p.owner_on, tech_lead: tech,
+    pending_events: get<{ n: number }>('select count(*) n from events where project_slug = ? and handled_at is null', s)!.n,
     owner_state: !owner ? 'none' : ownerBusy ? 'working' : (waiting || p.one_on_one) ? 'waiting' : p.owner_on ? 'watching' : 'off',
     focus: focusOf(get<{ text: string }>('select text from directions where project_slug = ? order by id desc limit 1', s)?.text ?? null),
     milestone: ms && msCount ? { title: ms.title, target: ms.target, total: msCount.n, done: msCount.done ?? 0 } : null,

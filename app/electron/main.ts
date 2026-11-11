@@ -387,7 +387,10 @@ function registerIpc(): void {
   handle('guides:abandon', id => { abandonGuide(id); send('guides:changed', null); });
   // WhatsApp (extensão): os donos conversam com a Central por lá; a resposta aparece aqui também
   initWhatsApp({ notify: chatNotify, changed: () => { changed(); backlogChanged(); }, onStatus: () => send('ext:changed', null), centralId: () => get<{ id: number }>('select id from agents where builtin = 1')!.id,
-    startListen: input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.small, proposal_id: null }, emitRun).id });
+    startListen: input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.small, proposal_id: null }, emitRun).id,
+    chiefChanged: id => send('chief:changed', id) });
+  // a conversa que está no chefe de gabinete (painel/cockpit): é nela que o seu WhatsApp entra
+  handle('chief:set', id => { setSetting('chief:chat', id ? String(id) : ''); });
   handle('agents:list', () => listAgents());
   handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });
   handle('agents:update', (id, patch) => { updateAgent(id, patch); agentsChanged(); });

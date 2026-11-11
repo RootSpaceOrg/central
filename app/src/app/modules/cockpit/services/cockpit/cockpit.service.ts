@@ -10,6 +10,7 @@ export interface Instrument {
   owner: { id: number; name: string; color: string; iconKind: string; iconValue: string | null } | null;
   ownerOn: boolean; ownerState: OwnerState;
   techLead: { id: number; name: string } | null;
+  pendingEvents: number;
   focus: string | null;
   /** pct null = marco sem tarefas ligadas ainda */
   milestone: { title: string; target: string | null; total: number; done: number; pct: number | null } | null;
@@ -27,7 +28,7 @@ const utc = (s: string) => new Date(s.endsWith('Z') ? s : `${s}Z`);
 const toInstrument = (p: CockpitProduct): Instrument => ({
   slug: p.slug, name: p.name, color: p.color, iconKind: p.icon_kind, iconValue: p.icon_value, parentSlug: p.parent_slug,
   owner: p.owner ? { id: p.owner.id, name: p.owner.name, color: p.owner.color, iconKind: p.owner.icon_kind, iconValue: p.owner.icon_value } : null,
-  ownerOn: p.owner_on, ownerState: p.owner_state, focus: p.focus, techLead: p.tech_lead,
+  ownerOn: p.owner_on, ownerState: p.owner_state, focus: p.focus, techLead: p.tech_lead, pendingEvents: p.pending_events,
   milestone: p.milestone ? { ...p.milestone, pct: p.milestone.total ? Math.round((p.milestone.done / p.milestone.total) * 100) : null } : null,
   rhythm: { days: p.rhythm.days, delivered: p.rhythm.delivered_7d, validated: p.rhythm.validated_7d, returned: p.rhythm.returned_7d },
   metrics: p.metrics.map(m => ({ name: m.name, unit: m.unit, value: m.value, prev: m.prev, target: m.target, at: m.at ? utc(m.at) : null, everyHours: m.every_hours })),

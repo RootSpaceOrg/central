@@ -1,4 +1,4 @@
-import { Injectable, WritableSignal, computed, inject, signal } from '@angular/core';
+import { Injectable, WritableSignal, computed, effect, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { ChatDto, ChatMessageDto, ChatRole } from '../../contract';
@@ -189,6 +189,9 @@ export class ChatService extends ChatSession {
       if (!busy || !this.chats().some(c => c.id === chat_id)) this.loadChats();
     });
     this.chief = this.spawn(null);
+    // o WhatsApp do Gustavo entra na conversa que está no chefe de gabinete; quando ele abre uma nova, o painel segue
+    effect(() => { const id = this.chief.current(); this.api.setChief(id).catch(() => {}); });
+    this.api.onChiefChanged(id => { this.loadChats(); this.chief.select(id); });
     this.loadChats();
     this.ready = Promise.all([this.settings.get('chat:last'), this.api.list(null)]).then(([v, list]) => {
       this.chats.set(list.map(toChat));

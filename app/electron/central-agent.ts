@@ -98,6 +98,8 @@ const EFFORTS = ['', 'low', 'medium', 'high', 'xhigh', 'max'];
 /** Texto ao vivo das respostas: o main liga ao evento da tela. */
 let onStream: (chatId: number, text: string) => void = () => {};
 export function onChatStream(fn: typeof onStream): void { onStream = fn; }
+/** a conversa está respondendo agora (tem um Claude rodando nela) */
+export const isChatBusy = (chatId: number) => procs.has(chatId);
 
 export function sendChat(chatId: number | null, agentId: number, text: string, notify: Notify, onCentralChange: () => void, projectSlug: string | null = null,
   options: ChatOptions | null = null, alreadySaved = false): number {

@@ -9,7 +9,7 @@
  *   (nunca escreveu) pede aprovação, a não ser que você libere "qualquer número" em Extensões.
  */
 import { getSetting, onDecided, setSetting } from './backlog';
-import { sendChat } from './central-agent';
+import { sendChat, isChatBusy } from './central-agent';
 import { all, get, now, run } from './db';
 import { callExtension, onExtensionEvent, running } from './extensions';
 import { digits, hitLimiter, splitReply, toWhatsApp } from './wa-format';
@@ -74,7 +74,43 @@ const bubbles = () => (splitOn()
 const intro = (who: string) => `(Mensagem de ${who} pelo WhatsApp.${bubbles()} Responda curto, em texto simples do WhatsApp: *negrito* com um asterisco, listas com •,
 sem tabelas nem blocos de código. O que precisar de tela, diga onde está na Central.)`;
 
-let deps: { notify: Notify; changed: () => void; onStatus: () => void; centralId: () => number; startListen: (input: { agent_id: number; project_slug: string | null; prompt: string }) => number };
+let deps: { notify: Notify; changed: () => void; onStatus: () => void; centralId: () => number; startListen: (input: { agent_id: number; project_slug: string | null; prompt: string }) => number;
+  /** a conversa do chefe de gabinete mudou (o WhatsApp abriu uma): o painel passa a mostrar ela */
+  chiefChanged?: (chatId: number) => void };
+
+/**
+ * Você falando com a Central pelo WhatsApp é a MESMA conversa do painel (o chefe de gabinete): o que você manda (texto,
+ * arquivo, áudio) entra nela marcado "pelo WhatsApp", e a resposta a isso volta pelo WhatsApp. Conversa ocupada (a
+ * Central respondendo no painel): espera ela terminar e entra na sequência.
+ */
+function talkChief(account: string, chat: string, text: string): void {
+  const saved = Number(getSetting('chief:chat')) || null;
+  const centralId = deps.centralId();
+  const chatId = saved && get('select 1 from chats where id = ? and agent_id = ? and project_slug is null', saved, centralId) ? saved : null;
+  if (chatId && isChatBusy(chatId)) { setTimeout(() => talkChief(account, chat, text), 4000); return; }
+  const typingOn = () => callExtension(EXT, 'typing', { account, to: chat }).catch(() => {});
+  typingOn();
+  const keep = setInterval(typingOn, 8000);
+  let last: string | null = null;
+  const notify: Notify = (id, msg, live) => {
+    deps.notify(id, msg, live);
+    if (msg?.role === 'assistant') last = msg.text;
+    if (msg?.role === 'error') last = `⚠️ ${msg.text}`;
+    if (msg === null && !live) {
+      clearInterval(keep);
+      const reply = toWhatsApp(last ?? 'Terminei, mas não tenho nada para dizer aqui. Veja a conversa na Central.');
+      for (const part of splitOn() ? splitReply(reply) : [reply]) sendOut(account, chat, part).catch(() => {});
+    }
+  };
+  try {
+    const head = `(pelo WhatsApp: esta mensagem veio do celular do Gustavo; responda curto, em texto simples do WhatsApp, *negrito* com um asterisco, listas com •, sem tabelas nem blocos de código${bubbles()})`;
+    const id = sendChat(chatId, centralId, `${head}\n\n${text}`, notify, deps.changed);
+    if (id !== chatId) { setSetting('chief:chat', String(id)); deps.chiefChanged?.(id); }
+  } catch (e) {
+    clearInterval(keep);
+    sendOut(account, chat, `⚠️ ${(e as Error).message}`).catch(() => {});
+  }
+}
 const waiting = new Map<string, string[]>();
 
 export function initWhatsApp(d: typeof deps): void {
@@ -230,6 +266,8 @@ function soon(account: string, who: string, chat: string, text: string, name: st
 /** Dono escreveu: segue a conversa dele com o agente do número; o que chega enquanto ele responde vai junto depois. */
 function talk(account: string, who: string, chat: string, text: string, name: string, outside = false, agentOverride: number | null = null, group = false): void {
   const agentId = agentOverride ?? agentFor(account);
+  // você mesmo falando com a Central: é o chefe de gabinete (a conversa do painel), não uma conversa à parte
+  if (who === 'self' && !outside && !group && agentId === deps.centralId()) return talkChief(account, chat, text);
   const key = `${account}:${agentId}:${who}`;
   // conversa de antes dos vários números (v0.28): a "você mesmo" com a Central continua a mesma
   const legacy = account === 'main' && agentId === deps.centralId() ? Number(getSetting(`wa:chat:${who}`)) || null : null;

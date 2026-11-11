@@ -5,6 +5,7 @@ import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
 import { Instrument as Product, OwnerState } from '../../../../services/cockpit/cockpit.service';
+import { OwnerStatus } from '../owner-status/owner-status';
 
 const STATE: Record<OwnerState, { label: string; tone: string; ring: string }> = {
   working: { label: 'trabalhando', tone: 'text-yes', ring: 'ck-ring-work' },
@@ -22,8 +23,8 @@ const RING = 2 * Math.PI * 26;
  */
 @Component({
   selector: 'app-instrument',
-  imports: [AgoPipe, Icon, ProjectAvatar, RouterLink],
-  host: { class: 'block' },
+  imports: [AgoPipe, Icon, OwnerStatus, ProjectAvatar, RouterLink],
+  host: { class: 'block', '(document:keydown.escape)': 'pop.set(null)' },
   template: `
     @let p = product();
     <article class="relative flex h-full flex-col overflow-hidden rounded-[22px] border border-edge bg-panel transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-faint"
@@ -41,7 +42,8 @@ const RING = 2 * Math.PI * 26;
           @else { <p class="mt-0.5 text-[12.5px] text-later">sem rumo escrito</p> }
         </div>
         <!-- o dono: rosto e estado -->
-        <a [routerLink]="['/produtos', p.slug]" class="group flex shrink-0 flex-col items-center gap-1" [title]="p.owner ? 'Dono: ' + p.owner.name + ' · ' + state().label + (p.techLead && p.techLead.id !== p.owner.id ? ' · tech lead: ' + p.techLead.name : '') : 'Escolher o dono'">
+        <button type="button" (click)="openStatus($event)" class="group flex shrink-0 flex-col items-center gap-1 rounded-xl px-1 py-0.5 hover:bg-raise/60"
+                [attr.aria-expanded]="!!pop()" [title]="p.owner ? 'O que o dono está fazendo ou esperando' : 'Escolher o dono'">
           <span class="relative grid size-11 place-items-center">
             @if (p.owner) {
               <svg class="absolute inset-0 size-11 {{ state().ring }}" viewBox="0 0 44 44" aria-hidden="true">
@@ -54,8 +56,8 @@ const RING = 2 * Math.PI * 26;
               <span class="grid size-9 place-items-center rounded-full border border-dashed border-edge text-faint group-hover:text-text"><app-icon name="plus" [size]="15" /></span>
             }
           </span>
-          <span class="max-w-[84px] truncate text-[10.5px] font-semibold {{ state().tone }}">{{ state().label }}</span>
-        </a>
+          <span class="max-w-[96px] truncate text-[10.5px] font-semibold {{ state().tone }}">{{ reason() }}</span>
+        </button>
       </header>
 
       <!-- instrumentos -->
@@ -134,7 +136,11 @@ const RING = 2 * Math.PI * 26;
            [class]="p.oneOnOne || p.guideOpen ? 'border-[#B48CFF]/60 text-[#C6A6FF]' : 'border-edge text-text'">
           <app-icon name="central" [size]="13" />{{ p.guideOpen ? '1:1 aberto' : '1:1' }}</a>
       </footer>
-    </article>`,
+    </article>
+    @if (pop(); as at) {
+      <div class="fixed inset-0 z-40" (click)="pop.set(null)" aria-hidden="true"></div>
+      <app-owner-status class="fixed z-50" [style.top.px]="at.top" [style.left.px]="at.left" [product]="p" (close)="pop.set(null)" />
+    }`,
 })
 export class InstrumentCard {
   readonly product = input.required<Product>();
@@ -143,6 +149,27 @@ export class InstrumentCard {
   protected readonly maxDay = computed(() => Math.max(1, ...this.product().rhythm.days));
   /** algo aconteceu no produto (entrega, dono começou ou terminou): uma onda sai do cartão */
   protected readonly ping = signal(false);
+  /** o painel do dono aberto (posição na tela) */
+  protected readonly pop = signal<{ top: number; left: number } | null>(null);
+  /** o estado com o motivo: "esperando você · 6 decisões", "trabalhando · 2" */
+  protected readonly reason = computed(() => {
+    const p = this.product();
+    const s = this.state().label;
+    if (p.ownerState === 'waiting') {
+      const bits = [p.oneOnOne ? '1:1' : '', p.decisions ? `${p.decisions} ${p.decisions === 1 ? 'decisão' : 'decisões'}` : ''].filter(Boolean);
+      return bits.length ? `${s} · ${bits.join(', ')}` : s;
+    }
+    if (p.ownerState === 'working' && p.activeRuns > 1) return `${s} · ${p.activeRuns}`;
+    return s;
+  });
+
+  protected openStatus(e: MouseEvent): void {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const w = 380, h = Math.min(window.innerHeight * 0.75, 520);
+    const left = Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12));
+    const top = r.bottom + 8 + h > window.innerHeight ? Math.max(12, r.top - h - 8) : r.bottom + 8;
+    this.pop.set(this.pop() ? null : { top, left });
+  }
   private last: string | null = null;
 
   constructor() {

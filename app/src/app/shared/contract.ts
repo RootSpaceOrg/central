@@ -66,6 +66,8 @@ export interface CockpitProduct {
   owner_on: boolean;
   /** quem executa (o A fazer): o tech lead; null = ninguém (as histórias esperam) */
   tech_lead: { id: number; name: string } | null;
+  /** eventos na fila do dono (ainda não viram uma passada) */
+  pending_events: number;
   /** working = o dono está numa passada; waiting = espera o Gustavo (decisão ou pedido de 1:1); watching = ligado, atento;
    *  off = dono existe mas não age sozinho; none = sem dono */
   owner_state: 'working' | 'waiting' | 'watching' | 'off' | 'none';
@@ -1241,6 +1243,8 @@ export interface Api {
   'direction:set': (projectSlug: string, text: string, note: string | null) => DirectionDto;
   'owner:get': (projectSlug: string) => OwnerDto;
   'owner:set': (projectSlug: string, on: boolean) => void;
+  /** a conversa aberta no chefe de gabinete (o WhatsApp do Gustavo entra nela) */
+  'chief:set': (chatId: number | null) => void;
   /** cria um dono de negócio para o produto (sem código, linguagem de usuário) e o põe como dono */
   'owner:create': (projectSlug: string) => number;
   /** 1:1: o tech lead lê a conversa e diz viabilidade e esforço */
@@ -1350,6 +1354,8 @@ export interface Api {
 
 /** eventos main → interface */
 export interface Events {
+  /** o WhatsApp abriu uma conversa nova com a Central: o chefe de gabinete passa a mostrar ela */
+  'chief:changed': number;
   /** as faixas do freio mudaram */
   'gov:changed': null;
   /** extensão instalada, ligada ou com status novo (WhatsApp conectou, código de pareamento) */
