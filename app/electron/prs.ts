@@ -69,3 +69,42 @@ export async function listPrs(filter: PrFilter, fresh = false): Promise<PrItemDt
   cache.set(filter, { at: Date.now(), items });
   return items;
 }
+
+
+/**
+ * "Mandar para os tech leads": agrupa os PRs por projeto e monta, para o tech lead de cada um, o pedido de analisar e
+ * mergear (ou ajustar e mergear, ou fechar o obsoleto). PR sem projeto ou projeto sem tech lead volta em `skipped`.
+ */
+export function delegatePlan(urls: string[]): { jobs: { slug: string; agentId: number; prompt: string; count: number }[]; skipped: { url: string; why: string }[] } {
+  const known = [...cache.values()].flatMap(c => c.items);
+  const byProject = new Map<string, PrItemDto[]>();
+  const skipped: { url: string; why: string }[] = [];
+  for (const url of [...new Set(urls)]) {
+    const pr = known.find(p => p.url === url);
+    if (!pr) { skipped.push({ url, why: 'não está na lista carregada' }); continue; }
+    if (!pr.project) { skipped.push({ url, why: `${pr.repo} não é de nenhum projeto da Central` }); continue; }
+    byProject.set(pr.project.slug, [...(byProject.get(pr.project.slug) ?? []), pr]);
+  }
+  const jobs: { slug: string; agentId: number; prompt: string; count: number }[] = [];
+  for (const [slug, prs] of byProject) {
+    const tech = get<{ id: number; name: string }>('select a.id, a.name from projects p join agents a on a.id = p.todo_agent_id where p.slug = ?', slug);
+    if (!tech) { for (const p of prs) skipped.push({ url: p.url, why: `${p.project!.name} não tem tech lead` }); continue; }
+    jobs.push({ slug, agentId: tech.id, count: prs.length, prompt: `[prs] Revisar e mergear ${prs.length} PR${prs.length === 1 ? '' : 's'} abertos de ${prs[0].project!.name}
+
+O Gustavo pediu que você, como tech lead, resolva os pull requests abertos abaixo. Ele autoriza o MERGE EM DEVELOP (nunca
+em main/master) do que estiver bom. Para cada um, na ordem que fizer sentido (dependências primeiro):
+${prs.map(p => `- ${p.url}  "${p.title}"  ${p.base ?? '?'} ← ${p.head ?? '?'}${p.draft ? '  [rascunho]' : ''}  CI: ${p.checks}${p.conflict ? '  CONFLITO' : ''}${p.review ? `  revisão: ${p.review}` : ''}${p.task ? `  (tarefa #${p.task.id})` : ''}`).join('\n')}
+
+Como fazer:
+1. Leia o PR (gh pr view, gh pr diff) e o que ele pretende (a tarefa ligada, se houver).
+2. Bom e com CI verde, base develop: gh pr merge --squash (rascunho: gh pr ready antes). Base main/master: NÃO mergeie;
+   crie uma decisão (create_decision) dizendo o que sobe e o risco.
+3. Precisa de ajuste (CI vermelho, conflito, bug, algo incompleto): faça o ajuste na branch do PR (git fetch, checkout,
+   corrija, rode os testes, push), espere o CI e mergeie em develop.
+4. Obsoleto ou repetido (outro PR já fez, a tarefa foi abandonada): feche com um comentário dizendo por quê (gh pr close -c).
+5. Se algo for grande demais para resolver agora, deixe um comentário no PR com o que falta e siga para o próximo.
+Servidores ou testes que subir: pare antes de terminar. No fim, report_delivery com uma linha por PR: mergeado, ajustado e
+mergeado, fechado (por quê) ou pendente (o que falta).` });
+  }
+  return { jobs, skipped };
+}

@@ -37,6 +37,9 @@ export class PrsService {
   readonly error = signal<string | null>(null);
   readonly fetchedAt = signal<Date | null>(null);
 
+  /** manda os PRs para o tech lead de cada projeto (analisar e mergear, ajustar e mergear, ou fechar) */
+  delegate(urls: string[]) { return this.api.delegate(urls); }
+
   async load(filter: PrFilter, fresh = false): Promise<void> {
     this.loading.set(filter);
     this.error.set(null);

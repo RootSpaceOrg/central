@@ -31,11 +31,18 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
       <div class="px-5 pt-6 pb-3">
         <h1 id="rv-title" class="flex items-center gap-2.5 font-display text-2xl font-bold tracking-tight"><app-icon name="pr" [size]="22" class="text-frost" />Revisão</h1>
         <p class="mt-1 text-[13px] text-mute">{{ items().length ? items().length + (items().length === 1 ? ' entrega espera' : ' entregas esperam') + ' o seu olhar.' : 'Nada esperando revisão.' }}</p>
+        @if (visible().length > 1) {
+          <label class="mt-3 flex w-fit cursor-pointer items-center gap-2 text-[12.5px] text-mute hover:text-text">
+            <input type="checkbox" class="size-4 accent-[#7FA2FF]" [checked]="allPicked()" [indeterminate]="somePicked()" (change)="toggleAll()" />
+            {{ allPicked() ? 'Tirar a seleção' : 'Selecionar todas (' + visible().length + ')' }}</label>
+        }
       </div>
       <ul class="min-h-0 flex-1 overflow-y-auto px-2 pb-4" role="listbox" aria-label="O que espera revisão">
         @for (it of visible(); track it.key) {
-          <li role="option" [attr.aria-selected]="current()?.key === it.key">
-            <button type="button" (click)="select(it.key)" class="flex w-full gap-3 rounded-xl px-3 py-3 text-left hover:bg-raise/60" [class.bg-raise]="current()?.key === it.key">
+          <li role="option" [attr.aria-selected]="current()?.key === it.key" class="flex items-start gap-1">
+            <input type="checkbox" class="mt-[18px] ml-2 size-4 shrink-0 cursor-pointer accent-[#7FA2FF]" [checked]="picked().has(it.key)" (change)="toggle(it.key)"
+                   [attr.aria-label]="'Selecionar: ' + titleOf(it)" />
+            <button type="button" (click)="select(it.key)" class="flex min-w-0 flex-1 gap-3 rounded-xl px-3 py-3 text-left hover:bg-raise/60" [class.bg-raise]="current()?.key === it.key">
               @if (project(slugOf(it)); as p) { <app-project-avatar class="mt-0.5" [project]="p" [size]="18" /> }
               @else { <span class="mt-1 size-[18px] shrink-0 rounded-md bg-edge"></span> }
               <span class="min-w-0 flex-1">
@@ -58,6 +65,21 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
           <li class="px-4 py-10 text-center text-[14px] text-mute">Tudo revisado. Quando um agente terminar algo, aparece aqui com como testar.</li>
         }
       </ul>
+      <!-- revisão em lote -->
+      @if (pickedVisible().length) {
+        <div class="border-t border-edge bg-raise px-4 py-3.5" aria-label="Aprovar em lote">
+          <p class="text-[13.5px] font-semibold">{{ pickedVisible().length }} {{ pickedVisible().length === 1 ? 'selecionada' : 'selecionadas' }}</p>
+          <label class="mt-1.5 flex cursor-pointer items-start gap-2 text-[12.5px] leading-snug text-mute">
+            <input type="checkbox" class="mt-0.5 size-4 accent-[#7FA2FF]" [checked]="merge()" (change)="merge.set(!merge())" />
+            <span>Fazer o merge dos PRs em develop <span class="text-faint">(nunca main; o que não der para mergear fica selecionado com o motivo)</span></span></label>
+          <div class="mt-3 flex gap-2">
+            <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" [disabled]="batching()" (click)="approvePicked()">
+              <app-icon name="check" [size]="14" />{{ batching() ? 'Aprovando…' : 'Aprovar ' + pickedVisible().length }}</button>
+            <button type="button" class="btn btn-sm btn-ghost" [disabled]="batching()" (click)="picked.set(empty())">Limpar</button>
+          </div>
+        </div>
+      }
+      @if (batchMsg(); as m) { <p role="status" class="border-t border-edge px-4 py-2.5 text-[12.5px]" [class]="m.ok ? 'text-yes' : 'text-later'">{{ m.text }}</p> }
     </section>
 
     <!-- detalhe -->
@@ -197,6 +219,37 @@ export class ReviewPage {
   protected project(slug: string | null) { return slug ? this.projects.bySlug().get(slug) ?? null : null; }
   protected run(id: number) { return this.runs.runs().find(r => r.id === id) ?? null; }
   protected select(key: string): void { this.selected.set(key); }
+
+  // ---------- revisão em lote ----------
+  protected readonly empty = () => new Set<string>();
+  protected readonly picked = signal<Set<string>>(new Set());
+  /** selecionadas que ainda estão na lista (as aprovadas somem sozinhas) */
+  protected readonly pickedVisible = computed(() => this.visible().filter(it => this.picked().has(it.key)));
+  protected readonly allPicked = computed(() => this.visible().length > 0 && this.pickedVisible().length === this.visible().length);
+  protected readonly somePicked = computed(() => this.pickedVisible().length > 0 && !this.allPicked());
+  protected readonly merge = signal(true);
+  protected readonly batching = signal(false);
+  protected readonly batchMsg = signal<{ ok: boolean; text: string } | null>(null);
+  protected toggle(key: string): void { this.picked.update(s => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; }); }
+  protected toggleAll(): void { this.picked.set(this.allPicked() ? new Set() : new Set(this.visible().map(it => it.key))); }
+  protected async approvePicked(): Promise<void> {
+    const list = this.pickedVisible();
+    if (!list.length) return;
+    this.batching.set(true);
+    this.batchMsg.set(null);
+    try {
+      const failed = await this.deliveries.approveMany(list.map(it => (it.kind === 'delivery' ? { delivery_id: it.d.id } : { task_id: it.task.id })), this.merge());
+      const ok = list.length - failed.length;
+      this.picked.set(new Set(failed.map(f => f.key)));
+      this.batchMsg.set(failed.length
+        ? { ok: false, text: `${ok} aprovada${ok === 1 ? '' : 's'}; ${failed.length} não deu: ${failed.map(f => f.error).slice(0, 2).join(' · ')}` }
+        : { ok: true, text: `${ok} aprovada${ok === 1 ? '' : 's'}${this.merge() ? ' (PRs mergeados em develop)' : ''}.` });
+    } catch (e) {
+      this.batchMsg.set({ ok: false, text: (e as Error).message });
+    } finally {
+      this.batching.set(false);
+    }
+  }
 
   /** depois de decidir, abre o próximo da lista */
   private advance(it: Item): void {

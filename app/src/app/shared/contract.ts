@@ -1267,8 +1267,15 @@ export interface Api {
   'owner:set': (projectSlug: string, on: boolean) => void;
   /** a conversa aberta no chefe de gabinete (o WhatsApp do Gustavo entra nela) */
   'chief:set': (chatId: number | null) => void;
+  /**
+   * Revisão em lote: aprova várias entregas/tarefas de uma vez; merge = antes, faz o merge do PR em develop (nunca main).
+   * Devolve o que não deu (o resto foi aprovado).
+   */
+  'review:approveMany': (items: { delivery_id?: number; task_id?: number }[], merge: boolean) => { key: string; error: string }[];
   /** Utils → Pull Requests (fresh = ignora o cache de 90 s) */
   'prs:list': (filter: PrFilter, fresh: boolean) => PrItemDto[];
+  /** manda os PRs para o tech lead de cada projeto analisar e mergear (ou ajustar e mergear, ou fechar o obsoleto) */
+  'prs:delegate': (urls: string[]) => { started: { project: string; agent: string; count: number; run_id: number }[]; skipped: { url: string; why: string }[] };
   /** faxina: o que os agentes fecharam pelo Gustavo num projeto (últimas 48 h) e o reabrir */
   'cleanup:closed': (projectSlug: string) => CleanupDto;
   'cleanup:reopen': (kind: 'decision' | 'review', id: number) => void;

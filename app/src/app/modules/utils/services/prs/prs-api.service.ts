@@ -8,4 +8,5 @@ export class PrsApiService {
   private readonly ipc = inject(IpcService);
 
   list(filter: PrFilter, fresh: boolean) { return this.ipc.invoke('prs:list', filter, fresh); }
+  delegate(urls: string[]) { return this.ipc.invoke('prs:delegate', urls); }
 }

@@ -82,6 +82,11 @@ export class DeliveriesService {
     this.api.onChanged(() => { this.load(); this.changed.update(n => n + 1); });
   }
 
+  /** aprova várias de uma vez (merge = faz o merge dos PRs em develop antes); devolve o que não deu, pela chave */
+  async approveMany(items: { delivery_id?: number; task_id?: number }[], merge: boolean): Promise<{ key: string; error: string }[]> {
+    try { return await this.api.approveMany(items, merge); } finally { this.load(); }
+  }
+
   load(): void {
     this.api.list(null, 'review').then(list => this.queue.set(list.map(toModel)));
     this.api.board().then(list => this.board.set(list.map(toModel)));

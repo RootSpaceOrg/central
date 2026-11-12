@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal, untracked } from '@angular
 import { Router } from '@angular/router';
 
 import { DialogsService } from '../../../../../../shared/services/dialogs/dialogs.service';
+import { AskService } from '../../../../../../shared/services/ask/ask.service';
 import { ProjectsService } from '../../../../../../shared/services/projects/projects.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
@@ -44,7 +45,26 @@ const REVIEW: Record<string, { label: string; tone: string }> = {
         <span class="text-[12px] text-faint">@if (svc.fetchedAt(); as t) { atualizado {{ t | ago }} }</span>
         <button type="button" class="btn btn-sm" [disabled]="!!svc.loading()" (click)="svc.load(filter(), true)">
           <app-icon name="sync" [size]="14" [class.animate-spin]="!!svc.loading()" />Atualizar</button>
+        <button type="button" class="btn btn-sm btn-primary" [disabled]="!visible().length || delegating()" (click)="delegate()"
+                title="A Central manda cada PR da lista para o tech lead do projeto: ele analisa e mergeia em develop, ou ajusta e mergeia, ou fecha o obsoleto. Main nunca: vira decisão para você.">
+          <app-icon name="agent" [size]="14" />{{ delegating() ? 'Mandando…' : 'Mandar para os tech leads' }}</button>
       </div>
+      @if (sent(); as r) {
+        <div role="status" class="mt-3 rounded-xl border border-frost/40 bg-frost/[0.06] px-4 py-3 text-[13px]">
+          @if (r.started.length) {
+            <p class="font-semibold">Tech leads acionados:</p>
+            <ul class="mt-1 space-y-0.5">
+              @for (s of r.started; track s.run_id) {
+                <li><button type="button" class="hover:underline" (click)="openRun(s.run_id)">{{ s.agent }} · {{ s.project }} · {{ s.count }} {{ s.count === 1 ? 'PR' : 'PRs' }}</button></li>
+              }
+            </ul>
+          }
+          @if (r.skipped.length) {
+            <p class="mt-2 font-semibold text-later">Ficaram de fora ({{ r.skipped.length }}):</p>
+            <ul class="mt-1 space-y-0.5 text-mute">@for (k of r.skipped.slice(0, 6); track k.url) { <li class="truncate">{{ k.url.replace('https://github.com/', '') }}: {{ k.why }}</li> }</ul>
+          }
+        </div>
+      }
 
       @if (svc.error()) { <p role="alert" class="mt-4 rounded-xl border border-no/40 bg-no/5 px-4 py-3 text-[13px] text-no">{{ svc.error() }}</p> }
 
@@ -114,6 +134,21 @@ export class PullRequests {
     // trocou de filtro: busca (o backend guarda 90 s)
     effect(() => { const f = this.filter(); untracked(() => this.svc.load(f)); });
   }
+
+  protected readonly delegating = signal(false);
+  protected readonly sent = signal<{ started: { project: string; agent: string; count: number; run_id: number }[]; skipped: { url: string; why: string }[] } | null>(null);
+  private readonly ask = inject(AskService);
+
+  /** manda o que está na lista (filtro + busca) para os tech leads */
+  protected async delegate(): Promise<void> {
+    const list = this.visible();
+    const projects = new Set(list.map(p => p.project?.name).filter(Boolean));
+    if (!(await this.ask.confirm(`Mandar ${list.length} ${list.length === 1 ? 'PR' : 'PRs'} para os tech leads de ${projects.size} ${projects.size === 1 ? 'projeto' : 'projetos'}? Eles analisam e mergeiam em develop o que estiver bom, ajustam o que precisar e fecham o obsoleto.`, { confirmLabel: 'Mandar' }))) return;
+    this.delegating.set(true);
+    try { this.sent.set(await this.svc.delegate(list.map(p => p.url))); }
+    finally { this.delegating.set(false); }
+  }
+  protected openRun(id: number): void { this.router.navigate(['/execucoes'], { queryParams: { run: id } }); }
 
   protected count(f: PrFilter): number | null { return this.svc.byFilter()[f]?.length ?? null; }
   protected review(p: PullRequest) { return p.review ? REVIEW[p.review] ?? null : null; }

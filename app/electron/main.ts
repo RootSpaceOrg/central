@@ -1,4 +1,4 @@
-import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, shell } from 'electron';
+﻿import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -13,8 +13,7 @@ import { adaptImport, discoverProjects, exportData, inspectImport, swapDatabase 
 import { adjustRun, continueRun, grantRun, dto as runDto, handoffRun, killRun, pauseAllOnQuit, listEvents, listRuns, listTurns, startRun, startTurn, stopTurn, unpauseRun, watchQuota, watchTurns } from './agents';
 import {
   createIdea, createProposal, createTask, decide, deleteProposal, deleteTask, getSetting, importPending, listIdeas, listProposals, listTasks, promoteIdea,
-  setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask,
-} from './backlog';
+  setSetting, syncCiFailures, syncPullRequests, updateIdea, updateTask, moveTaskForRun } from './backlog';
 import { buildUpdate, checkUpdate, installUpdate } from './updater';
 import { getNotif, getPrefs, keepAliveOnClose, markQuitting, notify, setNotif, setPrefs, setupTray } from './desktop';
 import type { NotifKind } from './notif';
@@ -32,7 +31,8 @@ import { dispatchOwners, onCriticalAlert, ownerDiary, pendingEvents, resolveAler
 import { listOperatorActions, onDecided, onDirection, onIdea, onReviewed, onTaskMoved } from './operator';
 import { pulse } from './pulse';
 import { cockpit } from './cockpit';
-import { listPrs } from './prs';
+import { delegatePlan, listPrs } from './prs';
+import { ghMerge } from './stories';
 import { closedBy, reopenDecision, reopenReview } from './cleanup';
 import { createBusinessOwner, techLeadOf } from './oneonone';
 import { meetingPrompt } from './insights';
@@ -395,6 +395,35 @@ function registerIpc(): void {
   handle('chief:set', id => { setSetting('chief:chat', id ? String(id) : ''); });
   handle('cleanup:closed', slug => closedBy(slug));
   handle('prs:list', (filter, fresh) => listPrs(filter, fresh));
+  handle('prs:delegate', urls => {
+    const { jobs, skipped } = delegatePlan(urls);
+    const started = jobs.map(j => {
+      const r = startRun({ project_slug: j.slug, agent_id: j.agentId, repo_path: null, prompt: j.prompt, permission: 'full', budget_usd: SIZE_BUDGET.large, proposal_id: null, task_id: null }, emitRun);
+      return { project: get<{ name: string }>('select name from projects where slug = ?', j.slug)?.name ?? j.slug, agent: get<{ name: string }>('select name from agents where id = ?', j.agentId)?.name ?? 'tech lead', count: j.count, run_id: r.id };
+    });
+    return { started, skipped };
+  });
+  handle('review:approveMany', async (items, merge) => {
+    const failed: { key: string; error: string }[] = [];
+    for (const it of items) {
+      const key = it.delivery_id ? `d${it.delivery_id}` : `t${it.task_id}`;
+      try {
+        const d = it.delivery_id ? get<{ task_id: number | null; pr_url: string | null }>('select task_id, pr_url from deliveries where id = ?', it.delivery_id) : null;
+        const taskId = d?.task_id ?? it.task_id ?? null;
+        const pr = d?.pr_url ?? (taskId ? get<{ pr_url: string | null }>('select pr_url from tasks where id = ?', taskId)?.pr_url : null) ?? null;
+        if (merge && pr) { const err = await ghMerge(pr); if (err) { failed.push({ key, error: `merge: ${err}` }); continue; } }
+        if (it.delivery_id) { reviewDelivery(it.delivery_id, 'accepted', merge && pr ? 'aprovada em lote (PR mergeado em develop)' : 'aprovada em lote'); onReviewed(it.delivery_id, 'accepted', null); }
+        if (taskId) {
+          const prod = !!get(`select 1 from tasks t join projects p on p.slug = t.project_slug where t.id = ? and p.done_when = 'prod'`, taskId);
+          const col = get<{ c: string }>('select "column" c from tasks where id = ?', taskId)?.c;
+          // mergeado em develop: num projeto "pronto = produção" vai para Em dev; senão, Feito
+          if (col && !['done', 'dev'].includes(col)) moveTaskForRun(taskId, merge && pr && prod ? 'dev' : 'done');
+        }
+      } catch (e) { failed.push({ key, error: (e as Error).message }); }
+    }
+    backlogChanged();
+    return failed;
+  });
   handle('cleanup:reopen', (kind, id) => { if (kind === 'decision') reopenDecision(id); else reopenReview(id); backlogChanged(); changed(); });
   handle('agents:list', () => listAgents());
   handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });
