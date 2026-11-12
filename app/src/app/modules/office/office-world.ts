@@ -415,7 +415,7 @@ export class OfficeWorld {
       put('computerScreen', 0.95, 0.6, 0, x + 1, z + 1.62, Math.PI, 0.74, SCREEN); // a tela olha para quem senta
       put('computerKeyboard', 0.6, 0.04, 0.2, x + 1, z + 1.22, 0, 0.74);
       put('computerMouse', 0.09, 0.04, 0.14, x + 0.55, z + 1.22, 0, 0.74);
-      put('chairDesk', 0.62, 1.05, 0.62, x + 1, z + 0.22, Math.PI, 0, CHAIR);
+      put('chairDesk', 0.62, 1.05, 0.62, x + 1, z + 0.22, 0, 0, CHAIR); // o modelo já vem com o assento para +z (para a mesa)
       // tela do monitor: acende quando alguém trabalha nessa mesa
       const screen = new MeshLambertMaterial({ color: '#0e131c', emissive: '#000000' });
       this.screens.set(`${r.id}:${i}`, screen);
