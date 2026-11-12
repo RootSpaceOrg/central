@@ -1,7 +1,8 @@
-﻿import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, screen, shell } from 'electron';
+import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, screen, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { Readable } from 'node:stream';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -51,7 +52,7 @@ import { abandonGuide, answerCard, askTech, approvePlan, askStrategist, guideIdl
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
-import { cleanHousekeeping, scanHousekeeping } from './housekeeping';
+import { cleanHousekeeping, measureSizes, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -225,9 +226,19 @@ const emitRun = {
 
 function registerIpc(): void {
   handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
-  handle('present:open', () => openPresentation());
+  handle('present:open', displayId => openPresentation(displayId ?? null));
+  handle('present:displays', () => {
+    const here = win ? screen.getDisplayMatching(win.getBounds()).id : null;
+    const primary = screen.getPrimaryDisplay().id;
+    return screen.getAllDisplays().map((d, i) => ({
+      id: d.id, label: d.label || `Monitor ${i + 1}`, width: Math.round(d.size.width * d.scaleFactor), height: Math.round(d.size.height * d.scaleFactor),
+      primary: d.id === primary, central: d.id === here, presenting: !!show && screen.getDisplayMatching(show.getBounds()).id === d.id,
+    }));
+  });
   // Utils > Limpeza: levanta o que os agentes deixaram (vídeos, worktrees, branches, .central-tmp) e apaga o que for marcado
   handle('housekeeping:scan', () => scanHousekeeping(join(app.getPath('userData'), 'videos')));
+  // tamanho das cópias de trabalho: em segundo plano, cada uma avisa quando fica pronta
+  handle('housekeeping:sizes', ids => { measureSizes(ids, (id, size) => send('housekeeping:size', { id, size })).catch(() => {}); });
   handle('housekeeping:clean', items => cleanHousekeeping(items, join(app.getPath('userData'), 'videos')));
   // área de transferência do sistema (funciona mesmo sem a janela em foco, ao contrário do navigator.clipboard)
   handle('app:copy', text => { clipboard.writeText(String(text)); });
@@ -642,14 +653,26 @@ function registerIpc(): void {
  * Modo apresentação: abre (ou traz para frente) a janela que mostra os produtos e o escritório. Com mais de um monitor,
  * vai para um que não é o da Central, já em tela cheia; F11 alterna e Esc sai da tela cheia.
  */
-function openPresentation(): void {
-  if (show) { show.show(); show.focus(); return; }
+function openPresentation(displayId: number | null = null): void {
+  const all = screen.getAllDisplays();
   const here = win ? screen.getDisplayMatching(win.getBounds()).id : screen.getPrimaryDisplay().id;
-  const other = screen.getAllDisplays().find(d => d.id !== here);
+  // escolhido na lista; sem escolha, o primeiro que não é o da Central
+  const chosen = all.find(d => d.id === displayId) ?? null;
+  const other = chosen ?? all.find(d => d.id !== here) ?? null;
   const area = (other ?? screen.getPrimaryDisplay()).workArea;
+  // já aberta: muda de monitor (sai da tela cheia, move, volta)
+  if (show) {
+    if (chosen) {
+      show.setFullScreen(false);
+      show.setBounds({ x: area.x + 40, y: area.y + 40, width: Math.min(1600, area.width - 80), height: Math.min(1000, area.height - 80) });
+      setTimeout(() => show?.setFullScreen(true), 150);
+    }
+    show.show(); show.focus();
+    return;
+  }
   show = new BrowserWindow({
     x: area.x + 40, y: area.y + 40, width: Math.min(1600, area.width - 80), height: Math.min(1000, area.height - 80), minWidth: 480, minHeight: 360,
-    fullscreen: !!other, autoHideMenuBar: true, backgroundColor: '#141922', title: 'Central · Apresentação',
+    fullscreen: !!other && (!!chosen || other.id !== here), autoHideMenuBar: true, backgroundColor: '#141922', title: 'Central · Apresentação',
     icon: join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
   });
@@ -712,7 +735,18 @@ app.whenReady().then(() => {
   setVideoDir(join(app.getPath('userData'), 'videos'));
   protocol.handle('central-media', req => {
     const file = videoPath(decodeURIComponent(new URL(req.url).pathname.replace(/^\//, '')));
-    return file && existsSync(file) ? net.fetch(pathToFileURL(file).toString()) : new Response('não encontrado', { status: 404 });
+    if (!file || !existsSync(file)) return new Response('não encontrado', { status: 404 });
+    // pedido de trecho (Range): sem 206 o player não consegue pular para outro ponto do vídeo
+    const size = statSync(file).size;
+    const type = file.endsWith('.mp4') ? 'video/mp4' : file.endsWith('.gif') ? 'image/gif' : 'video/webm';
+    const m = /bytes=(\d*)-(\d*)/.exec(req.headers.get('range') ?? '');
+    if (!m) return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream, { headers: { 'content-type': type, 'content-length': String(size), 'accept-ranges': 'bytes' } });
+    const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
+    return new Response(Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream, {
+      status: 206, headers: { 'content-type': type, 'content-length': String(end - start + 1), 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes' },
+    });
   });
   seedAgents();
   seedAgentsV2();

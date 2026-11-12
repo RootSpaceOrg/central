@@ -6,6 +6,7 @@ import { ProjectsService } from '../../../../../../shared/services/projects/proj
 import { Task } from '../../../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { VideoPlayer } from '../../../../../../shared/ui/video-player';
 import { MarkdownPipe } from '../../../../../../shared/ui/markdown';
 
 /**
@@ -14,7 +15,7 @@ import { MarkdownPipe } from '../../../../../../shared/ui/markdown';
  */
 @Component({
   selector: 'app-story-card',
-  imports: [AgoPipe, Icon, MarkdownPipe, RouterLink],
+  imports: [AgoPipe, Icon, MarkdownPipe, RouterLink, VideoPlayer],
   template: `
     @let d = delivery();
     <article class="overflow-hidden rounded-3xl border border-edge bg-panel" [style.box-shadow]="'inset 4px 0 0 ' + (project()?.color ?? 'var(--color-frost)')"
@@ -40,7 +41,7 @@ import { MarkdownPipe } from '../../../../../../shared/ui/markdown';
           }
         </div>
         @if (d.video) {
-          <video class="w-full self-start rounded-2xl border border-edge bg-black" [src]="d.video" controls preload="metadata" aria-label="O agente usando o fluxo"></video>
+          <app-video-player class="self-start" [src]="d.video" label="O agente usando o fluxo" />
         }
       </div>
 

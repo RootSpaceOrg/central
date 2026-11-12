@@ -1127,9 +1127,13 @@ export interface Api {
   'app:info': () => AppInfoDto;
   'window:fullscreen': (on: boolean) => void;
   /** modo apresentação: abre a janela (outro monitor, tela cheia) */
-  'present:open': () => void;
+  'present:open': (displayId?: number | null) => void;
+  /** monitores conectados (a apresentação abre no escolhido) */
+  'present:displays': () => { id: number; label: string; width: number; height: number; primary: boolean; central: boolean; presenting: boolean }[];
   /** Utils > Limpeza: o que dá para apagar (com o motivo) e apagar o que foi marcado */
   'housekeeping:scan': () => HousekeepingItem[];
+  /** mede as pastas em segundo plano; cada resultado chega em 'housekeeping:size' */
+  'housekeeping:sizes': (ids: string[]) => void;
   'housekeeping:clean': (items: HousekeepingItem[]) => { done: number; failed: { label: string; why: string }[] };
   'projects:list': () => ProjectDto[];
   'projects:create': (input: NewProjectInput) => ProjectDto;
@@ -1429,6 +1433,7 @@ export interface Events {
   'context:changed': { project: string };
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
+  'housekeeping:size': { id: string; size: number };
 }
 
 /** algo que a limpeza pode apagar: vídeo de entrega revisada, worktree parado, branch mergeada, pasta .central-tmp */

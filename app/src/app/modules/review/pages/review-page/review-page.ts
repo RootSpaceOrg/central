@@ -10,6 +10,7 @@ import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Check } from '../../../../shared/ui/check';
+import { VideoPlayer } from '../../../../shared/ui/video-player';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
@@ -24,7 +25,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
  */
 @Component({
   selector: 'app-review-page',
-  imports: [Icon, AgoPipe, MarkdownPipe, ProjectAvatar, RouterLink, Check],
+  imports: [Icon, AgoPipe, MarkdownPipe, ProjectAvatar, RouterLink, Check, VideoPlayer],
   host: { class: 'grid h-full min-h-0 grid-cols-[380px_minmax(0,1fr)]', '(document:keydown)': 'key($event)' },
   template: `
     <!-- lista -->
@@ -129,7 +130,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
             @if (d.video) {
               <section class="mt-6" aria-label="Vídeo do fluxo">
                 <h3 class="mb-2 flex items-center gap-2 text-[13px] font-semibold text-mute"><app-icon name="play" [size]="14" />O agente usando o fluxo</h3>
-                <video class="w-full rounded-2xl border border-edge bg-black" [src]="d.video" controls preload="metadata"></video>
+                <app-video-player [src]="d.video" label="O agente usando o fluxo" />
               </section>
             }
             @if (d.howToTest) {

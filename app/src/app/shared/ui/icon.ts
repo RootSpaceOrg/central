@@ -3,7 +3,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import {
   Activity, Archive, ArchiveRestore, ArrowUpFromLine, Bot, ChartNoAxesColumn, Check, ChevronRight, CircleStop, Clock, Code, Download,
   Ellipsis, ExternalLink, File, Flag, Folder, FolderOpen, GitBranch, GitMerge, House, Inbox, KanbanSquare, Lightbulb,
-  ListTree, MessageSquare, Moon, Pencil, Play, Plus, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
+  ListTree, MessageSquare, Moon, Pause, Pencil, Play, Plus, Maximize, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
   BatteryLow, Zap, X, LayoutGrid, Maximize2, Minimize2, Columns2, Rows2, GripVertical, Waypoints, Building2, Coffee, Milestone, ArrowRight, RotateCw, RotateCcw, Crosshair, Rocket, Workflow, Puzzle, Copy,
   Mic, MessageCircle, ArrowLeft, Search, Users, ImagePlus, Compass, Layers, LayoutDashboard, Wrench, GitPullRequest, GitPullRequestDraft, CircleCheck, CircleX, CircleDot, MessageSquareText,
 } from 'lucide-static';
@@ -41,6 +41,8 @@ const SVGS = {
   branch: GitBranch,
   stop: CircleStop,
   play: Play,
+  pause: Pause,
+  expand: Maximize,
   check: Check,
   pr: GitMerge,
   summary: ListTree,

@@ -4,6 +4,7 @@ import { ChatView } from '../../../../shared/components/chat-view/chat-view';
 import { MeetingImport } from '../../../../shared/components/meeting-import/meeting-import';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
+import { ContextMenuService } from '../../../../shared/services/context-menu/context-menu.service';
 import { LayoutService } from '../../../../shared/services/layout/layout.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
@@ -46,7 +47,7 @@ import { InstrumentCard } from './components/instrument/instrument';
               <dd class="mt-0.5 font-display text-[22px] font-bold tabular-nums text-yes">{{ week().validated }}@if (week().returned) {<span class="text-[13px] font-normal text-later"> · {{ week().returned }} voltaram</span>}</dd>
             </div>
           </dl>
-          <button type="button" class="btn btn-sm self-center" (click)="layout.present()" title="Abre uma janela com os produtos e o escritório para deixar num monitor da mesa (vai para o outro monitor, em tela cheia; F11 alterna)">
+          <button type="button" class="btn btn-sm self-center" (click)="pickDisplay($event)" title="Abre uma janela com os produtos e o escritório para deixar num monitor da mesa (vai para o outro monitor, em tela cheia; F11 alterna)">
             <app-icon name="layers" [size]="14" />Apresentação</button>
         </header>
 
@@ -145,6 +146,21 @@ export class CockpitPage {
     this.chat.restoreChief();
     this.cockpit.load();
   }
+
+  /** Apresentação: escolher o monitor (com um só, abre direto) */
+  protected async pickDisplay(e: MouseEvent): Promise<void> {
+    // o menu abre embaixo do botão (a posição vem antes do await: depois dele o evento já não tem alvo)
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const at = { clientX: r.left, clientY: r.bottom + 6, preventDefault: () => {}, stopPropagation: () => {} } as MouseEvent;
+    const list = await this.layout.displays();
+    if (list.length < 2) { this.layout.present(); return; }
+    this.menu.open(at, list.map(d => ({
+      label: d.label, icon: 'layers' as const,
+      hint: [`${d.width}×${d.height}`, d.central ? 'onde a Central está' : '', d.primary ? 'principal' : '', d.presenting ? 'apresentando' : ''].filter(Boolean).join(' · '),
+      run: () => this.layout.present(d.id),
+    })));
+  }
+  private readonly menu = inject(ContextMenuService);
 
   protected fresh(): void { this.chat.chief.newChat(this.central()?.id); this.history.set(false); }
   protected pick(id: number): void { this.chat.chief.select(id); this.history.set(false); }

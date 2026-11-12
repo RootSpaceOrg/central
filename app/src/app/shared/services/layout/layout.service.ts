@@ -35,7 +35,8 @@ export class LayoutService {
   toggleFocus(): void { this.setFocus(!this.focus()); }
 
   /** modo apresentação: janela própria no outro monitor, em tela cheia */
-  present(): void { this.ipc.invoke('present:open'); }
+  present(displayId: number | null = null): void { this.ipc.invoke('present:open', displayId); }
+  displays() { return this.ipc.invoke('present:displays'); }
 
   /** fixa ou tira uma tela da barra do modo diretor */
   togglePin(path: string): void {

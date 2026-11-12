@@ -7,7 +7,8 @@
  * - Pastas `.central-tmp/` (onde os agentes guardam o que é descartável).
  */
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { Dirent, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { lstat, readdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -36,6 +37,36 @@ function sizeOf(path: string, budget = { n: 20_000 }): number {
   };
   walk(path);
   return total;
+}
+
+/**
+ * Tamanho de uma pasta inteira, sem travar o processo (assíncrono, no máximo 48 leituras de disco ao mesmo tempo).
+ * Não segue atalhos/junções (node_modules do pnpm): não conta duas vezes nem entra em laço.
+ */
+const slots = { free: 48, queue: [] as (() => void)[] };
+const take = () => (slots.free > 0 ? (slots.free--, Promise.resolve()) : new Promise<void>(r => slots.queue.push(r)));
+const give = () => { const next = slots.queue.shift(); if (next) next(); else slots.free++; };
+export async function folderSize(path: string): Promise<number> {
+  await take();
+  let entries: Dirent[] | null = null;
+  try { entries = await readdir(path, { withFileTypes: true }); } catch { /* sem acesso: conta zero */ } finally { give(); }
+  if (!entries) return 0;
+  const sizes = await Promise.all(entries.map(async e => {
+    const p = join(path, e.name);
+    if (e.isSymbolicLink()) return 0;
+    if (e.isDirectory()) return folderSize(p);
+    await take();
+    try { return (await lstat(p)).size; } catch { return 0; } finally { give(); }
+  }));
+  return sizes.reduce((a, b) => a + b, 0);
+}
+
+/** mede as pastas uma a uma (avisando cada resultado), para a tela ir preenchendo */
+export async function measureSizes(paths: string[], onSize: (id: string, size: number) => void): Promise<void> {
+  for (const p of paths) {
+    if (!resolve(p).startsWith(join(DEV_ROOT, '.central-worktrees'))) continue;
+    onSize(p, await folderSize(p));
+  }
 }
 
 function videos(videoDir: string): Item[] {

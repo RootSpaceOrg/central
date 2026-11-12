@@ -10,4 +10,6 @@ export class HousekeepingApiService {
 
   scan() { return this.ipc.invoke('housekeeping:scan'); }
   clean(items: HousekeepingItem[]) { return this.ipc.invoke('housekeeping:clean', items); }
+  measure(ids: string[]) { return this.ipc.invoke('housekeeping:sizes', ids); }
+  onSize(cb: (s: { id: string; size: number }) => void) { return this.ipc.on('housekeeping:size', cb); }
 }
