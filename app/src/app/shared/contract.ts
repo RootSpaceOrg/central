@@ -59,6 +59,20 @@ export interface ProjectDto {
   dev_login?: string | null;
 }
 
+/** Utils → Pull Requests: os filtros do inbox do GitHub */
+export type PrFilter = 'created' | 'assigned' | 'mentioned' | 'review' | 'involves';
+export interface PrItemDto {
+  number: number; title: string; url: string; repo: string; author: string; bot: boolean;
+  created_at: string; updated_at: string; draft: boolean; comments: number; labels: { name: string; color: string | null }[];
+  /** CI: none = sem checks */
+  checks: 'success' | 'failure' | 'pending' | 'none';
+  review: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  head: string | null; base: string | null; additions: number | null; deletions: number | null; conflict: boolean;
+  /** projeto e tarefa da Central a que o PR pertence (pelo repositório e pela tarefa que guardou o PR) */
+  project: { slug: string; name: string } | null;
+  task: { id: number; title: string } | null;
+}
+
 /** faxina do dono: o que ele tirou da frente do Gustavo */
 export interface CleanupDto {
   decisions: { id: number; title: string; closed_by: string; closed_how: string; closed_reason: string; closed_at: string }[];
@@ -1253,6 +1267,8 @@ export interface Api {
   'owner:set': (projectSlug: string, on: boolean) => void;
   /** a conversa aberta no chefe de gabinete (o WhatsApp do Gustavo entra nela) */
   'chief:set': (chatId: number | null) => void;
+  /** Utils → Pull Requests (fresh = ignora o cache de 90 s) */
+  'prs:list': (filter: PrFilter, fresh: boolean) => PrItemDto[];
   /** faxina: o que os agentes fecharam pelo Gustavo num projeto (últimas 48 h) e o reabrir */
   'cleanup:closed': (projectSlug: string) => CleanupDto;
   'cleanup:reopen': (kind: 'decision' | 'review', id: number) => void;

@@ -32,6 +32,7 @@ import { dispatchOwners, onCriticalAlert, ownerDiary, pendingEvents, resolveAler
 import { listOperatorActions, onDecided, onDirection, onIdea, onReviewed, onTaskMoved } from './operator';
 import { pulse } from './pulse';
 import { cockpit } from './cockpit';
+import { listPrs } from './prs';
 import { closedBy, reopenDecision, reopenReview } from './cleanup';
 import { createBusinessOwner, techLeadOf } from './oneonone';
 import { meetingPrompt } from './insights';
@@ -393,6 +394,7 @@ function registerIpc(): void {
   // a conversa que está no chefe de gabinete (painel/cockpit): é nela que o seu WhatsApp entra
   handle('chief:set', id => { setSetting('chief:chat', id ? String(id) : ''); });
   handle('cleanup:closed', slug => closedBy(slug));
+  handle('prs:list', (filter, fresh) => listPrs(filter, fresh));
   handle('cleanup:reopen', (kind, id) => { if (kind === 'decision') reopenDecision(id); else reopenReview(id); backlogChanged(); changed(); });
   handle('agents:list', () => listAgents());
   handle('agents:create', input => { const a = createAgent(input); agentsChanged(); return a; });

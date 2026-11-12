@@ -5,12 +5,19 @@ import {
   Ellipsis, ExternalLink, File, Flag, Folder, FolderOpen, GitBranch, GitMerge, House, Inbox, KanbanSquare, Lightbulb,
   ListTree, MessageSquare, Moon, Pencil, Play, Plus, RefreshCw, Repeat, Send, Settings, Sparkles, SquareTerminal, Trash2,
   BatteryLow, Zap, X, LayoutGrid, Maximize2, Minimize2, Columns2, Rows2, GripVertical, Waypoints, Building2, Coffee, Milestone, ArrowRight, RotateCw, RotateCcw, Crosshair, Rocket, Workflow, Puzzle, Copy,
-  Mic, MessageCircle, ArrowLeft, Search, Users, ImagePlus, Compass, Layers, LayoutDashboard,
+  Mic, MessageCircle, ArrowLeft, Search, Users, ImagePlus, Compass, Layers, LayoutDashboard, Wrench, GitPullRequest, GitPullRequestDraft, CircleCheck, CircleX, CircleDot, MessageSquareText,
 } from 'lucide-static';
 
 /** Nome usado no app → SVG do Lucide (strings estáticas do pacote, sem rede). */
 const SVGS = {
   home: House,
+  tools: Wrench,
+  pullRequest: GitPullRequest,
+  prDraft: GitPullRequestDraft,
+  ok: CircleCheck,
+  fail: CircleX,
+  dot: CircleDot,
+  comments: MessageSquareText,
   layers: Layers,
   desk: LayoutDashboard,
   activity: Activity,

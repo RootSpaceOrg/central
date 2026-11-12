@@ -99,10 +99,11 @@ export class App {
     { path: '/rotinas', label: 'Rotinas (agentes e scripts na agenda)', icon: 'routine' },
     { path: '/escritorio', label: 'Escritório (o time trabalhando)', icon: 'office' },
     { path: '/grade', label: 'Grade (sessões lado a lado)', icon: 'grid' },
+    { path: '/utils', label: 'Utils (pull requests e outras ferramentas)', icon: 'tools' },
   ];
   /** modo diretor (padrão): a Mesa, o Estúdio e os Bastidores; o resto mora nos Bastidores */
   /** telas que dá para fixar na barra do modo diretor (botão direito na barra) */
-  private readonly pinnable = computed(() => this.operatorNav.filter(n => n.path !== '/' && n.path !== '/estudio'));
+  private readonly pinnable = computed(() => this.operatorNav.filter(n => n.path !== '/' && n.path !== '/estudio' && n.path !== '/utils'));
   private readonly directorNav = computed<NavItem[]>(() => {
     const pinned = this.pinnable().filter(n => this.layout.pinned().includes(n.path));
     const lit = new Set(pinned.flatMap(n => (n.tabs ?? [n]).map(t => t.path)));
@@ -110,6 +111,7 @@ export class App {
       { path: '/', label: 'Cockpit (seus produtos, o que é seu e o chefe de gabinete)', icon: 'desk', also: ['/produtos'] },
       ...pinned,
       // os Bastidores acendem nas telas de operação que não estão fixadas
+      { path: '/utils', label: 'Utils (pull requests e outras ferramentas)', icon: 'tools' },
       { path: '/bastidores', label: 'Bastidores (a operação por dentro; botão direito na barra fixa telas aqui)', icon: 'layers', also: BACKSTAGE.filter(p => !lit.has(p)) },
     ];
   });
