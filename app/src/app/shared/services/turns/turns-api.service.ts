@@ -12,7 +12,7 @@ export class TurnsApiService {
   stop(id: number) { return this.ipc.invoke('turns:stop', id); }
   onChanged(cb: () => void) {
     const a = this.ipc.on('backlog:changed', cb);
-    const b = this.ipc.on('run:update', cb);
+    const b = this.ipc.on('run:update', r => { if (r.turn_id) cb(); });
     return () => { a(); b(); };
   }
 }

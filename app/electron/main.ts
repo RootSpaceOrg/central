@@ -105,8 +105,26 @@ const ownerStart: OwnerDeps['start'] = input =>
   startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun).id;
 
 function send<K extends keyof Events>(channel: K, payload: Events[K]): void {
+  if (payload === null && COALESCE.has(channel)) return coalesce(channel);
   win?.webContents.send(channel, payload);
   show?.webContents.send(channel, payload);
+}
+
+/**
+ * "Algo mudou" (sem dados): cada aviso faz várias telas recarregarem listas inteiras. Com muitos agentes mexendo, chegavam
+ * vários por segundo e a tela engasgava. O primeiro sai na hora; os que vierem na janela viram um só no fim dela.
+ */
+const COALESCE = new Set<string>(['projects:changed', 'backlog:changed', 'agents:changed', 'routines:changed', 'guides:changed']);
+const COALESCE_MS = 400;
+const windows = new Map<string, { again: boolean }>();
+function coalesce(channel: keyof Events): void {
+  const w = windows.get(channel);
+  if (w) { w.again = true; return; }
+  const state = { again: false };
+  windows.set(channel, state);
+  win?.webContents.send(channel, null);
+  show?.webContents.send(channel, null);
+  setTimeout(() => { windows.delete(channel); if (state.again) coalesce(channel); }, COALESCE_MS);
 }
 
 function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> | Promise<ReturnType<Api[K]>>): void {

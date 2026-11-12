@@ -63,17 +63,15 @@ const RING = 2 * Math.PI * 26;
       <!-- instrumentos -->
       <div class="relative mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-3 px-5">
         <!-- meta do marco atual -->
-        <div class="flex items-center gap-3" [title]="p.milestone ? p.milestone.title + ' · ' + p.milestone.done + ' de ' + p.milestone.total : 'Sem marco em Agora'">
-          <svg class="size-[64px] -rotate-90" viewBox="0 0 64 64" aria-hidden="true">
+        <div class="relative grid size-[64px] place-items-center" [title]="p.milestone ? p.milestone.title + ' · ' + p.milestone.done + ' de ' + p.milestone.total : 'Sem marco em Agora'">
+          <svg class="absolute inset-0 size-[64px] -rotate-90" viewBox="0 0 64 64" aria-hidden="true">
             <circle cx="32" cy="32" r="26" fill="none" stroke="var(--color-edge)" stroke-width="5" />
             @if (p.milestone?.pct != null) {
               <circle class="ck-draw" cx="32" cy="32" r="26" fill="none" [attr.stroke]="p.color" stroke-width="5" stroke-linecap="round"
                       [attr.stroke-dasharray]="ring" [attr.stroke-dashoffset]="ring * (1 - p.milestone!.pct! / 100)" [style.--len]="ring" />
             }
           </svg>
-          <div class="min-w-0 -ml-[70px] w-[64px] text-center">
-            <p class="font-display text-[17px] font-bold tabular-nums leading-none">{{ p.milestone?.pct != null ? p.milestone!.pct + '%' : '—' }}</p>
-          </div>
+          <p class="relative font-display text-[17px] font-bold tabular-nums leading-none">{{ p.milestone?.pct != null ? p.milestone!.pct + '%' : '—' }}</p>
         </div>
         <div class="min-w-0 self-center">
           <p class="text-[10.5px] font-semibold uppercase tracking-wider text-faint">Marco atual</p>

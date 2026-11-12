@@ -14,7 +14,8 @@ export class RoutinesApiService {
   fire(id: number) { return this.ipc.invoke('routines:fire', id); }
   onChanged(cb: () => void) {
     const a = this.ipc.on('routines:changed', cb);
-    const b = this.ipc.on('run:update', cb);
+    // só execução de rotina muda a lista de rotinas (as outras chegavam aqui e recarregavam tudo à toa)
+    const b = this.ipc.on('run:update', r => { if (r.routine_id) cb(); });
     return () => { a(); b(); };
   }
 }

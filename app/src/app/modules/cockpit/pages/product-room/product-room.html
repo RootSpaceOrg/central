@@ -59,8 +59,8 @@
   <div class="grid min-h-0 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_460px]">
     <main class="min-h-0 overflow-y-auto">
       <div class="w-full px-8 pt-7 pb-24">
-        <!-- 1:1 aberto: a conversa vem primeiro; fechado, o painel e o diário vêm antes -->
-        @if (guide()) { <ng-container *ngTemplateOutlet="oneOnOneTpl" /> }
+        <!-- 1:1 no topo; depois o painel e o diário -->
+        <ng-container *ngTemplateOutlet="oneOnOneTpl" />
 
         <!-- painel do produto -->
         <section class="mb-10" aria-labelledby="pr-panel">
@@ -109,7 +109,6 @@
           }
         </section>
 
-        @if (!guide()) { <ng-container *ngTemplateOutlet="oneOnOneTpl" /> }
       </div>
     </main>
 

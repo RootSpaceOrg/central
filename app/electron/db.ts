@@ -656,9 +656,31 @@ for (const table of ['runs', 'routines']) {
   }
 }
 
-export const all = <T>(sql: string, ...params: SQLInputValue[]) => db.prepare(sql).all(...params) as T[];
-export const get = <T>(sql: string, ...params: SQLInputValue[]) => db.prepare(sql).get(...params) as T | undefined;
-export const run = (sql: string, ...params: SQLInputValue[]) => db.prepare(sql).run(...params);
+// índices das consultas quentes (depois das migrações: algumas colunas nascem nelas). Sem o de runs(task_id), a lista de
+// tarefas varria todas as execuções para cada tarefa (~0,5 s travando o processo principal a cada mudança no backlog).
+db.exec(`
+  create index if not exists runs_by_task on runs(task_id, id);
+  create index if not exists runs_by_project on runs(project_slug, created_at);
+  create index if not exists runs_by_status on runs(status);
+  create index if not exists runs_by_worktree on runs(worktree_path);
+  create index if not exists runs_by_agent on runs(agent_id);
+  create index if not exists runs_by_routine on runs(routine_id, id);
+  create index if not exists chats_by_agent on chats(agent_id);
+  create index if not exists routines_by_agent on routines(agent_id);
+  create index if not exists tasks_by_parent on tasks(parent_id);
+  create index if not exists tasks_by_project on tasks(project_slug, "column");
+  create index if not exists deliveries_by_task on deliveries(task_id);
+  create index if not exists deliveries_by_status on deliveries(status);
+  create index if not exists proposals_by_project on proposals(project_slug, status);
+  create index if not exists events_by_project on events(project_slug, handled_at);
+`);
+
+/** consultas preparadas uma vez e reaproveitadas (preparar de novo a cada chamada custa em laço quente) */
+const stmts = new Map<string, ReturnType<typeof db.prepare>>();
+const prep = (sql: string) => { let s = stmts.get(sql); if (!s) { s = db.prepare(sql); if (stmts.size < 2000) stmts.set(sql, s); } return s; };
+export const all = <T>(sql: string, ...params: SQLInputValue[]) => prep(sql).all(...params) as T[];
+export const get = <T>(sql: string, ...params: SQLInputValue[]) => prep(sql).get(...params) as T | undefined;
+export const run = (sql: string, ...params: SQLInputValue[]) => prep(sql).run(...params);
 export const now = () => new Date().toISOString();
 
 // Execuções que estavam rodando quando o app fechou não têm mais processo. Com sessão do Claude, ficam pausadas e a
