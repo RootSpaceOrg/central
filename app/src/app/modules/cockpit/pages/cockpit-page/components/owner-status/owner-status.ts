@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AgentsService } from '../../../../../../shared/services/agents/agents.service';
@@ -9,7 +9,7 @@ import { TasksService } from '../../../../../../shared/services/tasks/tasks.serv
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
 import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
-import { Instrument } from '../../../../services/cockpit/cockpit.service';
+import { Cleaned, CockpitService, Instrument } from '../../../../services/cockpit/cockpit.service';
 
 const STATE = {
   working: { label: 'Trabalhando', tone: 'text-yes' }, waiting: { label: 'Esperando você', tone: 'text-later' },
@@ -82,6 +82,25 @@ const STATE = {
           </section>
         }
 
+        <!-- faxina: o que ele tirou da sua frente -->
+        @if (cleaned().length) {
+          <section>
+            <h4 class="text-[10.5px] font-bold uppercase tracking-wider text-yes">Limpou para você · 48 h</h4>
+            <ul class="mt-2 space-y-1.5">
+              @for (c of cleaned(); track c.kind + c.id) {
+                <li class="rounded-lg bg-night/50 px-2.5 py-2 text-[12.5px]">
+                  <p class="flex items-start gap-2">
+                    <span class="mt-px shrink-0 rounded-full bg-yes/15 px-1.5 text-[10.5px] font-semibold text-yes">{{ c.kind === 'decision' ? 'decisão' : 'revisão' }} · {{ c.how }}</span>
+                    <span class="min-w-0 flex-1 line-clamp-2 font-semibold">{{ c.title }}</span>
+                    <button type="button" class="shrink-0 text-[11.5px] text-frost hover:underline" (click)="reopen(c)">reabrir</button>
+                  </p>
+                  <p class="mt-0.5 line-clamp-3 text-mute">{{ c.why }} <span class="text-faint">· {{ c.by }}, {{ c.at | ago }}</span></p>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
         <!-- atento: o que fez e o que está na fila -->
         <section>
           <h4 class="text-[10.5px] font-bold uppercase tracking-wider text-faint">Último que ele fez</h4>
@@ -128,5 +147,13 @@ export class OwnerStatus {
   });
   protected readonly decisions = computed(() => this.proposals.inbox().filter(p => p.projectSlug === this.product().slug));
   protected readonly blockers = computed(() => this.runs.waiting().filter(r => r.projectSlug === this.product().slug));
+  /** o que o dono fechou por você (carrega ao abrir o painel) */
+  protected readonly cleaned = signal<Cleaned[]>([]);
+  private readonly cockpit = inject(CockpitService);
+  private readonly loadCleaned = effect(() => { const s = this.product().slug; this.product().cleaned; untracked(() => this.cockpit.closed(s).then(l => this.cleaned.set(l), () => {})); });
+  protected async reopen(c: Cleaned): Promise<void> {
+    await this.cockpit.reopen(c);
+    this.cleaned.update(l => l.filter(x => !(x.kind === c.kind && x.id === c.id)));
+  }
   protected agentName(id: number | null): string { return (id && this.agents.byId().get(id)?.name) || 'agente'; }
 }

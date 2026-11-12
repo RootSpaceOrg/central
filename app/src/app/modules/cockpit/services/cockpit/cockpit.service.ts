@@ -11,6 +11,8 @@ export interface Instrument {
   ownerOn: boolean; ownerState: OwnerState;
   techLead: { id: number; name: string } | null;
   pendingEvents: number;
+  /** o que os agentes fecharam por você nas últimas 48 h */
+  cleaned: number;
   focus: string | null;
   /** pct null = marco sem tarefas ligadas ainda */
   milestone: { title: string; target: string | null; total: number; done: number; pct: number | null } | null;
@@ -22,13 +24,16 @@ export interface Instrument {
   guideOpen: number | null;
   diary: { text: string | null; at: Date } | null;
 }
+/** algo que o dono tirou da frente do Gustavo */
+export interface Cleaned { kind: 'decision' | 'review'; id: number; title: string; by: string; how: string; why: string; at: Date }
+
 export interface Company { slug: string; name: string; color: string; iconKind: string; iconValue: string | null; products: Instrument[] }
 
 const utc = (s: string) => new Date(s.endsWith('Z') ? s : `${s}Z`);
 const toInstrument = (p: CockpitProduct): Instrument => ({
   slug: p.slug, name: p.name, color: p.color, iconKind: p.icon_kind, iconValue: p.icon_value, parentSlug: p.parent_slug,
   owner: p.owner ? { id: p.owner.id, name: p.owner.name, color: p.owner.color, iconKind: p.owner.icon_kind, iconValue: p.owner.icon_value } : null,
-  ownerOn: p.owner_on, ownerState: p.owner_state, focus: p.focus, techLead: p.tech_lead, pendingEvents: p.pending_events,
+  ownerOn: p.owner_on, ownerState: p.owner_state, focus: p.focus, techLead: p.tech_lead, pendingEvents: p.pending_events, cleaned: p.cleaned_48h,
   milestone: p.milestone ? { ...p.milestone, pct: p.milestone.total ? Math.round((p.milestone.done / p.milestone.total) * 100) : null } : null,
   rhythm: { days: p.rhythm.days, delivered: p.rhythm.delivered_7d, validated: p.rhythm.validated_7d, returned: p.rhythm.returned_7d },
   metrics: p.metrics.map(m => ({ name: m.name, unit: m.unit, value: m.value, prev: m.prev, target: m.target, at: m.at ? utc(m.at) : null, everyHours: m.every_hours })),
@@ -66,4 +71,15 @@ export class CockpitService {
   }
 
   async resolveAlert(id: number): Promise<void> { await this.api.resolveAlert(id); this.load(); }
+
+  /** faxina: o que o dono fechou por você (com o motivo) */
+  async closed(slug: string): Promise<Cleaned[]> {
+    const d = await this.api.closed(slug);
+    const utc = (s: string) => new Date(s.endsWith('Z') ? s : `${s}Z`);
+    return [
+      ...d.decisions.map(x => ({ kind: 'decision' as const, id: x.id, title: x.title, by: x.closed_by, how: x.closed_how, why: x.closed_reason, at: utc(x.closed_at) })),
+      ...d.reviews.map(x => ({ kind: 'review' as const, id: x.id, title: x.title, by: x.closed_by, how: x.closed_how, why: x.review_note.replace(/^Fechada por [^(]+\([^)]*\):\s*/, ''), at: utc(x.reviewed_at) })),
+    ].sort((a, b) => b.at.getTime() - a.at.getTime());
+  }
+  async reopen(c: Cleaned): Promise<void> { await this.api.reopen(c.kind, c.id); this.load(); }
 }

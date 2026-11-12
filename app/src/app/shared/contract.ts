@@ -59,6 +59,12 @@ export interface ProjectDto {
   dev_login?: string | null;
 }
 
+/** faxina do dono: o que ele tirou da frente do Gustavo */
+export interface CleanupDto {
+  decisions: { id: number; title: string; closed_by: string; closed_how: string; closed_reason: string; closed_at: string }[];
+  reviews: { id: number; title: string; closed_by: string; closed_how: string; review_note: string; reviewed_at: string }[];
+}
+
 /** Cockpit: produtos por empresa, com os instrumentos de cada um */
 export interface CockpitProduct {
   slug: string; name: string; color: string; icon_kind: string; icon_value: string | null; parent_slug: string | null;
@@ -68,6 +74,8 @@ export interface CockpitProduct {
   tech_lead: { id: number; name: string } | null;
   /** eventos na fila do dono (ainda não viram uma passada) */
   pending_events: number;
+  /** o que os agentes fecharam pelo Gustavo nas últimas 48 h (decisões + revisões) */
+  cleaned_48h: number;
   /** working = o dono está numa passada; waiting = espera o Gustavo (decisão ou pedido de 1:1); watching = ligado, atento;
    *  off = dono existe mas não age sozinho; none = sem dono */
   owner_state: 'working' | 'waiting' | 'watching' | 'off' | 'none';
@@ -1245,6 +1253,9 @@ export interface Api {
   'owner:set': (projectSlug: string, on: boolean) => void;
   /** a conversa aberta no chefe de gabinete (o WhatsApp do Gustavo entra nela) */
   'chief:set': (chatId: number | null) => void;
+  /** faxina: o que os agentes fecharam pelo Gustavo num projeto (últimas 48 h) e o reabrir */
+  'cleanup:closed': (projectSlug: string) => CleanupDto;
+  'cleanup:reopen': (kind: 'decision' | 'review', id: number) => void;
   /** cria um dono de negócio para o produto (sem código, linguagem de usuário) e o põe como dono */
   'owner:create': (projectSlug: string) => number;
   /** 1:1: o tech lead lê a conversa e diz viabilidade e esforço */

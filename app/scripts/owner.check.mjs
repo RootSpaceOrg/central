@@ -24,14 +24,14 @@ db.exec(\`
   create table tasks (id integer primary key, project_slug text, "column" text, title text, body text, parent_id integer, priority integer default 2, position integer default 0,
     repo_path text, proposal_id integer, pr_url text, source text, source_ref text, idea_id integer, milestone_id integer, color text, depends_on text, picked_at text,
     created_at text default '2026-11-01', updated_at text default '2026-11-01');
-  create table proposals (id integer primary key, project_slug text, status text, task_id integer, title text);
+  create table proposals (id integer primary key, project_slug text, status text, task_id integer, title text, created_at text default '2026-11-01', closed_by text, closed_at text);
   create table proposal_tasks (proposal_id integer, task_id integer);
   create table facts (id integer primary key, project_slug text);
   create table memories (id integer primary key, agent_id integer, status text default 'active');
   create table settings (key text primary key, value text);
   create table ideas (id integer primary key autoincrement, project_slug text, title text, body text, status text default 'new', source text, source_ref text, author text,
     task_id integer, created_at text default '2026-11-01', approved_at text, milestone_id integer, triaged_at text, triage text, seen_at text);
-  create table deliveries (id integer primary key, task_id integer, project_slug text, title text, run_id integer, status text);
+  create table deliveries (id integer primary key, task_id integer, project_slug text, title text, run_id integer, status text, created_at text default '2026-11-01', closed_by text, reviewed_at text);
   create table metrics (id integer primary key autoincrement, project_slug text, name text, value real, unit text, note text, at text default (strftime('%Y-%m-%dT%H:%M:%SZ','now')));
   create table events (id integer primary key autoincrement, project_slug text not null, kind text not null, ref text not null, summary text not null,
     urgent integer not null default 0, from_owner integer not null default 0, created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')), handled_at text, pass_run_id integer);
@@ -182,4 +182,9 @@ started = [];
 o.emitEvent('kultivai', 'alerta', 'papel2', 'sem tech lead');
 await o.dispatchOwners(deps());
 ok(started.length === 1 && /NINGUÉM/.test(started[0].prompt) && /sem insistir/.test(started[0].prompt), 'sem tech lead: segue, só avisa');
+// fila parada (decisão aberta há mais de um dia): vira evento de faxina, no máximo um por dia
+db.exec("update events set handled_at = 'x'; update runs set status = 'succeeded'; insert into proposals (project_slug, status, title) values ('kultivai', 'proposed', 'velha')");
+await o.dispatchOwners(deps());
+await o.dispatchOwners(deps());
+ok(db.prepare("select count(*) n from events where kind = 'fila_parada'").get().n === 1, 'fila parada: um evento de faxina');
 console.log('owner ok');

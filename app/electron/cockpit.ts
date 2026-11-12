@@ -49,6 +49,8 @@ function product(p: { slug: string; name: string; color: string; icon_kind: stri
     slug: s, name: p.name, color: p.color, icon_kind: p.icon_kind, icon_value: p.icon_value, parent_slug: p.parent_slug,
     owner, owner_on: !!p.owner_on, tech_lead: tech,
     pending_events: get<{ n: number }>('select count(*) n from events where project_slug = ? and handled_at is null', s)!.n,
+    cleaned_48h: get<{ n: number }>(`select (select count(*) from proposals where project_slug = ? and closed_by is not null and closed_at > ?)
+      + (select count(*) from deliveries where project_slug = ? and closed_by is not null and reviewed_at > ?) n`, s, new Date(Date.now() - 48 * 3_600_000).toISOString(), s, new Date(Date.now() - 48 * 3_600_000).toISOString())!.n,
     owner_state: !owner ? 'none' : ownerBusy ? 'working' : (waiting || p.one_on_one) ? 'waiting' : p.owner_on ? 'watching' : 'off',
     focus: focusOf(get<{ text: string }>('select text from directions where project_slug = ? order by id desc limit 1', s)?.text ?? null),
     milestone: ms && msCount ? { title: ms.title, target: ms.target, total: msCount.n, done: msCount.done ?? 0 } : null,

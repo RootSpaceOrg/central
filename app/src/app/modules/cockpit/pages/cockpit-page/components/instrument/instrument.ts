@@ -115,13 +115,14 @@ const RING = 2 * Math.PI * 26;
       }
 
       <!-- o que pede atenção -->
-      @if (p.alerts.length || p.toValidate || p.decisions || p.oneOnOne || p.returned) {
+      @if (p.alerts.length || p.toValidate || p.decisions || p.oneOnOne || p.returned || p.cleaned) {
         <div class="relative mt-4 flex flex-wrap gap-1.5 px-5">
           @for (a of p.alerts; track a.id) { <span class="rounded-full bg-no/15 px-2.5 py-1 text-[11.5px] font-semibold text-no" [title]="a.summary">quebrou · {{ a.at | ago }}</span> }
           @if (p.oneOnOne) { <span class="rounded-full bg-[#B48CFF]/15 px-2.5 py-1 text-[11.5px] font-semibold text-[#C6A6FF]" [title]="p.oneOnOne.why">pediu um 1:1</span> }
           @if (p.toValidate) { <span class="rounded-full bg-frost/15 px-2.5 py-1 text-[11.5px] font-semibold text-frost">{{ p.toValidate }} para você usar</span> }
           @if (p.decisions) { <span class="rounded-full bg-later/15 px-2.5 py-1 text-[11.5px] font-semibold text-later">{{ p.decisions }} {{ p.decisions === 1 ? 'decisão' : 'decisões' }}</span> }
           @if (p.returned) { <span class="rounded-full bg-later/10 px-2.5 py-1 text-[11.5px] text-later">{{ p.returned }} devolvida{{ p.returned === 1 ? '' : 's' }} em conserto</span> }
+          @if (p.cleaned) { <span class="rounded-full bg-yes/10 px-2.5 py-1 text-[11.5px] text-yes" title="O dono tirou da sua frente o que não precisava mais de você (clique no rosto dele para ver e reabrir)">limpou {{ p.cleaned }}</span> }
         </div>
       }
 

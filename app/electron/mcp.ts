@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
 import { criticalAlert, emitEvent } from './owner';
+import { closeDecision, closeReview, ownerDecide, refreshDecision } from './cleanup';
 import { addInsight } from './insights';
 import { reportMetric } from './pulse';
 import { defineMetric, listMetricDefs, requestOneOnOne } from './metrics';
@@ -358,7 +359,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
 
   // ---------- decisões ----------
   tool('list_decisions', 'Lista decisões. status: proposed (esperando o Gustavo, padrão), approved, rejected, deferred, done.', { status: z.enum(['proposed', 'approved', 'rejected', 'deferred', 'running', 'done']).optional() }, a =>
-    listProposals([a.status ?? 'proposed']).map(p => ({ id: p.id, project: p.project_slug, title: p.title, body: p.body, next_action: p.next_action, tier: p.tier })));
+    listProposals([a.status ?? 'proposed']).map(p => ({ id: p.id, project: p.project_slug, title: p.title, body: p.body, next_action: p.next_action, tier: p.tier, task: p.task_id, created_at: p.created_at, options: p.options })));
   tool('create_decision', 'Cria uma decisão para o Gustavo aprovar ou recusar. summary: uma linha com o que você pede (ele lê isso primeiro). options: quando houver caminhos, 2 a 4 respostas curtas e completas (ex.: "Usar Stripe", "Usar Pagar.me"); escolher uma aprova com ela; o que você faz em cada uma vai no body. next_action: o que acontece se ele aprovar. tier: 0 risco baixo, 1 médio, 2 alto. task_id: quando a escolha é sobre uma tarefa que já existe (a decisão volta para ela, sem criar outra tarefa). Se ele direcionar em vez de aprovar/recusar, o direcionamento volta para você nesta mesma sessão.', {
     title: z.string(), body: z.string().optional(), project_slug: z.string().optional(), next_action: z.string().optional(), tier: z.number().int().min(0).max(2).optional(),
     task_id: z.number().int().optional(), summary: z.string().optional(), options: z.array(z.string()).max(4).optional(),
@@ -366,6 +367,19 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('link_decision', 'Liga uma decisão (aberta ou já respondida) a outras tarefas. Use quando a mesma escolha segura vários cartões, em vez de criar outra decisão igual: enquanto ela estiver aberta, essas tarefas esperam (o quadro não roda) e recebem a resposta quando o Gustavo decidir.', {
     decision_id: z.number().int(), task_ids: z.array(z.number().int()).min(1),
   }, a => linkDecision(a.decision_id, a.task_ids), h.backlog);
+  tool('close_decision', 'Faxina: fecha uma decisão que não precisa mais do Gustavo. how: resolvida (já aconteceu por outro caminho), repetida ou superada (outra decisão cobre; diga qual em keep_id). Sempre com o motivo; ele vê e pode reabrir.', {
+    id: z.number().int(), how: z.enum(['resolvida', 'repetida', 'superada']), why: z.string().describe('o que resolveu ou qual decisão cobre (cite #tarefa, PR, entrega)'),
+    keep_id: z.number().int().optional().describe('a decisão que fica (para repetida/superada)'),
+  }, a => closeDecision(a.id, a.how, a.why, who, a.keep_id ?? null), () => { h.backlog(); h.projects(); });
+  tool('owner_decide', 'Faxina: o dono decide uma escolha NÃO crítica dentro do rumo (nunca produção com impacto no usuário, dinheiro, dados de cliente, comunicação com cliente ou rumo). A resposta segue para a tarefa como se fosse do Gustavo; ele vê e pode reabrir.', {
+    id: z.number().int(), choice: z.string().describe('a opção escolhida'), why: z.string(),
+  }, a => ownerDecide(a.id, a.choice, a.why, who), () => { h.backlog(); h.projects(); });
+  tool('refresh_decision', 'Decisão crítica que continua valendo: atualiza o resumo com o estado de hoje (uma linha) para o Gustavo decidir rápido.', {
+    id: z.number().int(), summary: z.string(), next_action: z.string().optional(),
+  }, a => refreshDecision(a.id, a.summary, a.next_action ?? null), () => { h.backlog(); h.projects(); });
+  tool('close_review', 'Faxina: tira uma entrega da revisão do Gustavo. how: resolvida (já entrou/já foi feita), superada (outra entrega cobre) ou mergear (código pronto e seguro: o PR entra em develop, nunca main). História (tarefa com partes) não: essa ele valida como usuário.', {
+    delivery_id: z.number().int(), how: z.enum(['resolvida', 'superada', 'mergear']), why: z.string(),
+  }, a => closeReview(a.delivery_id, a.how, a.why, who), () => { h.backlog(); h.projects(); });
   tool('delete_decision', 'Apaga uma decisão de vez (some da Triagem e do histórico). Só quando o Gustavo pedir para apagar/excluir; para dizer não, use decide com reject.', {
     id: z.number().int(),
   }, a => { deleteProposal(a.id); return `Decisão #${a.id} apagada.`; }, () => { h.backlog(); h.projects(); });

@@ -21,14 +21,14 @@ const IDLE_EVERY_H = 20;
 
 export type EventKind =
   | 'historia_validada' | 'historia_devolvida' | 'entrega_devolvida' | 'execucao_falhou' | 'decisao_respondida'
-  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado' | 'medir';
+  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado' | 'medir' | 'fila_parada';
 
 const LABEL: Record<EventKind, string> = {
   historia_validada: 'história validada pelo Gustavo', historia_devolvida: 'história DEVOLVIDA pelo Gustavo ("não funcionou")',
   entrega_devolvida: 'entrega devolvida pelo Gustavo (pediu ajuste)', execucao_falhou: 'execução falhou',
   decisao_respondida: 'decisão respondida pelo Gustavo', ideia_aprovada: 'ideia aprovada pelo Gustavo (planejar)',
   insight: 'insight (cliente, conversa ou reunião)', fila_vazia: 'fila do projeto vazia', rumo_atualizado: 'rumo atualizado',
-  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)', medir: 'hora de medir os números combinados',
+  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)', medir: 'hora de medir os números combinados', fila_parada: 'decisões ou revisões paradas esperando o Gustavo (faxina)',
 };
 const URGENT: EventKind[] = ['historia_devolvida', 'alerta', 'dono_ligado'];
 
@@ -96,6 +96,7 @@ export async function dispatchOwners(deps: OwnerDeps): Promise<number> {
     idleCheck(o.slug, now);
     memoryCheck(o.slug, deps);
     metricsCheck(o.slug, now);
+    staleCheck(o.slug, now);
     const evs = all<{ id: number; kind: EventKind; ref: string; summary: string; urgent: number; created_at: string }>(
       `select id, kind, ref, summary, urgent, created_at from events where project_slug = ? and handled_at is null order by id limit 30`, o.slug);
     if (!evs.length) continue;
@@ -121,6 +122,17 @@ function idleCheck(slug: string, now: Date): void {
   const last = get<{ at: string }>(`select max(created_at) at from events where project_slug = ? and kind = 'fila_vazia'`, slug)?.at;
   if (last && now.getTime() - Date.parse(last.endsWith('Z') ? last : `${last}Z`) < IDLE_EVERY_H * 3_600_000) return;
   emitEvent(slug, 'fila_vazia', now.toISOString().slice(0, 13), 'Nada em A fazer, fazendo ou revisão: o time está parado.');
+}
+
+/** decisões ou revisões do produto paradas há mais de um dia: o dono faz a faxina (no máximo uma vez a cada 20 h) */
+function staleCheck(slug: string, now: Date): void {
+  const day = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const d = get<{ n: number }>(`select count(*) n from proposals where project_slug = ? and status = 'proposed' and created_at < ?`, slug, day)!.n;
+  const r = get<{ n: number }>(`select count(*) n from deliveries where project_slug = ? and status = 'review' and created_at < ?`, slug, day)!.n;
+  if (!d && !r) return;
+  const last = get<{ at: string }>(`select max(created_at) at from events where project_slug = ? and kind = 'fila_parada'`, slug)?.at;
+  if (last && now.getTime() - Date.parse(last.endsWith('Z') ? last : `${last}Z`) < 20 * 3_600_000) return;
+  emitEvent(slug, 'fila_parada', `parada:${now.toISOString().slice(0, 13)}`, `${d} ${d === 1 ? 'decisão' : 'decisões'} e ${r} ${r === 1 ? 'revisão' : 'revisões'} esperando o Gustavo há mais de um dia.`);
 }
 
 /** números combinados vencidos: o dono mede (um evento por rodada de medida) */
@@ -161,6 +173,21 @@ const counts = (slug: string) => {
   return ['backlog', 'todo', 'doing', 'review', 'dev'].map(k => `${k} ${c.find(x => x.c === k)?.n ?? 0}`).join(', ');
 };
 
+/** a faxina: o que está esperando o Gustavo e não precisa mais dele sai da frente, sempre com o motivo */
+export const CLEANUP = `   - Faxina (ajude o Gustavo ao máximo: ele quer ver só o que é dele). Leia as decisões abertas do produto
+     (list_decisions) e as revisões (list_deliveries status review). Para cada uma, confira no backlog, nas entregas e no
+     código o estado de HOJE e:
+     • já resolvida por outro caminho (o PR entrou, a tarefa andou, alguém respondeu): close_decision / close_review
+       "resolvida", dizendo o que resolveu (cite #tarefa, PR ou entrega);
+     • repetida ou superada por uma mais nova: close_decision "repetida"/"superada" com keep_id, ou close_review "superada";
+     • escolha NÃO crítica que cabe no rumo (ex.: qual de dois jeitos fazer, se pode seguir com algo de dev): owner_decide
+       com a escolha e o porquê;
+     • revisão de código pronto e seguro (só develop, testes passando, sem mudança que o usuário note em produção):
+       close_review "mergear";
+     • CRÍTICA (produção com impacto no usuário, dinheiro, dados de cliente, comunicação com cliente, rumo) e ainda
+       valendo: NÃO decida; refresh_decision com o estado de hoje em uma linha ("ainda vale porque…").
+     Na dúvida, deixe para ele. No diário, liste o que fechou e por quê.`;
+
 /** só as instruções dos tipos de evento que vieram (o resto é ruído na passada) */
 const GUIDE: [EventKind[], string][] = [
   [['ideia_aprovada', 'historia_validada', 'decisao_respondida', 'rumo_atualizado', 'alerta', 'insight', 'fila_vazia', 'dono_ligado'],
@@ -187,6 +214,7 @@ const GUIDE: [EventKind[], string][] = [
      list_boards, list_routines): o que está repetido, sem uso ou amarrado a horário sem precisar (ex.: a mesma rotina
      copiada várias vezes) vira UMA proposta de simplificação (create_decision com o antes e o depois). (c) Ponha o próximo
      passo do rumo para andar. O limite de 3 histórias novas não vale para agrupar o que já existe.`],
+  [['fila_parada', 'dono_ligado'], CLEANUP],
   [['memoria_cresceu'],
     `   - Curadoria: a memória do projeto é uma só. Leia a do projeto (memory_recall, limit 30, algumas buscas) e a dos
      agentes do projeto (list_agent_memories). O que é sobre o projeto e está na memória de um agente:

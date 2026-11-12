@@ -11,7 +11,7 @@ import { createAgent } from './agentdefs';
 import { all, get, run } from './db';
 import { listMetricDefs } from './metrics';
 import { cardsText, registerProfile, scopeText, snapshot } from './guides';
-import { OWNER_HEAD, teamBlock } from './owner';
+import { CLEANUP, OWNER_HEAD, teamBlock } from './owner';
 
 const STRATEGIST = 'Estrategista';
 const strategistId = () => get<{ id: number }>('select id from agents where name = ? order by id limit 1', STRATEGIST)?.id
@@ -46,11 +46,15 @@ Retrato em números (montado agora):
 ${g.snapshot}
 ${teamBlock(g.project_slug)}
 ${g.focus ? `\nO que ele trouxe para este 1:1: "${g.focus}"\n` : ''}
+ANTES da pauta, faça a faxina (sem comentar na conversa; o que fechar entra na pauta):
+${CLEANUP}
+
 Abra com a PAUTA, em markdown curto (até ~250 palavras):
 1. **O que fiz** desde o último 1:1 (histórias entregues, consertos, o que aprendi), com números.
 2. **Números**: os que combinamos (metrics) e a direção deles; se faltar medir algo que o rumo pede, diga qual.
 3. **O que vem**: as próximas histórias e por quê (ligue ao rumo e ao marco).
 4. **O que preciso de você**: só o que é seu (decisão crítica, acesso, conta, opinião sobre rumo). Se nada, diga "nada".
+5. **Limpei para você**: o que fechou na faxina (uma linha cada), se fechou algo.
 ${g.focus ? 'Depois da pauta, responda ao que ele trouxe.\n' : ''}
 Se já tiver propostas concretas (caminhos para o próximo passo, um ajuste de rumo, de time ou de números), entregue também
 como cards com guide_update(guide_id ${g.id}, cards): 2 a 5 cards, cada um com id curto, kind ('direcao' = caminhos para uma
