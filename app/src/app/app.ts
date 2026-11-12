@@ -135,6 +135,8 @@ export class App {
   protected readonly bareDesk = computed(() => !this.layout.operator() && (this.scope.path() === '/' || this.scope.path().startsWith('/produtos/')));
   /** no cockpit o chefe de gabinete já mora na coluna: o painel flutuante não abre por cima */
   protected readonly onCockpit = computed(() => this.scope.path() === '/');
+  /** modo apresentação (janela própria, sem barras): só a tela */
+  protected readonly presenting = computed(() => this.scope.path().startsWith('/apresentacao'));
   /** o que é do Gustavo (selo da Mesa): histórias para usar, decisões e agentes esperando ele */
   protected readonly forYou = computed(() => {
     const byTask = new Map(this.tasks.tasks().map(t => [t.id, t]));

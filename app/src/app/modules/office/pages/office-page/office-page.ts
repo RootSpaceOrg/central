@@ -1,5 +1,5 @@
 import { CHARACTERS } from '../../office-assets';
-import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
 import { Agent, AgentsService } from '../../../../shared/services/agents/agents.service';
@@ -79,6 +79,9 @@ export class OfficePage {
   private readonly agents = inject(AgentsService);
   private readonly router = inject(Router);
   private readonly tasks = inject(TasksService);
+
+  /** modo apresentação: só o andar e quem está trabalhando (sem lista, sem abrir nada) */
+  readonly stage = input(false);
 
   protected readonly phases = PHASES;
 

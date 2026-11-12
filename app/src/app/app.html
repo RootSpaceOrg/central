@@ -1,3 +1,4 @@
+@if (presenting()) { <router-outlet /> } @else {
 <div class="grid h-screen" [class]="layout.focus() ? 'grid-rows-[minmax(0,1fr)]' : 'grid-rows-[40px_minmax(0,1fr)_26px]'">
   <!-- barra de título (os botões da janela são do sistema: à direita no Windows, à esquerda no Mac) -->
   <header [hidden]="layout.focus()" class="drag flex items-center gap-3 border-b border-edge bg-night" [class]="isWin ? 'pl-4 pr-[150px]' : 'pl-[84px] pr-4'">
@@ -213,3 +214,4 @@
 <app-import-session-dialog />
 <app-ask-dialog />
 <app-find-bar />
+}

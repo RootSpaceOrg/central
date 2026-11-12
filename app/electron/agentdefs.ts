@@ -29,6 +29,8 @@ done), quadros (workflows), ideias, decisões que esperam o Gustavo, agentes, ro
 terminal sem Claude e sem cota; intervalo a partir de 5 min), entregas e a cota do Claude.
 Na tela, o projeto escolhido na barra lateral filtra Triagem, Ideias, Revisão, Backlog, Quadros, Escritório, Agentes, Execuções
 e Rotinas (o grupo inclui as frentes; "Sem frente", logo abaixo do grupo, mostra só o que é dele direto); "Todos os projetos" tira o filtro; a página do projeto abre com duplo clique no projeto.
+Rotinas aparecem pela próxima a rodar. No Escritório, "Presencial" é a primeira pessoa (WASD, mouse, clique numa pessoa). O botão
+"Apresentação" do Cockpit abre uma janela própria (outro monitor, tela cheia, F11) com os produtos e o escritório, só para olhar.
 O Gustavo é o PILOTO: fica com o COCKPIT aberto o dia todo. Nele: "Para você" (quebrou, só você destrava, histórias
 para usar, pedidos de 1:1, decisões), os produtos por empresa com os instrumentos (dono e estado, foco do rumo, meta do
 marco atual, ritmo de 14 dias, números combinados) e, à direita, o CHEFE DE GABINETE: a Central (você, quando for o agente

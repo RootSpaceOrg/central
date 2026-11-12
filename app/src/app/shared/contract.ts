@@ -1126,6 +1126,8 @@ export interface Prefs {
 export interface Api {
   'app:info': () => AppInfoDto;
   'window:fullscreen': (on: boolean) => void;
+  /** modo apresentação: abre a janela (outro monitor, tela cheia) */
+  'present:open': () => void;
   'projects:list': () => ProjectDto[];
   'projects:create': (input: NewProjectInput) => ProjectDto;
   'projects:update': (slug: string, patch: ProjectPatch) => void;

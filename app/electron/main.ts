@@ -1,4 +1,4 @@
-﻿import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, shell } from 'electron';
+﻿import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, screen, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -71,6 +71,8 @@ const ROUTE = arg('route');
 const CAPTURE = arg('capture');
 if (CAPTURE && !process.argv.includes('--dispatch')) process.env.CENTRAL_HOLD_RUNS = '1';
 let win: BrowserWindow | null = null;
+/** modo apresentação: janela própria (outro monitor, tela cheia) que recebe os mesmos eventos */
+let show: BrowserWindow | null = null;
 
 /**
  * Caminho citado num texto: absoluto (C:\\..., /Users/..., ~/...) ou relativo a onde ele foi escrito — a pasta da
@@ -99,6 +101,7 @@ function resolveCited(raw: string, ctx: { run?: number | null; chat?: number | n
 
 function send<K extends keyof Events>(channel: K, payload: Events[K]): void {
   win?.webContents.send(channel, payload);
+  show?.webContents.send(channel, payload);
 }
 
 function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> | Promise<ReturnType<Api[K]>>): void {
@@ -199,6 +202,7 @@ const emitRun = {
 
 function registerIpc(): void {
   handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
+  handle('present:open', () => openPresentation());
   // área de transferência do sistema (funciona mesmo sem a janela em foco, ao contrário do navigator.clipboard)
   handle('app:copy', text => { clipboard.writeText(String(text)); });
   handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion(), data_dir: app.getPath('userData'), platform: process.platform }));
@@ -605,6 +609,32 @@ function registerIpc(): void {
     const r = await dialog.showOpenDialog(win!, { defaultPath, properties: ['openDirectory', 'createDirectory'] });
     return r.canceled ? null : r.filePaths[0];
   });
+}
+
+/**
+ * Modo apresentação: abre (ou traz para frente) a janela que mostra os produtos e o escritório. Com mais de um monitor,
+ * vai para um que não é o da Central, já em tela cheia; F11 alterna e Esc sai da tela cheia.
+ */
+function openPresentation(): void {
+  if (show) { show.show(); show.focus(); return; }
+  const here = win ? screen.getDisplayMatching(win.getBounds()).id : screen.getPrimaryDisplay().id;
+  const other = screen.getAllDisplays().find(d => d.id !== here);
+  const area = (other ?? screen.getPrimaryDisplay()).workArea;
+  show = new BrowserWindow({
+    x: area.x + 40, y: area.y + 40, width: Math.min(1600, area.width - 80), height: Math.min(1000, area.height - 80), minWidth: 480, minHeight: 360,
+    fullscreen: !!other, autoHideMenuBar: true, backgroundColor: '#141922', title: 'Central · Apresentação',
+    icon: join(__dirname, '..', 'build', 'icon.png'),
+    webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+  });
+  show.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  show.webContents.on('before-input-event', (e, i) => {
+    if (i.type !== 'keyDown' || !show) return;
+    if (i.key === 'F11') { show.setFullScreen(!show.isFullScreen()); e.preventDefault(); }
+    else if (i.key === 'Escape' && show.isFullScreen()) { show.setFullScreen(false); e.preventDefault(); }
+  });
+  show.on('closed', () => { show = null; });
+  if (DEV) show.loadURL('http://localhost:4300/#/apresentacao');
+  else show.loadFile(join(__dirname, '..', 'dist', 'web', 'browser', 'index.html'), { hash: '/apresentacao' });
 }
 
 function createWindow(): void {

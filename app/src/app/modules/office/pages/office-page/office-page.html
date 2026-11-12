@@ -1,3 +1,25 @@
+@if (stage()) {
+  <!-- modo apresentação: o andar ocupando tudo e, embaixo, quem está trabalhando no quê -->
+  <div class="flex h-full min-h-0 flex-col gap-3">
+    <div class="office-sky min-h-0 flex-1 overflow-hidden rounded-3xl border border-edge">
+      <app-office-scene class="h-full outline-none" [members]="members()" [people]="people()" [selected]="selected()" [milestones]="nowColors()" [talks]="talks()" (pick)="pick($event)" />
+    </div>
+    @if (visible().length) {
+      <section class="grid shrink-0 grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-2.5" aria-label="Quem está trabalhando">
+        @for (w of visible().slice(0, 8); track w.key) {
+          @let ph = phaseOf(w);
+          <div class="flex min-w-0 flex-col rounded-2xl border border-edge bg-panel/80 px-3.5 py-2.5" [style.box-shadow]="'inset 3px 0 0 ' + ph.color">
+            <span class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide" [style.color]="ph.color">
+              <span class="pulse size-1.5 rounded-full" [style.background]="ph.color"></span>{{ ph.label }}<span class="flex-1"></span>
+              <span class="font-semibold normal-case tracking-normal text-faint tabular-nums">{{ live.since(w.since) }}</span></span>
+            <span class="mt-1 line-clamp-2 text-[13.5px] font-semibold leading-snug">{{ w.doing ?? w.title }}</span>
+            <span class="mt-1 truncate text-[11.5px] text-faint">{{ w.name }}@if (projectName(w.slug); as pn) { · {{ pn }} }</span>
+          </div>
+        }
+      </section>
+    }
+  </div>
+} @else {
 <div class="mx-auto max-w-[1500px] px-8 pt-8 pb-16">
   <header class="flex flex-wrap items-end gap-x-6 gap-y-2">
     <div class="flex-1">
@@ -162,3 +184,4 @@
     </div>
   </div>
 </div>
+}

@@ -9,6 +9,7 @@ import { ScopeService, markProjects } from '../../../../shared/services/scope/sc
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { Task, TasksService } from '../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
+import { Check } from '../../../../shared/ui/check';
 import { Icon } from '../../../../shared/ui/icon';
 import { MarkdownPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
@@ -23,7 +24,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
  */
 @Component({
   selector: 'app-review-page',
-  imports: [Icon, AgoPipe, MarkdownPipe, ProjectAvatar, RouterLink],
+  imports: [Icon, AgoPipe, MarkdownPipe, ProjectAvatar, RouterLink, Check],
   host: { class: 'grid h-full min-h-0 grid-cols-[380px_minmax(0,1fr)]', '(document:keydown)': 'key($event)' },
   template: `
     <!-- lista -->
@@ -33,15 +34,14 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
         <p class="mt-1 text-[13px] text-mute">{{ items().length ? items().length + (items().length === 1 ? ' entrega espera' : ' entregas esperam') + ' o seu olhar.' : 'Nada esperando revisão.' }}</p>
         @if (visible().length > 1) {
           <label class="mt-3 flex w-fit cursor-pointer items-center gap-2 text-[12.5px] text-mute hover:text-text">
-            <input type="checkbox" class="size-4 accent-[#7FA2FF]" [checked]="allPicked()" [indeterminate]="somePicked()" (change)="toggleAll()" />
+            <app-check [checked]="allPicked()" [indeterminate]="somePicked()" (changed)="toggleAll()" />
             {{ allPicked() ? 'Tirar a seleção' : 'Selecionar todas (' + visible().length + ')' }}</label>
         }
       </div>
       <ul class="min-h-0 flex-1 overflow-y-auto px-2 pb-4" role="listbox" aria-label="O que espera revisão">
         @for (it of visible(); track it.key) {
           <li role="option" [attr.aria-selected]="current()?.key === it.key" class="flex items-start gap-1">
-            <input type="checkbox" class="mt-[18px] ml-2 size-4 shrink-0 cursor-pointer accent-[#7FA2FF]" [checked]="picked().has(it.key)" (change)="toggle(it.key)"
-                   [attr.aria-label]="'Selecionar: ' + titleOf(it)" />
+            <app-check class="mt-[17px] ml-2" [checked]="picked().has(it.key)" (changed)="toggle(it.key)" [label]="'Selecionar: ' + titleOf(it)" />
             <button type="button" (click)="select(it.key)" class="flex min-w-0 flex-1 gap-3 rounded-xl px-3 py-3 text-left hover:bg-raise/60" [class.bg-raise]="current()?.key === it.key">
               @if (project(slugOf(it)); as p) { <app-project-avatar class="mt-0.5" [project]="p" [size]="18" /> }
               @else { <span class="mt-1 size-[18px] shrink-0 rounded-md bg-edge"></span> }
@@ -70,7 +70,7 @@ type Item = { key: string; kind: 'delivery'; d: Delivery; task: Task | null } | 
         <div class="border-t border-edge bg-raise px-4 py-3.5" aria-label="Aprovar em lote">
           <p class="text-[13.5px] font-semibold">{{ pickedVisible().length }} {{ pickedVisible().length === 1 ? 'selecionada' : 'selecionadas' }}</p>
           <label class="mt-1.5 flex cursor-pointer items-start gap-2 text-[12.5px] leading-snug text-mute">
-            <input type="checkbox" class="mt-0.5 size-4 accent-[#7FA2FF]" [checked]="merge()" (change)="merge.set(!merge())" />
+            <app-check [checked]="merge()" (changed)="merge.set($event)" />
             <span>Fazer o merge dos PRs em develop <span class="text-faint">(nunca main; o que não der para mergear fica selecionado com o motivo)</span></span></label>
           <div class="mt-3 flex gap-2">
             <button type="button" class="btn btn-sm !border-yes !bg-yes !text-night" [disabled]="batching()" (click)="approvePicked()">

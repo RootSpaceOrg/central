@@ -59,7 +59,10 @@ export class RoutinesPage {
 
   private readonly scope = inject(ScopeService);
   /** do projeto da barra lateral: a rotina dele ou do agente dele */
-  protected readonly shown = computed(() => this.routines.routines().filter(r => this.scope.matches(r.projectSlug ?? this.agent(r.agentId)?.projectSlug)));
+  /** a próxima a rodar primeiro; as desligadas no fim */
+  protected readonly shown = computed(() => this.routines.routines()
+    .filter(r => this.scope.matches(r.projectSlug ?? this.agent(r.agentId)?.projectSlug))
+    .sort((a, b) => +b.enabled - +a.enabled || +a.nextRunAt - +b.nextRunAt));
   protected readonly templates = TEMPLATES;
   protected readonly dialog = signal<RoutineDialogState>(null);
   protected readonly describe = describeSchedule;

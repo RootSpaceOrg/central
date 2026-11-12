@@ -80,7 +80,7 @@ export function place(people: { key: string; room: RoomId }[], prev: Map<string,
     const r = ROOM.get(id)!;
     if (n.startsWith('s')) { const [x, y] = r.stands[+n.slice(1)]; return { room: id, seat, x, y, seated: false }; }
     const [x, y] = r.desks[+n];
-    return { room: id, seat, x: x + 1, y: y + 1.55, seated: true };
+    return { room: id, seat, x: x + 1, y: y + 0.29, seated: true };
   };
   // 1) quem continua na mesma sala fica no mesmo lugar
   for (const p of people) {

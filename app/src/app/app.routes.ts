@@ -4,6 +4,7 @@ export const routes: Routes = [
   { path: '', title: 'Cockpit', loadComponent: () => import('./modules/cockpit/pages/cockpit-page/cockpit-page').then(m => m.CockpitPage) },
   { path: 'produtos/:slug', title: 'Produto', loadComponent: () => import('./modules/cockpit/pages/product-room/product-room').then(m => m.ProductRoom) },
   { path: 'painel', title: 'Painel do operador', loadComponent: () => import('./modules/home/pages/home-page/home-page').then(m => m.HomePage) },
+  { path: 'apresentacao', title: 'Apresentação', loadComponent: () => import('./modules/presentation/pages/presentation-page/presentation-page').then(m => m.PresentationPage) },
   { path: 'utils', title: 'Utils', loadComponent: () => import('./modules/utils/pages/utils-page/utils-page').then(m => m.UtilsPage) },
   { path: 'bastidores', title: 'Bastidores', loadComponent: () => import('./modules/backstage/pages/backstage-page/backstage-page').then(m => m.BackstagePage) },
   {

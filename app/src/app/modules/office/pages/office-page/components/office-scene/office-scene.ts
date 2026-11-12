@@ -30,13 +30,21 @@ export type { Person, Talk };
       <p class="px-2.5 py-1.5 text-[11.5px] leading-snug text-faint">Corredor: por onde andam. O elevador é por onde chega quem não mora numa sala (sessões) e sai quem terminou.</p>
     </div>
     <div class="absolute right-3 bottom-3 z-10 flex gap-1 rounded-xl border border-edge bg-night/80 p-1 backdrop-blur">
+      <button type="button" class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] font-semibold text-mute hover:bg-raise hover:text-text" [class.!text-night]="walking()" [class.!bg-frost]="walking()"
+              (click)="toggleWalk()" [attr.aria-pressed]="walking()" title="Primeira pessoa: ande pelo andar e veja o time de perto"><app-icon name="agent" [size]="15" />{{ walking() ? 'Sair do presencial' : 'Presencial' }}</button>
       <button type="button" class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] font-semibold text-mute hover:bg-raise hover:text-text" [class.!text-text]="legend()" [class.bg-raise]="legend()"
               (click)="legend.set(!legend())" [attr.aria-expanded]="legend()" title="O que é cada sala"><app-icon name="office" [size]="15" />Salas</button>
       <button type="button" class="rounded-lg p-1.5 text-mute hover:bg-raise hover:text-text" (click)="world?.rotate(-1)" title="Girar para a esquerda (Q)" aria-label="Girar para a esquerda"><app-icon name="rotateLeft" [size]="16" /></button>
       <button type="button" class="rounded-lg p-1.5 text-mute hover:bg-raise hover:text-text" (click)="world?.reset()" title="Vista inicial" aria-label="Vista inicial"><app-icon name="center" [size]="16" /></button>
       <button type="button" class="rounded-lg p-1.5 text-mute hover:bg-raise hover:text-text" (click)="world?.rotate(1)" title="Girar para a direita (E)" aria-label="Girar para a direita"><app-icon name="rotateRight" [size]="16" /></button>
     </div>
-    <p class="pointer-events-none absolute bottom-3 left-4 text-[11.5px] text-faint">Arraste para girar · roda aproxima · botão direito move</p>
+    @if (walking()) {
+      <span aria-hidden="true" class="pointer-events-none absolute top-1/2 left-1/2 size-1.5 -translate-1/2 rounded-full bg-white/80 ring-2 ring-night/40"></span>
+      <p class="pointer-events-none absolute bottom-3 left-4 rounded-lg bg-night/70 px-2.5 py-1.5 text-[12px] text-mute backdrop-blur">
+        Clique para olhar com o mouse · <b class="text-text">WASD</b> ou setas andam · <b class="text-text">Shift</b> corre · clique em alguém para ver a mesa · <b class="text-text">Esc</b> solta o mouse</p>
+    } @else {
+      <p class="pointer-events-none absolute bottom-3 left-4 text-[11.5px] text-faint">Arraste para girar · roda aproxima · botão direito move</p>
+    }
     @if (failed()) {
       <p class="absolute inset-0 grid place-items-center text-[13px] text-mute">Não deu para abrir o 3D aqui (WebGL indisponível).</p>
     }
@@ -95,7 +103,15 @@ export class OfficeScene {
     this.world?.talk(this.talks());
   }
 
+  protected readonly walking = signal(false);
+  protected toggleWalk(): void {
+    this.walking.update(v => !v);
+    this.world?.walk(this.walking());
+    if (this.walking()) this.legend.set(false);
+  }
+
   protected key(e: KeyboardEvent): void {
+    if (this.walking()) return;
     if (e.key === 'q' || e.key === 'Q') this.world?.rotate(-1);
     if (e.key === 'e' || e.key === 'E') this.world?.rotate(1);
   }

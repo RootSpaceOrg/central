@@ -4,6 +4,7 @@ import { ChatView } from '../../../../shared/components/chat-view/chat-view';
 import { MeetingImport } from '../../../../shared/components/meeting-import/meeting-import';
 import { AgentsService } from '../../../../shared/services/agents/agents.service';
 import { ChatService } from '../../../../shared/services/chat/chat.service';
+import { LayoutService } from '../../../../shared/services/layout/layout.service';
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
@@ -45,6 +46,8 @@ import { InstrumentCard } from './components/instrument/instrument';
               <dd class="mt-0.5 font-display text-[22px] font-bold tabular-nums text-yes">{{ week().validated }}@if (week().returned) {<span class="text-[13px] font-normal text-later"> · {{ week().returned }} voltaram</span>}</dd>
             </div>
           </dl>
+          <button type="button" class="btn btn-sm self-center" (click)="layout.present()" title="Abre uma janela com os produtos e o escritório para deixar num monitor da mesa (vai para o outro monitor, em tela cheia; F11 alterna)">
+            <app-icon name="layers" [size]="14" />Apresentação</button>
         </header>
 
         <app-for-you class="mt-8 block" />
@@ -114,6 +117,7 @@ export class CockpitPage {
   protected readonly chat = inject(ChatService);
   private readonly agents = inject(AgentsService);
   private readonly runs = inject(RunsService);
+  protected readonly layout = inject(LayoutService);
 
   protected readonly date = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
   protected readonly greeting = (() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })();

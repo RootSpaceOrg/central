@@ -1,6 +1,6 @@
 import {
   ACESFilmicToneMapping, AmbientLight, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, Color, CylinderGeometry, DirectionalLight, Group, HemisphereLight, IcosahedronGeometry,
-  Material, Mesh, MeshLambertMaterial, NearestFilter, Object3D, OrthographicCamera, PCFSoftShadowMap, PlaneGeometry, Raycaster,
+  Material, Mesh, MeshLambertMaterial, NearestFilter, Object3D, OrthographicCamera, PerspectiveCamera, PCFSoftShadowMap, PlaneGeometry, Raycaster,
   RepeatWrapping, RingGeometry, SRGBColorSpace, Scene, SphereGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -45,10 +45,10 @@ export interface Talk { id: number; from: string; to: string; text: string; repl
 const WALL_H = 2.4;
 const TALK_S = 8; // segundos de conversa depois que chega
 const SPEED = 2.6; // ladrilhos por segundo
-const SUB_SPOTS: [number, number][] = [[1.25, -0.55], [1.35, 0.35], [-0.95, 0.2]]; // estagiários, em relação a quem está sentado
+const SUB_SPOTS: [number, number][] = [[1.25, 0.55], [1.35, -0.35], [-0.95, -0.2]]; // estagiários, em relação a quem está sentado
 /** sentado: altura e recuo do corpo para cair no assento da cadeira (ajuste fino da animação 'sit') */
 const SEAT_Y = 0.22;
-const SEAT_BACK = 0.12;
+const SEAT_BACK = -0.12;
 
 // ---------- peças ----------
 
@@ -158,6 +158,17 @@ interface Actor {
   visit: { with: string; text: string; reply: string } | null;
 }
 
+/** modo presencial: o que não dá para atravessar (retângulos em ladrilhos: x0, z0, x1, z1; linha = retângulo fino) */
+const SOLID: [number, number, number, number][] = [
+  [7, 0, 7, 6], [17, 0, 17, 6], [7, 8, 7, 14], [16, 8, 16, 14],
+  ...ROOMS.flatMap(r => { const z = r.y === 0 ? 6 : 8; return [[r.x, z, r.door, z], [r.door + 1.2, z, r.x + r.w, z]] as [number, number, number, number][]; }),
+  ...ROOMS.flatMap(r => r.desks.map(([x, z]) => [x, z + 0.94, x + 2, z + 1.84] as [number, number, number, number])),
+  [TASK_BOARD[0] - 1.2, TASK_BOARD[1] - 0.05, TASK_BOARD[0] + 1.2, TASK_BOARD[1] + 0.05],
+  [3.35, 4.1, 5.25, 5.1], [23, 1, 23.8, 2.2],
+];
+const EYE = 1.55, BODY = 0.25;
+const distTo = (x: number, z: number, [x0, z0, x1, z1]: [number, number, number, number]) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1));
+
 const angleTo = (from: number, to: number) => { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
 /**
@@ -170,6 +181,14 @@ export class OfficeWorld {
   private readonly labels = new CSS2DRenderer();
   private readonly scene = new Scene();
   private readonly camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  /** modo presencial (primeira pessoa): câmera na altura dos olhos, posição em ladrilhos */
+  private readonly fp = new PerspectiveCamera(70, 1, 0.05, 80);
+  private walking = false;
+  private readonly keys = new Set<string>();
+  private readonly me = new Vector2(1.6, CORRIDOR_Y);
+  private yaw = -Math.PI / 2;
+  private pitch = 0;
+  private readonly off = new AbortController();
   private readonly controls: OrbitControls;
   private readonly floor = new Group();
   private readonly walls: { g: Group; n: Vector3 }[] = [];
@@ -252,6 +271,21 @@ export class OfficeWorld {
       this.down = null;
     });
     el.addEventListener('dblclick', e => { const k = this.hit(e); if (k) this.on.open(k); });
+    // presencial: clique prende o mouse (olhar em volta); Esc solta
+    el.addEventListener('click', () => { if (this.walking && document.pointerLockElement !== el) el.requestPointerLock(); });
+    const sig = { signal: this.off.signal };
+    document.addEventListener('mousemove', e => {
+      if (document.pointerLockElement !== el) return;
+      this.yaw -= e.movementX * 0.0025;
+      this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - e.movementY * 0.0025));
+    }, sig);
+    window.addEventListener('keydown', e => {
+      if (!this.walking || (e.target as HTMLElement).closest?.('input, textarea, [contenteditable]')) return;
+      this.keys.add(e.code);
+      if (/^(Arrow|Space)/.test(e.code)) e.preventDefault();
+    }, sig);
+    window.addEventListener('keyup', e => this.keys.delete(e.code), sig);
+    window.addEventListener('blur', () => this.keys.clear(), sig);
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
@@ -361,19 +395,21 @@ export class OfficeWorld {
     const SOFA = { carpet: '#4f6f8f', carpetBlue: '#4f6f8f', wood: '#3a3028' };
     const RUG = { carpet: '#6a5546', carpetDarker: '#5b4839' };
     for (const r of ROOMS) r.desks.forEach(([x, z], i) => {
-      put('desk', 2, 0.74, 0.9, x + 1, z + 0.45, Math.PI, 0, DESK);
-      put('computerScreen', 0.95, 0.6, 0, x + 1, z + 0.22, Math.PI, 0.74, SCREEN);
-      put('computerKeyboard', 0.6, 0.04, 0.2, x + 1, z + 0.62, Math.PI, 0.74);
-      put('computerMouse', 0.09, 0.04, 0.14, x + 1.45, z + 0.62, Math.PI, 0.74);
-      put('chairDesk', 0.62, 1.05, 0.62, x + 1, z + 1.62, 0, 0, CHAIR);
+      // cadeira atrás (lado da parede), mesa e monitor na frente: quem senta fica de rosto para a câmera
+      put('desk', 2, 0.74, 0.9, x + 1, z + 1.39, 0, 0, DESK);
+      put('computerScreen', 0.95, 0.6, 0, x + 1, z + 1.62, 0, 0.74, SCREEN);
+      put('computerKeyboard', 0.6, 0.04, 0.2, x + 1, z + 1.22, 0, 0.74);
+      put('computerMouse', 0.09, 0.04, 0.14, x + 0.55, z + 1.22, 0, 0.74);
+      put('chairDesk', 0.62, 1.05, 0.62, x + 1, z + 0.22, Math.PI, 0, CHAIR);
       // tela do monitor: acende quando alguém trabalha nessa mesa
       const screen = new MeshLambertMaterial({ color: '#0e131c', emissive: '#000000' });
       this.screens.set(`${r.id}:${i}`, screen);
       const sc = new Mesh(new PlaneGeometry(0.84, 0.46), screen);
-      sc.position.set(x + 1, 1.07, z + 0.27);
+      sc.position.set(x + 1, 1.07, z + 1.57);
+      sc.rotation.y = Math.PI;
       f.add(sc);
-      if (i % 2 === 0) put(i % 4 === 0 ? 'plantSmall1' : 'plantSmall3', 0, 0.32, 0, x + 0.3, z + 0.3, 0, 0.74);
-      else put('books', 0.32, 0.18, 0, x + 1.7, z + 0.3, Math.PI, 0.74);
+      if (i % 2 === 0) put(i % 4 === 0 ? 'plantSmall1' : 'plantSmall3', 0, 0.32, 0, x + 1.7, z + 1.54, 0, 0.74);
+      else put('books', 0.32, 0.18, 0, x + 0.3, z + 1.54, 0, 0.74);
     });
 
     // gestão: mesa de reunião com cadeiras e estante
@@ -614,6 +650,36 @@ export class OfficeWorld {
 
   // ---------- câmera ----------
 
+  /** modo presencial: primeira pessoa (WASD/setas andam, Shift corre, mouse olha); false volta à vista de cima */
+  walk(on: boolean): void {
+    this.walking = on;
+    this.controls.enabled = !on;
+    this.keys.clear();
+    if (!on && document.pointerLockElement === this.renderer.domElement) document.exitPointerLock();
+    this.moving = performance.now() + 300;
+  }
+
+  private step(dt: number): void {
+    const k = this.keys, has = (...c: string[]) => c.some(x => k.has(x));
+    const f = +has('KeyW', 'ArrowUp') - +has('KeyS', 'ArrowDown'), r = +has('KeyD', 'ArrowRight') - +has('KeyA', 'ArrowLeft');
+    if (f || r) {
+      const v = ((has('ShiftLeft', 'ShiftRight') ? 5 : 2.6) * dt) / Math.hypot(f, r);
+      const s = Math.sin(this.yaw), c = Math.cos(this.yaw);
+      const p = this.me, dx = (-s * f + c * r) * v, dz = (-c * f - s * r) * v;
+      // anda em cada eixo separado: encostou na parede, desliza ao longo dela
+      if (this.free(p.x, p.y, p.x + dx, p.y)) p.x += dx;
+      if (this.free(p.x, p.y, p.x, p.y + dz)) p.y += dz;
+    }
+    this.fp.position.set(this.me.x - MAP_W / 2, EYE, this.me.y - MAP_H / 2);
+    this.fp.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+  }
+
+  /** pode ir de (x0, z0) para (x1, z1)? dentro do andar e sem chegar mais perto de algo sólido do que o corpo */
+  private free(x0: number, z0: number, x1: number, z1: number): boolean {
+    if (x1 < BODY || z1 < BODY || x1 > MAP_W - BODY || z1 > MAP_H - BODY) return false;
+    return SOLID.every(b => { const d = distTo(x1, z1, b); return d >= BODY || d >= distTo(x0, z0, b); });
+  }
+
   /** gira a vista em 90° (sentido: 1 ou -1) */
   rotate(dir: 1 | -1): void { this.spin += (dir * Math.PI) / 2; }
 
@@ -634,12 +700,17 @@ export class OfficeWorld {
     const view = 17, aspect = w / h;
     Object.assign(this.camera, { left: (-view * aspect) / 2, right: (view * aspect) / 2, top: view / 2, bottom: -view / 2 });
     this.camera.updateProjectionMatrix();
+    this.fp.aspect = aspect;
+    this.fp.updateProjectionMatrix();
     this.drawn = 0;
   }
 
   private hit(e: MouseEvent): string | null {
     const r = this.renderer.domElement.getBoundingClientRect();
-    this.ray.setFromCamera(new Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
+    // mouse preso (presencial): mira no centro da tela
+    const at = document.pointerLockElement === this.renderer.domElement ? new Vector2(0, 0)
+      : new Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(at, this.walking ? this.fp : this.camera);
     const roots = [...this.actors.values()].map(a => a.ch.root);
     for (const h of this.ray.intersectObjects(roots, true)) {
       let o: Object3D | null = h.object;
@@ -656,7 +727,7 @@ export class OfficeWorld {
     // câmera mexendo ou alguém andando: todo quadro (fica liso em monitor de 144/240 Hz);
     // só gente digitando: 60; só a copa respirando: 30
     const actors = [...this.actors.values()];
-    const live = this.interacting || this.spin !== 0 || t < this.moving || actors.some(a => a.path.length);
+    const live = this.walking || this.interacting || this.spin !== 0 || t < this.moving || actors.some(a => a.path.length);
     const gap = live ? 0 : actors.some(a => a.working) ? 15 : 32;
     if (t - this.drawn < gap) return;
     const dt = Math.min(0.1, (t - (this.last || t)) / 1000);
@@ -670,18 +741,19 @@ export class OfficeWorld {
       if (Math.abs(this.spin) < 1e-4) this.spin = 0;
       this.camera.position.sub(this.controls.target).applyAxisAngle(new Vector3(0, 1, 0), step).add(this.controls.target);
     }
-    this.controls.update();
+    if (this.walking) this.step(dt); else this.controls.update();
 
     for (const a of [...this.actors.values()]) this.animate(a, dt, s);
 
     // paredes do lado da câmera somem
     const dir = this.camera.position.clone().sub(this.controls.target).setY(0).normalize();
-    for (const w of this.walls) w.g.visible = dir.dot(w.n) > -0.2;
+    for (const w of this.walls) w.g.visible = this.walking || dir.dot(w.n) > -0.2;
     for (const g of this.graphs) g.offset.x = (g.offset.x + dt * 0.06) % 1;
 
     const t0 = performance.now();
-    this.renderer.render(this.scene, this.camera);
-    this.labels.render(this.scene, this.camera);
+    const cam = this.walking ? this.fp : this.camera;
+    this.renderer.render(this.scene, cam);
+    this.labels.render(this.scene, cam);
     this.stats.frames++; this.stats.ms += performance.now() - t0; this.stats.calls = this.renderer.info.render.calls;
   }
 
@@ -706,7 +778,7 @@ export class OfficeWorld {
       if (len > 0.01) a.facing = Math.atan2(target.x - a.pos.x, target.y - a.pos.y);
       if (!a.path.length && a.leaving) { this.remove(a); return; }
     } else if (a.at?.seated && !a.saying) {
-      a.facing = Math.PI; // de frente para o monitor
+      a.facing = 0; // de frente para o monitor (e para a câmera)
     } else if (s > a.turnAt && !a.hold) {
       // parado em pé: vira de vez em quando (conversa na copa)
       a.facing = Math.random() * Math.PI * 2;
@@ -764,6 +836,8 @@ export class OfficeWorld {
 
   destroy(): void {
     this.dead = true;
+    this.off.abort();
+    if (document.pointerLockElement === this.renderer.domElement) document.exitPointerLock();
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     this.controls.dispose();
