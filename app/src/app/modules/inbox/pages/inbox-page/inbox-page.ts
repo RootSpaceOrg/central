@@ -118,16 +118,22 @@ export class InboxPage {
     ? this.proposals.inbox().filter(p => this.focus.decision(p) && this.scope.matches(p.projectSlug)).map(p => ({ kind: 'decision' as const, p }))
     : this.ideas.fresh().filter(i => this.focus.idea(i) && this.scope.matches(i.projectSlug)).map(i => ({ kind: 'idea' as const, i })));
 
-  /** por projeto; dentro de cada um, o que trava primeiro (o mais antigo antes), depois o mais novo */
+  /**
+   * por projeto. Decisões: o que trava primeiro (o mais antigo antes), depois o mais novo. Ideias: só pela data de criação,
+   * a mais nova primeiro (e o projeto da ideia mais nova no topo).
+   */
   protected readonly groups = computed(() => {
-    const later = this.skipped();
-    const rank = (q: Item) => (stuck(q) ? 0 : 1) + (q.kind === 'idea' && (later.has(q.i.id) || q.i.seen) ? 2 : 0);
+    const ideas = this.focus.tab() !== 'decision';
+    const rank = (q: Item) => (stuck(q) ? 0 : 1);
     const m = new Map<string, Item[]>();
     for (const q of this.items()) { const k = this.focus.top(slugOf(q)); m.set(k, [...(m.get(k) ?? []), q]); }
-    return [...m].map(([slug, list]) => ({
+    const groups = [...m].map(([slug, list]) => ({
       slug, project: this.project(slug), stuck: list.filter(stuck).length,
       list: list.sort((a, b) => rank(a) - rank(b) || (stuck(a) ? dateOf(a) - dateOf(b) : dateOf(b) - dateOf(a))),
-    })).sort((a, b) => b.stuck - a.stuck || (a.slug ? 0 : 1) - (b.slug ? 0 : 1) || (a.project?.name ?? '').localeCompare(b.project?.name ?? ''));
+    }));
+    return ideas
+      ? groups.sort((a, b) => dateOf(b.list[0]) - dateOf(a.list[0]))
+      : groups.sort((a, b) => b.stuck - a.stuck || (a.slug ? 0 : 1) - (b.slug ? 0 : 1) || (a.project?.name ?? '').localeCompare(b.project?.name ?? ''));
   });
   protected readonly flat = computed(() => this.groups().flatMap(g => g.list));
 

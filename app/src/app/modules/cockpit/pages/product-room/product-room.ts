@@ -1,3 +1,4 @@
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -27,7 +28,7 @@ const SUGGESTIONS = ['Organize o rumo comigo', 'Repense o time para esse rumo', 
  */
 @Component({
   selector: 'app-product-room',
-  imports: [AgoPipe, ChatView, Icon, InstrumentCard, MarkdownPipe, OneOnOne, ProjectAvatar, RefsPipe, RouterLink, Select],
+  imports: [AgoPipe, ChatView, DatePipe, Icon, InstrumentCard, MarkdownPipe, NgTemplateOutlet, OneOnOne, ProjectAvatar, RefsPipe, RouterLink, Select],
   host: { class: 'grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]' },
   templateUrl: './product-room.html',
 })
@@ -71,6 +72,11 @@ export class ProductRoom {
   protected readonly session = this.chat.spawn(null);
   protected readonly talking = computed(() => { const id = this.session.current(); return !!id && this.chat.busy().has(id); });
   protected readonly info = signal<OwnerInfo | null>(null);
+  /** diário: quantas passadas mostrar e quais estão abertas por inteiro */
+  protected readonly diaryLimit = signal(8);
+  protected readonly diary = computed(() => (this.info()?.diary ?? []).slice(0, this.diaryLimit()));
+  protected readonly expanded = signal(new Set<number>());
+  protected toggleDiary(id: number): void { this.expanded.update(s => { const n = new Set(s); if (!n.delete(id)) n.add(id); return n; }); }
   protected readonly focus = signal('');
   protected readonly starting = signal(false);
   protected readonly suggestions = SUGGESTIONS;

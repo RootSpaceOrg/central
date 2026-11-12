@@ -12,7 +12,7 @@
             <span class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide" [style.color]="ph.color">
               <span class="pulse size-1.5 rounded-full" [style.background]="ph.color"></span>{{ ph.label }}<span class="flex-1"></span>
               <span class="font-semibold normal-case tracking-normal text-faint tabular-nums">{{ live.since(w.since) }}</span></span>
-            <span class="mt-1 line-clamp-2 text-[13.5px] font-semibold leading-snug">{{ w.doing ?? w.title }}</span>
+            <span class="mt-1 line-clamp-2 h-[2.75em] text-[13.5px] font-semibold leading-snug">{{ w.doing ?? w.title }}</span>
             <span class="mt-1 truncate text-[11.5px] text-faint">{{ w.name }}@if (projectName(w.slug); as pn) { · {{ pn }} }</span>
           </div>
         }
@@ -54,8 +54,9 @@
             <span class="flex-1"></span>
             <span class="font-semibold normal-case tracking-normal text-faint tabular-nums">{{ live.since(w.since) }}</span>
           </span>
-          <span class="mt-1.5 line-clamp-2 text-[14.5px] font-semibold leading-snug">{{ w.doing ?? w.title }}</span>
-          @if (w.task) { <span class="mt-1 truncate text-[12.5px] text-mute"><app-icon name="kanban" [size]="11" /> tarefa {{ w.task }}</span> }
+          <!-- altura fixa: o texto mudando (1 ou 2 linhas, com ou sem tarefa) não empurra o mapa para cima e para baixo -->
+          <span class="mt-1.5 line-clamp-2 h-[2.75em] text-[14.5px] font-semibold leading-snug">{{ w.doing ?? w.title }}</span>
+          <span class="mt-1 h-[1.4em] truncate text-[12.5px] text-mute">@if (w.task) { <app-icon name="kanban" [size]="11" /> tarefa {{ w.task }} }</span>
           <span class="mt-auto flex items-center gap-2 pt-2.5 text-[12px] text-faint">
             <span class="size-2.5 shrink-0 rounded-[3px]" [style.background]="w.hair"></span>
             <span class="min-w-0 truncate">{{ w.name }}@if (projectName(w.slug); as pn) { · {{ pn }} }</span>

@@ -34,6 +34,8 @@ Rotinas aparecem pela próxima a rodar. No Escritório, "Presencial" é a primei
 Na sala do produto, "Procurar trabalho" manda o dono (ou o tech lead) fazer a ronda na hora: backlog que pode subir,
 revisões que ele valida, rumo, próximo marco e ideias (descartar, virar história ou decisão). Pelo MCP: owner_round, quando o
 Gustavo pedir ("manda o dono do X procurar trabalho").
+Utils > Limpeza: o Gustavo apaga o que os agentes deixaram (vídeos de entregas revisadas, worktrees parados, branches
+locais mergeadas, pastas .central-tmp). Arquivo temporário de agente vai em .central-tmp/ e não entra em commit.
 O Gustavo é o PILOTO: fica com o COCKPIT aberto o dia todo. Nele: "Para você" (quebrou, só você destrava, histórias
 para usar, pedidos de 1:1, decisões), os produtos por empresa com os instrumentos (dono e estado, foco do rumo, meta do
 marco atual, ritmo de 14 dias, números combinados) e, à direita, o CHEFE DE GABINETE: a Central (você, quando for o agente

@@ -1128,6 +1128,9 @@ export interface Api {
   'window:fullscreen': (on: boolean) => void;
   /** modo apresentação: abre a janela (outro monitor, tela cheia) */
   'present:open': () => void;
+  /** Utils > Limpeza: o que dá para apagar (com o motivo) e apagar o que foi marcado */
+  'housekeeping:scan': () => HousekeepingItem[];
+  'housekeeping:clean': (items: HousekeepingItem[]) => { done: number; failed: { label: string; why: string }[] };
   'projects:list': () => ProjectDto[];
   'projects:create': (input: NewProjectInput) => ProjectDto;
   'projects:update': (slug: string, patch: ProjectPatch) => void;
@@ -1427,3 +1430,6 @@ export interface Events {
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
 }
+
+/** algo que a limpeza pode apagar: vídeo de entrega revisada, worktree parado, branch mergeada, pasta .central-tmp */
+export interface HousekeepingItem { kind: 'video' | 'worktree' | 'branch' | 'temp'; id: string; label: string; why: string; size: number | null; repo?: string; branch?: string }

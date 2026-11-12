@@ -51,6 +51,7 @@ import { abandonGuide, answerCard, askTech, approvePlan, askStrategist, guideIdl
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
+import { cleanHousekeeping, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
 import { SIZE_BUDGET, createRoutine, onRoutineFail, deleteRoutine, fireRoutine, listRoutines, updateRoutine, watchRoutines } from './routines';
@@ -207,6 +208,9 @@ const emitRun = {
 function registerIpc(): void {
   handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
   handle('present:open', () => openPresentation());
+  // Utils > Limpeza: levanta o que os agentes deixaram (vídeos, worktrees, branches, .central-tmp) e apaga o que for marcado
+  handle('housekeeping:scan', () => scanHousekeeping(join(app.getPath('userData'), 'videos')));
+  handle('housekeeping:clean', items => cleanHousekeeping(items, join(app.getPath('userData'), 'videos')));
   // área de transferência do sistema (funciona mesmo sem a janela em foco, ao contrário do navigator.clipboard)
   handle('app:copy', text => { clipboard.writeText(String(text)); });
   handle('app:info', () => ({ home: app.getPath('home'), dev_root: DEV_ROOT, db_path: DB_PATH, version: app.getVersion(), data_dir: app.getPath('userData'), platform: process.platform }));

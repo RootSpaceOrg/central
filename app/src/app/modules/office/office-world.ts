@@ -47,7 +47,7 @@ const TALK_S = 8; // segundos de conversa depois que chega
 const SPEED = 2.6; // ladrilhos por segundo
 const SUB_SPOTS: [number, number][] = [[1.25, 0.55], [1.35, -0.35], [-0.95, -0.2]]; // estagiários, em relação a quem está sentado
 /** sentado: altura e recuo do corpo para cair no assento da cadeira (ajuste fino da animação 'sit') */
-const SEAT_Y = 0.22;
+const SEAT_Y = 0.44;
 const SEAT_BACK = -0.12;
 
 // ---------- peças ----------

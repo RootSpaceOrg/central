@@ -3,15 +3,16 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { Icon, IconName } from '../../../../shared/ui/icon';
+import { Housekeeping } from './components/housekeeping/housekeeping';
 import { PullRequests } from './components/pull-requests/pull-requests';
 
-type Tab = 'pull-requests';
-const TABS: { id: Tab; label: string; icon: IconName }[] = [{ id: 'pull-requests', label: 'Pull Requests', icon: 'pullRequest' }];
+type Tab = 'pull-requests' | 'limpeza';
+const TABS: { id: Tab; label: string; icon: IconName }[] = [{ id: 'pull-requests', label: 'Pull Requests', icon: 'pullRequest' }, { id: 'limpeza', label: 'Limpeza', icon: 'delete' }];
 
 /** Utils: ferramentas do dia a dia, uma por aba (?aba=). A primeira: os pull requests abertos que envolvem você. */
 @Component({
   selector: 'app-utils-page',
-  imports: [Icon, PullRequests],
+  imports: [Housekeeping, Icon, PullRequests],
   host: { class: 'flex h-full min-h-0 flex-col' },
   template: `
     <header class="shrink-0 border-b border-edge px-8 pt-7">
@@ -27,6 +28,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [{ id: 'pull-requests
     </header>
     <div class="min-h-0 flex-1 overflow-y-auto px-8 pt-6 pb-16">
       @if (tab() === 'pull-requests') { <app-pull-requests /> }
+      @if (tab() === 'limpeza') { <app-housekeeping /> }
     </div>`,
 })
 export class UtilsPage {

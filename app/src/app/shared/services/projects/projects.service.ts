@@ -132,7 +132,7 @@ export class ProjectsService {
     const utc = (s: string) => new Date(s.endsWith('Z') ? s : `${s}Z`);
     return {
       on: d.on,
-      diary: d.diary.map(x => ({ runId: x.id, status: x.status, at: utc(x.created_at), title: x.prompt.split('\n')[0].replace(/^\[dono\]\s*/, ''), diary: x.result })),
+      diary: d.diary.map(x => ({ runId: x.id, status: x.status, at: utc(x.created_at), title: x.prompt.split('\n')[0].replace(/^\[dono\]\s*/, '').replace(/^[^:]+:\s*/, ''), diary: x.result })),
       pending: d.pending.map(e => ({ id: e.id, kind: e.kind, summary: e.summary, at: utc(e.created_at) })),
       actions: d.actions.map(a => ({ ...a, at: utc(a.at) })),
     };
