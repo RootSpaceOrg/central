@@ -27,7 +27,7 @@ import { digest, listDeliveries, reviewDelivery, reviewBoard, setVideoDir, video
 // vídeos das entregas: a tela toca por central-media://v/<arquivo> (só a pasta de vídeos da Central)
 protocol.registerSchemesAsPrivileged([{ scheme: 'central-media', privileges: { stream: true, supportFetchAPI: true, standard: true, secure: true } }]);
 import { dispatchTodo, dispatchTriage } from './dispatch';
-import { dispatchOwners, onCriticalAlert, ownerDiary, pendingEvents, resolveAlert, setOwnerOn } from './owner';
+import { OwnerDeps, dispatchOwners, onCriticalAlert, ownerDiary, ownerRound, pendingEvents, resolveAlert, setOwnerOn } from './owner';
 import { listOperatorActions, onDecided, onDirection, onIdea, onReviewed, onTaskMoved } from './operator';
 import { pulse } from './pulse';
 import { cockpit } from './cockpit';
@@ -99,6 +99,10 @@ function resolveCited(raw: string, ctx: { run?: number | null; chat?: number | n
   return null;
 }
 
+/** passada do dono (eventos ou ronda pedida pelo Gustavo) */
+const ownerStart: OwnerDeps['start'] = input =>
+  startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun).id;
+
 function send<K extends keyof Events>(channel: K, payload: Events[K]): void {
   win?.webContents.send(channel, payload);
   show?.webContents.send(channel, payload);
@@ -127,7 +131,7 @@ const dispatchNow = () => {
   // dono do projeto: acorda com os eventos (história devolvida, falha, decisão, ideia aprovada, insight, fila vazia)
   dispatchOwners({
     quota, setting: getSetting, setSetting,
-    start: input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, emitRun).id,
+    start: ownerStart,
   }).then(n => { if (n) send('backlog:changed', null); }, () => {});
   // agente de triagem: lê as ideias novas e deixa uma recomendação (gatilho em Triagem)
   dispatchTriage({
@@ -327,6 +331,7 @@ function registerIpc(): void {
   handle('cockpit:get', () => cockpit());
   handle('alerts:resolve', id => { resolveAlert(id); changed(); });
   handle('owner:set', (slug, on) => { setOwnerOn(slug, on); changed(); });
+  handle('owner:round', slug => { const id = ownerRound(slug, ownerStart); changed(); return id; });
   handle('owner:create', slug => { const id = createBusinessOwner(slug); changed(); agentsChanged(); return id; });
   handle('insights:meeting', async ({ title, text, file, project_slug }) => {
     let body = text?.trim() ?? '';

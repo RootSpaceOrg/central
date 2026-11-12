@@ -108,5 +108,13 @@ export class ProductRoom {
     this.creating.set(true);
     try { await this.projects.createOwner(this.slug()); } finally { this.creating.set(false); }
   }
+  protected readonly round = signal<'idle' | 'going' | 'sent' | 'busy'>('idle');
+  /** manda o dono procurar trabalho agora (ronda) */
+  protected async goRound(): Promise<void> {
+    this.round.set('going');
+    try { this.round.set((await this.projects.ownerRound(this.slug())) === null ? 'busy' : 'sent'); }
+    catch { this.round.set('idle'); return; }
+    setTimeout(() => this.round.set('idle'), 8000);
+  }
   protected toggleOwner(): void { const p = this.project(); if (p) this.projects.setOwnerOn(p.slug, !p.ownerOn).catch(() => {}); }
 }

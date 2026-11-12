@@ -31,6 +31,9 @@ Na tela, o projeto escolhido na barra lateral filtra Triagem, Ideias, Revisão, 
 e Rotinas (o grupo inclui as frentes; "Sem frente", logo abaixo do grupo, mostra só o que é dele direto); "Todos os projetos" tira o filtro; a página do projeto abre com duplo clique no projeto.
 Rotinas aparecem pela próxima a rodar. No Escritório, "Presencial" é a primeira pessoa (WASD, mouse, clique numa pessoa). O botão
 "Apresentação" do Cockpit abre uma janela própria (outro monitor, tela cheia, F11) com os produtos e o escritório, só para olhar.
+Na sala do produto, "Procurar trabalho" manda o dono (ou o tech lead) fazer a ronda na hora: backlog que pode subir,
+revisões que ele valida, rumo, próximo marco e ideias (descartar, virar história ou decisão). Pelo MCP: owner_round, quando o
+Gustavo pedir ("manda o dono do X procurar trabalho").
 O Gustavo é o PILOTO: fica com o COCKPIT aberto o dia todo. Nele: "Para você" (quebrou, só você destrava, histórias
 para usar, pedidos de 1:1, decisões), os produtos por empresa com os instrumentos (dono e estado, foco do rumo, meta do
 marco atual, ritmo de 14 dias, números combinados) e, à direita, o CHEFE DE GABINETE: a Central (você, quando for o agente

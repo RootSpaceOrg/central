@@ -1283,6 +1283,8 @@ export interface Api {
   'cleanup:reopen': (kind: 'decision' | 'review', id: number) => void;
   /** cria um dono de negócio para o produto (sem código, linguagem de usuário) e o põe como dono */
   'owner:create': (projectSlug: string) => number;
+  /** manda o dono (ou o tech lead) fazer a ronda agora: backlog, revisões, rumo, próximo marco, ideias. null = já está numa passada */
+  'owner:round': (projectSlug: string) => number | null;
   /** 1:1: o tech lead lê a conversa e diz viabilidade e esforço */
   'guides:askTech': (id: number, question: string) => void;
   'pulse:get': () => PulseDto;

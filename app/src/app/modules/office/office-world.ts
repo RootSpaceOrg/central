@@ -10,7 +10,7 @@ import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRe
 import { boxGeo, clearAvatarCaches, mat } from '../../shared/ui/avatar3d';
 import { CHARACTERS, Character, Kit, Prop, fitBox, loadKit } from './office-assets';
 import type { AvatarLook } from '../../shared/ui/avatar-look';
-import { BOARD_SPOT, CORRIDOR_Y, ELEVATOR, MAP_H, MAP_W, Placement, ROOM, ROOMS, RoomId, TASK_BOARD, route, skinOf } from './office-map';
+import { BOARD_SPOT, CORRIDOR_Y, MAP_H, MAP_W, NORTH_D, Placement, ROOM, ROOMS, RoomId, SOUTH_Y, TASK_BOARD, exitPath, route, skinOf } from './office-map';
 
 /** Uma pessoa no andar: quem trabalha senta numa mesa da sala; quem está parado fica na copa. */
 export interface Person {
@@ -158,16 +158,10 @@ interface Actor {
   visit: { with: string; text: string; reply: string } | null;
 }
 
-/** modo presencial: o que não dá para atravessar (retângulos em ladrilhos: x0, z0, x1, z1; linha = retângulo fino) */
-const SOLID: [number, number, number, number][] = [
-  [7, 0, 7, 6], [17, 0, 17, 6], [7, 8, 7, 14], [16, 8, 16, 14],
-  ...ROOMS.flatMap(r => { const z = r.y === 0 ? 6 : 8; return [[r.x, z, r.door, z], [r.door + 1.2, z, r.x + r.w, z]] as [number, number, number, number][]; }),
-  ...ROOMS.flatMap(r => r.desks.map(([x, z]) => [x, z + 0.94, x + 2, z + 1.84] as [number, number, number, number])),
-  [TASK_BOARD[0] - 1.2, TASK_BOARD[1] - 0.05, TASK_BOARD[0] + 1.2, TASK_BOARD[1] + 0.05],
-  [3.35, 4.1, 5.25, 5.1], [23, 1, 23.8, 2.2],
-];
+/** retângulo no chão, em ladrilhos: x0, z0, x1, z1 (linha = retângulo fino) */
+type Rect = [number, number, number, number];
 const EYE = 1.55, BODY = 0.25;
-const distTo = (x: number, z: number, [x0, z0, x1, z1]: [number, number, number, number]) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1));
+const distTo = (x: number, z: number, [x0, z0, x1, z1]: Rect) => Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1));
 
 const angleTo = (from: number, to: number) => { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
 
@@ -189,6 +183,8 @@ export class OfficeWorld {
   private yaw = -Math.PI / 2;
   private pitch = 0;
   private readonly off = new AbortController();
+  /** modo presencial: o que não dá para atravessar (paredes, vidro, mesas, móveis grandes) */
+  private readonly solid: Rect[] = [];
   private readonly controls: OrbitControls;
   private readonly floor = new Group();
   private readonly walls: { g: Group; n: Vector3 }[] = [];
@@ -230,10 +226,10 @@ export class OfficeWorld {
 
     this.scene.add(new HemisphereLight('#e6eeff', '#4a3f33', 1.6), new AmbientLight('#ffffff', 0.45));
     const sun = new DirectionalLight('#fff1dc', 2.6);
-    sun.position.set(9, 16, 11);
+    sun.position.set(11, 19, 13);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -17, right: 17, top: 17, bottom: -17, near: 1, far: 50 });
+    Object.assign(sun.shadow.camera, { left: -21, right: 21, top: 21, bottom: -21, near: 1, far: 60 });
     sun.shadow.bias = -0.0008;
     this.scene.add(sun);
 
@@ -312,7 +308,8 @@ export class OfficeWorld {
       label.position.set(r.x + 0.35 + label.userData['w'] / 2, 0.006, r.y + r.d - 0.55);
       f.add(label);
     }
-    slab(0, 6, MAP_W, 2, '#2c313c', '#272c36');
+    slab(0, NORTH_D, MAP_W, SOUTH_Y - NORTH_D, '#2c313c', '#272c36');
+    const solid = (x0: number, z0: number, x1: number, z1: number) => this.solid.push([x0, z0, x1, z1]);
 
     // paredes externas: cada lado é um grupo que some quando a câmera está do lado de fora dele
     const side = (n: Vector3) => { const g = new Group(); f.add(g); this.walls.push({ g, n }); return g; };
@@ -322,60 +319,75 @@ export class OfficeWorld {
       if (r.y === 0) box(north, r.w, WALL_H, 0.12, tone(r.wall, 1.15), r.x + r.w / 2, 0, -0.06);
       else box(south, r.w, WALL_H, 0.12, tone(r.wall, 1.15), r.x + r.w / 2, 0, MAP_H + 0.06);
     }
-    for (const [z0, z1, color] of [[0, 6, ROOM.get('gestao')!.wall], [6, 8, '#3a404d'], [8, 14, ROOM.get('copa')!.wall]] as [number, number, string][])
-      box(west, 0.12, WALL_H, z1 - z0, tone(color, 0.95), -0.06, 0, (z0 + z1) / 2);
-    for (const [z0, z1, color] of [[0, 6, ROOM.get('monitor')!.wall], [6, 8, '#3a404d'], [8, 14, ROOM.get('business')!.wall]] as [number, number, string][])
-      box(east, 0.12, WALL_H, z1 - z0, tone(color, 0.95), MAP_W + 0.06, 0, (z0 + z1) / 2);
+    const ends = (left: RoomId, right: RoomId, bottomLeft: RoomId, bottomRight: RoomId) => [
+      [[0, NORTH_D, ROOM.get(left)!.wall], [NORTH_D, SOUTH_Y, '#3a404d'], [SOUTH_Y, MAP_H, ROOM.get(bottomLeft)!.wall]],
+      [[0, NORTH_D, ROOM.get(right)!.wall], [NORTH_D, SOUTH_Y, '#3a404d'], [SOUTH_Y, MAP_H, ROOM.get(bottomRight)!.wall]],
+    ] as [number, number, string][][];
+    const [w, e] = ends('gestao', 'monitor', 'copa', 'business');
+    for (const [z0, z1, color] of w) box(west, 0.12, WALL_H, z1 - z0, tone(color, 0.95), -0.06, 0, (z0 + z1) / 2);
+    for (const [z0, z1, color] of e) box(east, 0.12, WALL_H, z1 - z0, tone(color, 0.95), MAP_W + 0.06, 0, (z0 + z1) / 2);
 
-    // elevador (de onde chega quem não estava na copa)
-    box(west, 0.04, 1.9, 1.4, '#7c8494', 0.02, 0, CORRIDOR_Y);
-    box(west, 0.05, 1.9, 0.03, '#2b303a', 0.03, 0, CORRIDOR_Y);
-    box(west, 0.05, 0.12, 0.3, '#E8C46A', 0.03, 2.0, CORRIDOR_Y);
-    // corredor: quadro de tarefas (colunas com post-its), onde quem começa uma tarefa passa
-    box(f, 2.4, 1.25, 0.06, '#eceae2', TASK_BOARD[0], 0.85, TASK_BOARD[1]);
-    box(f, 2.5, 0.06, 0.1, '#5b6475', TASK_BOARD[0], 2.1, TASK_BOARD[1]);
+    // elevador (de onde chega quem não estava na copa), com moldura e luz em cima
+    box(west, 0.06, 2.1, 1.7, '#3a404d', 0.03, 0, CORRIDOR_Y);
+    box(west, 0.04, 1.95, 1.4, '#8a92a3', 0.07, 0, CORRIDOR_Y);
+    box(west, 0.05, 1.95, 0.03, '#2b303a', 0.1, 0, CORRIDOR_Y);
+    box(west, 0.05, 0.12, 0.34, '#E8C46A', 0.08, 2.12, CORRIDOR_Y);
+
+    // quadro de tarefas: na parede da Gestão, virado para o corredor, ao lado do elevador (quem começa uma tarefa passa nele)
+    const [bx, bz] = TASK_BOARD;
+    box(f, 3.2, 2.2, 0.16, tone(ROOM.get('gestao')!.wall, 1.05), bx, 0, bz - 0.1);
+    solid(bx - 1.6, bz - 0.18, bx + 1.6, bz);
+    box(f, 2.6, 1.3, 0.05, '#eceae2', bx, 0.75, bz);
+    box(f, 2.7, 0.08, 0.1, '#5b6475', bx, 2.06, bz);
     for (let c = 0; c < 3; c++) {
-      box(f, 0.03, 1.1, 0.07, '#c9c4b8', TASK_BOARD[0] - 0.4 + c * 0.8, 0.92, TASK_BOARD[1] + 0.01, false);
-      for (let r = 0; r < 3 - c % 2; r++) box(f, 0.28, 0.22, 0.03, ['#E8C46A', '#7FA2FF', '#7ED69A'][c], TASK_BOARD[0] - 0.8 + c * 0.8, 1.6 - r * 0.32, TASK_BOARD[1] + 0.05, false);
+      box(f, 0.03, 1.15, 0.06, '#c9c4b8', bx - 0.43 + c * 0.86, 0.82, bz + 0.03, false);
+      for (let r = 0; r < 3 - c % 2; r++) box(f, 0.3, 0.24, 0.03, ['#E8C46A', '#7FA2FF', '#7ED69A'][c], bx - 0.86 + c * 0.86, 1.62 - r * 0.34, bz + 0.05, false);
     }
-    box(f, 0.08, 0.85, 0.08, '#5b6475', TASK_BOARD[0] - 1.1, 0, TASK_BOARD[1]);
-    box(f, 0.08, 0.85, 0.08, '#5b6475', TASK_BOARD[0] + 1.1, 0, TASK_BOARD[1]);
+    const sign = floorLabel('TAREFAS', '#E8C46A');
+    sign.rotation.x = 0;
+    sign.scale.setScalar(0.5);
+    sign.position.set(bx, 2.3, bz + 0.01);
+    f.add(sign);
+
     // gestão: quadro branco com um post-it por marco em Agora
-    box(north, 4.2, 1.1, 0.04, '#eceae2', 3.4, 0.95, 0.02);
+    box(north, 4.6, 1.1, 0.04, '#eceae2', 3.8, 0.95, 0.02);
     this.stickies.position.set(0, 0, 0.05);
     north.add(this.stickies);
     // engenharia: janelas
-    for (const x of [9.6, 13.4]) box(north, 1.8, 1.0, 0.03, new MeshLambertMaterial({ color: '#9fc3ff', emissive: '#4a6aa8', emissiveIntensity: 0.6 }), x, 1.0, 0.02, false);
+    for (const x of [11.6, 15.5, 19.4]) box(north, 2.0, 1.0, 0.03, new MeshLambertMaterial({ color: '#9fc3ff', emissive: '#4a6aa8', emissiveIntensity: 0.6 }), x, 1.0, 0.02, false);
     // monitoração: telões
-    for (const x of [18.7, 21.3]) {
+    for (const x of [24.0, 26.8]) {
       const t = graphTexture();
       this.graphs.push(t);
-      box(north, 2.2, 1.2, 0.08, '#1d2129', x, 0.95, 0.04);
-      const s = new Mesh(new PlaneGeometry(2.05, 1.05), new MeshLambertMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.9 }));
-      s.position.set(x, 1.55, 0.09);
+      box(north, 2.4, 1.3, 0.08, '#1d2129', x, 0.95, 0.04);
+      const s = new Mesh(new PlaneGeometry(2.25, 1.15), new MeshLambertMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.9 }));
+      s.position.set(x, 1.6, 0.09);
       north.add(s);
     }
     // criativo: quadro de cortiça; negócios: quadro com gráfico de barras
-    box(south, 2.6, 1.0, 0.04, '#b98d5b', 10.5, 1.0, MAP_H - 0.02);
-    box(south, 2.2, 1.0, 0.04, '#e9eee9', 19.5, 1.0, MAP_H - 0.02);
-    [0.3, 0.5, 0.42, 0.7].forEach((h, i) => box(south, 0.3, h, 0.03, '#7ED69A', 18.8 + i * 0.45, 1.12, MAP_H - 0.05));
+    box(south, 2.8, 1.0, 0.04, '#b98d5b', 14.0, 1.0, MAP_H - 0.02);
+    for (const [dx, dy, c] of [[-0.9, 1.6, '#f2efe6'], [-0.2, 1.3, '#E8C46A'], [0.6, 1.55, '#D69CFF'], [0.95, 1.15, '#f2efe6']] as [number, number, string][])
+      box(south, 0.45, 0.35, 0.02, c, 14.0 + dx, dy, MAP_H - 0.05, false);
+    box(south, 2.4, 1.0, 0.04, '#e9eee9', 24.6, 1.0, MAP_H - 0.02);
+    [0.3, 0.5, 0.42, 0.7].forEach((h, i) => box(south, 0.3, h, 0.03, '#7ED69A', 23.9 + i * 0.45, 1.12, MAP_H - 0.05));
 
-    // vidro: divisórias e muretas com porta
+    // vidro: divisórias entre salas e muretas com porta para o corredor (a parede do quadro de tarefas interrompe a da Gestão)
     const glass = new MeshLambertMaterial({ color: '#cfe3ff', transparent: true, opacity: 0.13, depthWrite: false });
     const frame = '#5b6475';
     const pane = (x0: number, z0: number, x1: number, z1: number, h: number) => {
+      if (x1 - x0 <= 0.01 && z1 - z0 <= 0.01) return;
       const along = x1 !== x0, len = along ? x1 - x0 : z1 - z0;
       box(f, along ? len : 0.05, h, along ? 0.05 : len, glass, (x0 + x1) / 2, 0, (z0 + z1) / 2, false);
       box(f, along ? len : 0.07, 0.05, along ? 0.07 : len, frame, (x0 + x1) / 2, h, (z0 + z1) / 2, false);
+      solid(x0, z0, x1, z1);
     };
-    for (const x of [7, 17]) pane(x, 0, x, 6, 1.5);
-    for (const x of [7, 16]) pane(x, 8, x, 14, 1.5);
     for (const r of ROOMS) {
-      const z = r.y === 0 ? 6 : 8;
-      pane(r.x, z, r.door, z, 0.9);
+      if (r.x > 0) pane(r.x, r.y, r.x, r.y + r.d, 1.5);
+      const z = r.y === 0 ? NORTH_D : SOUTH_Y;
+      if (r.id === 'gestao') { pane(r.x, z, bx - 1.6, z, 0.9); pane(bx + 1.6, z, r.door, z, 0.9); }
+      else pane(r.x, z, r.door, z, 0.9);
       pane(r.door + 1.2, z, r.x + r.w, z, 0.9);
     }
-
   }
 
   /** Mobília com modelos 3D: mesas com monitor/teclado/cadeira, copa, estantes, plantas. A tela do monitor acende com alguém trabalhando. */
@@ -389,6 +401,8 @@ export class OfficeWorld {
       f.add(g);
       return g;
     };
+    /** não dá para atravessar (presencial): centro e medidas no chão */
+    const solid = (x: number, z: number, w: number, d: number) => this.solid.push([x - w / 2, z - d / 2, x + w / 2, z + d / 2]);
     const DESK = { wood: '#c8a77c', woodDark: '#8a6a48', metal: '#3a3f4b' };
     const CHAIR = { metal: '#2b2f38', metalMedium: '#2b2f38', carpet: '#465267', carpetBlue: '#465267', wood: '#3a3f4b' };
     const SCREEN = { metal: '#262a33', metalDark: '#1b1e25' };
@@ -397,7 +411,8 @@ export class OfficeWorld {
     for (const r of ROOMS) r.desks.forEach(([x, z], i) => {
       // cadeira atrás (lado da parede), mesa e monitor na frente: quem senta fica de rosto para a câmera
       put('desk', 2, 0.74, 0.9, x + 1, z + 1.39, 0, 0, DESK);
-      put('computerScreen', 0.95, 0.6, 0, x + 1, z + 1.62, 0, 0.74, SCREEN);
+      solid(x + 1, z + 1.39, 2, 0.9);
+      put('computerScreen', 0.95, 0.6, 0, x + 1, z + 1.62, Math.PI, 0.74, SCREEN); // a tela olha para quem senta
       put('computerKeyboard', 0.6, 0.04, 0.2, x + 1, z + 1.22, 0, 0.74);
       put('computerMouse', 0.09, 0.04, 0.14, x + 0.55, z + 1.22, 0, 0.74);
       put('chairDesk', 0.62, 1.05, 0.62, x + 1, z + 0.22, Math.PI, 0, CHAIR);
@@ -412,42 +427,73 @@ export class OfficeWorld {
       else put('books', 0.32, 0.18, 0, x + 0.3, z + 1.54, 0, 0.74);
     });
 
-    // gestão: mesa de reunião com cadeiras e estante
-    put('table', 1.9, 0.72, 1.0, 4.3, 4.6, 0, 0, DESK);
-    for (const [dx, dz, rt] of [[-0.55, -0.75, 0], [0.55, -0.75, 0], [-0.55, 0.75, Math.PI], [0.55, 0.75, Math.PI]] as [number, number, number][])
-      put('chairModernCushion', 0.48, 0.85, 0.48, 4.3 + dx, 4.6 + dz, rt, 0, CHAIR);
-    put('bookcaseClosedWide', 1.4, 1.6, 0.45, 0.35, 4.6, Math.PI / 2);
-    // engenharia: estante e luminária
-    put('bookcaseOpen', 0.9, 1.7, 0.4, 16.7, 2.3, -Math.PI / 2);
-    put('lampRoundFloor', 0, 1.6, 0, 16.5, 4.8);
+    // gestão: mesa de reunião (as cadeiras olham para a mesa) e estante
+    put('table', 1.9, 0.72, 1.0, 6.4, 5.5, 0, 0, DESK);
+    solid(6.4, 5.5, 1.9, 1.0);
+    for (const [dx, dz, rt] of [[-0.55, -0.78, Math.PI], [0.55, -0.78, Math.PI], [-0.55, 0.78, 0], [0.55, 0.78, 0], [1.3, 0, -Math.PI / 2]] as [number, number, number][])
+      put('chairModernCushion', 0.48, 0.85, 0.48, 6.4 + dx, 5.5 + dz, rt, 0, CHAIR);
+    put('laptop', 0, 0.22, 0, 6.0, 5.45, 0.4, 0.72);
+    put('bookcaseClosedWide', 1.4, 1.6, 0.45, 0.3, 3.4, Math.PI / 2);
+    solid(0.3, 3.4, 0.45, 1.4);
+    // engenharia: estante e luminária nos cantos de baixo
+    put('bookcaseOpen', 0.9, 1.7, 0.4, 21.6, 6.9, -Math.PI / 2);
+    solid(21.6, 6.9, 0.4, 0.9);
+    put('lampRoundFloor', 0, 1.6, 0, 9.5, 7.3);
     // monitoração: rack de servidores e caixa de som
-    box(f, 0.8, 2.0, 1.2, '#232833', 23.4, 0, 1.6);
-    for (let i = 0; i < 8; i++) box(f, 0.02, 0.05, 0.05, i % 2 ? '#5FD3B5' : '#E8C46A', 22.99, 0.3 + i * 0.22, 1.3 + (i % 3) * 0.2, false);
-    put('speaker', 0, 0.9, 0, 23.5, 3.2, -Math.PI / 2);
-    // copa: balcão com cafeteira e micro-ondas, geladeira, sofás, mesinha, banquetas, TV
-    put('kitchenBar', 2.8, 0.95, 0.8, 0.45, 10.3, Math.PI / 2);
-    put('kitchenCoffeeMachine', 0, 0.42, 0, 0.45, 9.4, Math.PI / 2, 0.95);
-    put('kitchenMicrowave', 0, 0.32, 0, 0.45, 10.9, Math.PI / 2, 0.95);
-    put('kitchenFridgeLarge', 0.9, 1.95, 0.75, 0.45, 12.75, Math.PI / 2);
-    put('loungeSofaCorner', 1.9, 0.8, 1.9, 2.4, 12.95, Math.PI, 0, SOFA);
-    put('loungeSofa', 2.0, 0.8, 0.9, 4.9, 13.45, Math.PI, 0, SOFA);
-    put('rugRound', 2.6, 0.02, 2.6, 4.1, 12.2, 0, 0, RUG);
-    put('tableCoffee', 1.1, 0.4, 0.6, 4.1, 12.3);
-    put('tableRound', 1.0, 0.75, 1.0, 3.5, 10.3, 0, 0, DESK);
-    for (const [dx, dz] of [[-0.8, 0], [0.8, 0], [0, -0.8]]) put('stoolBar', 0, 0.75, 0, 3.5 + dx, 10.3 + dz, 0, 0, CHAIR);
-    put('loungeDesignChair', 0.9, 0.85, 0.9, 6.2, 10.6, -Math.PI / 2, 0, SOFA);
-    put('televisionModern', 1.5, 0.95, 0, 6.85, 12.1, -Math.PI / 2, 0.6);
-    put('trashcan', 0, 0.45, 0, 1.3, 13.5);
+    box(f, 0.8, 2.0, 1.2, '#232833', 29.4, 0, 1.6);
+    solid(29.4, 1.6, 0.8, 1.2);
+    for (let i = 0; i < 8; i++) box(f, 0.02, 0.05, 0.05, i % 2 ? '#5FD3B5' : '#E8C46A', 28.99, 0.3 + i * 0.22, 1.3 + (i % 3) * 0.2, false);
+    put('speaker', 0, 0.9, 0, 29.5, 3.4, -Math.PI / 2);
+
+    // copa: cozinha na parede da esquerda, mesa no meio, sala de TV no canto
+    put('kitchenBar', 3.2, 0.95, 0.8, 0.45, 13.6, Math.PI / 2);
+    solid(0.45, 13.6, 0.8, 3.2);
+    put('kitchenCoffeeMachine', 0, 0.42, 0, 0.45, 12.5, Math.PI / 2, 0.95);
+    put('kitchenMicrowave', 0, 0.32, 0, 0.45, 14.6, Math.PI / 2, 0.95);
+    put('kitchenFridgeLarge', 0.9, 1.95, 0.75, 0.45, 16.0, Math.PI / 2);
+    solid(0.45, 16.0, 0.75, 0.9);
+    put('tableRound', 1.1, 0.75, 1.1, 3.4, 13.9, 0, 0, DESK);
+    solid(3.4, 13.9, 1.1, 1.1);
+    for (const [dx, dz] of [[-0.85, 0], [0.85, 0], [0, -0.85], [0, 0.85]]) put('stoolBar', 0, 0.75, 0, 3.4 + dx, 13.9 + dz, 0, 0, CHAIR);
+    put('rugRectangle', 3.2, 0.02, 2.6, 6.9, 17.6, 0, 0, RUG);
+    put('loungeSofa', 2.2, 0.8, 0.9, 6.0, 17.6, Math.PI / 2, 0, SOFA);
+    solid(6.0, 17.6, 0.9, 2.2);
+    put('tableCoffee', 0.6, 0.4, 1.1, 7.25, 17.6);
+    solid(7.25, 17.6, 0.6, 1.1);
+    put('televisionModern', 1.6, 1.0, 0, 8.85, 17.6, -Math.PI / 2, 0.55);
+    box(f, 0.3, 0.55, 1.4, '#3a3028', 8.8, 0, 17.6);
+    solid(8.8, 17.6, 0.4, 1.6);
+    put('loungeDesignChair', 0.9, 0.85, 0.9, 7.2, 19.3, Math.PI, 0, SOFA);
+    put('loungeDesignChair', 0.9, 0.85, 0.9, 7.2, 15.9, 0, 0, SOFA);
+    put('trashcan', 0, 0.45, 0, 0.5, 19.4);
+    put('sideTable', 0, 0.5, 0, 1.4, 19.4);
+
     // estúdio criativo: cavalete, poltrona com tapete, caixas
-    box(f, 0.08, 1.4, 0.8, '#f2efe6', 14.7, 0, 9.5);
-    put('rugRectangle', 2.2, 0.02, 1.5, 15.0, 11.6, Math.PI / 2, 0, { carpet: '#7a5a8f', carpetDarker: '#664a78' });
-    put('loungeChair', 0.9, 0.85, 0.9, 15.0, 11.6, -Math.PI / 2, 0, { carpet: '#c98a5a', wood: '#3a3028' });
-    put('cardboardBoxClosed', 0, 0.45, 0, 15.5, 13.4, 0.3);
-    // negócios: estante e mesa lateral
-    put('bookcaseClosedWide', 2.2, 1.8, 0.5, 23.65, 10.2, -Math.PI / 2);
-    put('sideTable', 0, 0.55, 0, 23.4, 12.6);
-    // plantas pelo andar
-    for (const [x, z, k] of [[6.5, 0.5, 0], [16.5, 0.5, 1], [6.4, 13.4, 0], [23.4, 6.5, 1], [15.5, 13.5, 0], [9.2, 6.4, 1], [14.5, 6.4, 0], [6.5, 5.4, 1], [0.6, 6.5, 0], [17.4, 13.4, 1]] as [number, number, number][])
+    box(f, 0.08, 1.4, 0.8, '#f2efe6', 10.0, 0, 18.9);
+    box(f, 0.05, 1.5, 0.05, '#8a6a48', 10.08, 0, 18.6);
+    put('rugRectangle', 2.2, 0.02, 1.6, 17.3, 18.6, 0, 0, { carpet: '#7a5a8f', carpetDarker: '#664a78' });
+    put('loungeChair', 0.9, 0.85, 0.9, 17.0, 18.7, 0, 0, { carpet: '#c98a5a', wood: '#3a3028' });
+    put('loungeChair', 0.9, 0.85, 0.9, 18.2, 18.7, 0, 0, { carpet: '#c98a5a', wood: '#3a3028' });
+    put('cardboardBoxClosed', 0, 0.45, 0, 15.6, 19.4, 0.3);
+    put('cardboardBoxClosed', 0, 0.35, 0, 16.0, 19.5, 1.1);
+
+    // negócios: estante na parede, mesinha de reunião com poltronas
+    put('bookcaseClosedWide', 2.2, 1.8, 0.5, 29.65, 13.4, -Math.PI / 2);
+    solid(29.65, 13.4, 0.5, 2.2);
+    put('tableCoffee', 1.1, 0.4, 0.7, 28.2, 18.6);
+    solid(28.2, 18.6, 1.1, 0.7);
+    put('loungeChair', 0.9, 0.85, 0.9, 28.2, 19.5, Math.PI, 0, SOFA);
+    put('loungeChair', 0.9, 0.85, 0.9, 27.1, 18.6, Math.PI / 2, 0, SOFA);
+
+    // corredor: bancos e plantas encostados nas muretas de baixo (o meio fica livre)
+    for (const x of [8.0, 17.6, 26.0]) {
+      box(f, 1.6, 0.42, 0.45, '#3a3f4b', x, 0, SOUTH_Y - 0.35);
+      box(f, 1.6, 0.06, 0.5, '#c8a77c', x, 0.42, SOUTH_Y - 0.35);
+      solid(x, SOUTH_Y - 0.35, 1.6, 0.5);
+    }
+    // plantas pelo andar (nos cantos, longe dos caminhos)
+    for (const [x, z, k] of [[8.5, 0.5, 0], [21.5, 0.5, 1], [22.4, 7.4, 0], [8.5, 7.4, 1], [29.5, 7.4, 0], [29.4, 10.5, 1], [0.6, 10.6, 0], [8.5, 11.5, 1],
+      [0.6, 18.5, 0], [18.5, 19.5, 1], [19.5, 19.5, 0], [29.5, 19.5, 1], [11.0, 10.6, 1], [20.5, 10.6, 0]] as [number, number, number][])
       put(k ? 'plantSmall2' : 'pottedPlant', 0, k ? 0.7 : 1.1, 0, x, z, (x * 7) % 3);
   }
 
@@ -467,7 +513,7 @@ export class OfficeWorld {
       if (!a) {
         a = this.spawn(p);
         if (this.first) a.pos.set(to.x, to.y);
-        else { a.pos.set(ELEVATOR[0], ELEVATOR[1]); a.path = this.viaBoard(a, route(null, to).slice(1).map(([x, y]) => new Vector2(x, y)), starting); }
+        else { const [ex, ey] = route(null, to)[0]; a.pos.set(ex, ey); a.path = this.viaBoard(a, route(null, to).slice(1).map(([x, y]) => new Vector2(x, y)), starting); }
       } else if (a.hold) {
         a.next = to; // conversando: vai depois
       } else if (a.leaving || !a.at || a.at.seat !== to.seat) {
@@ -491,9 +537,7 @@ export class OfficeWorld {
       a.leaving = true;
       a.working = false;
       this.setSubs(a, 0);
-      const r = a.at ? ROOM.get(a.at.room)! : null;
-      const door = r ? [new Vector2(r.door + 0.5, r.y === 0 ? 5.4 : 8.6), new Vector2(r.door + 0.5, CORRIDOR_Y)] : [];
-      a.path = [...door, new Vector2(ELEVATOR[0], ELEVATOR[1])];
+      a.path = exitPath(a.at).map(([x, y]) => new Vector2(x, y));
       a.el.say.hidden = true;
     }
     // monitores acesos
@@ -636,7 +680,7 @@ export class OfficeWorld {
     if (this.stickies.userData['key'] === key) return;
     this.stickies.userData['key'] = key;
     this.stickies.clear();
-    colors.slice(0, 12).forEach((c, i) => box(this.stickies, 0.42, 0.36, 0.02, c, 1.75 + (i % 6) * 0.66, i < 6 ? 1.52 : 1.06, 0, false));
+    colors.slice(0, 12).forEach((c, i) => box(this.stickies, 0.42, 0.36, 0.02, c, 1.95 + (i % 6) * 0.74, i < 6 ? 1.52 : 1.06, 0, false));
   }
 
   /** acende o piso de uma sala (legenda); null apaga */
@@ -677,7 +721,7 @@ export class OfficeWorld {
   /** pode ir de (x0, z0) para (x1, z1)? dentro do andar e sem chegar mais perto de algo sólido do que o corpo */
   private free(x0: number, z0: number, x1: number, z1: number): boolean {
     if (x1 < BODY || z1 < BODY || x1 > MAP_W - BODY || z1 > MAP_H - BODY) return false;
-    return SOLID.every(b => { const d = distTo(x1, z1, b); return d >= BODY || d >= distTo(x0, z0, b); });
+    return this.solid.every(b => { const d = distTo(x1, z1, b); return d >= BODY || d >= distTo(x0, z0, b); });
   }
 
   /** gira a vista em 90° (sentido: 1 ou -1) */
@@ -697,7 +741,7 @@ export class OfficeWorld {
     if (!w || !h) return;
     this.renderer.setSize(w, h);
     this.labels.setSize(w, h);
-    const view = 17, aspect = w / h;
+    const view = 24, aspect = w / h;
     Object.assign(this.camera, { left: (-view * aspect) / 2, right: (view * aspect) / 2, top: view / 2, bottom: -view / 2 });
     this.camera.updateProjectionMatrix();
     this.fp.aspect = aspect;

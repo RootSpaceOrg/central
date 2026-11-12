@@ -43,6 +43,14 @@
             <span class="text-[12.5px] leading-tight"><b class="block">{{ p.ownerOn ? 'Age sozinho' : 'Parado' }}</b><span class="text-faint">{{ p.ownerOn ? 'pelos eventos' : 'só o que você pede' }}</span></span>
           </button>
         }
+        @if (owner() || tech()) {
+          <span class="h-8 w-px bg-edge"></span>
+          <button type="button" class="btn btn-sm" [disabled]="round() === 'going'" (click)="goRound()"
+                  title="Agora: olha o backlog (o que pode subir), as revisões que ele valida por você, o rumo, o próximo marco e as ideias (descarta, vira história ou decisão)">
+            <app-icon name="search" [size]="14" />{{ round() === 'going' ? 'Mandando…' : 'Procurar trabalho' }}</button>
+          @if (round() === 'sent') { <span role="status" class="text-[12px] text-yes">foi procurar · o diário conta o que achou</span> }
+          @if (round() === 'busy') { <span role="status" class="text-[12px] text-later">já está trabalhando numa passada</span> }
+        }
       </div>
       <a [routerLink]="['/projetos', p.slug]" [queryParams]="{ aba: 'backlog' }" class="btn btn-sm btn-ghost" title="Backlog, roadmap, sessões, produção, contexto"><app-icon name="layers" [size]="14" />Bastidores do produto</a>
     </div>

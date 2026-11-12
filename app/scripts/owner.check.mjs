@@ -187,4 +187,10 @@ db.exec("update events set handled_at = 'x'; update runs set status = 'succeeded
 await o.dispatchOwners(deps());
 await o.dispatchOwners(deps());
 ok(db.prepare("select count(*) n from events where kind = 'fila_parada'").get().n === 1, 'fila parada: um evento de faxina');
+// ronda pedida pelo Gustavo: acorda na hora (mesmo desligado), com a ronda e o pendente; com passada rodando, null
+db.exec("update runs set status = 'succeeded'; update projects set owner_on = 0 where slug = 'kultivai'");
+started = [];
+const rid = o.ownerRound('kultivai', deps().start);
+ok(typeof rid === 'number' && started.length === 1 && /Ronda/.test(started[0].prompt) && /Faxina/.test(started[0].prompt) && open() === 0, 'ronda: acorda na hora com o pendente');
+ok(o.ownerRound('kultivai', deps().start) === null && started.length === 1, 'ronda: uma passada por vez');
 console.log('owner ok');

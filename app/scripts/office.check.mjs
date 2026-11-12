@@ -40,14 +40,31 @@ ok([...m.place([{ key: 'z', room: 'copa' }], new Map()).values()][0].seated === 
 const from = m.place([{ key: 'x', room: 'copa' }], new Map()).get('x');
 const to = m.place([{ key: 'x', room: 'eng' }], new Map()).get('x');
 const r = m.route(from, to);
-ok(r.some(([, y]) => y === 7), 'passa pelo corredor');
+ok(r.some(([, y]) => y === m.CORRIDOR_Y), 'passa pelo corredor');
 ok(r.at(-1)[0] === to.x && r.at(-1)[1] === to.y, 'termina no lugar');
-ok(m.route(to, { ...to, x: to.x + 1 }).length === 2, 'mesma sala: direto');
-ok(m.route(null, to)[0][1] === 7, 'chega pelo elevador');
+ok(m.route(to, { ...to, x: to.x + 1 }).every(([, y]) => y !== m.CORRIDOR_Y), 'mesma sala: não sai da sala');
+ok(m.route(null, to)[0][1] === m.CORRIDOR_Y, 'chega pelo elevador');
 
 // todo lugar fica dentro da sala
-for (const room of m.ROOMS) for (const [x, y] of [...room.desks.map(([x, y]) => [x + 1, y + 1.55]), ...room.stands])
+for (const room of m.ROOMS) for (const [x, y] of [...room.desks.map(([x, y]) => [x + 1, y + 0.29]), ...room.stands])
   ok(x > room.x && x < room.x + room.w && y > room.y && y < room.y + room.d, `${room.id}: lugar (${x},${y}) fora da sala`);
+
+// da porta até cada mesa: nenhum trecho do caminho atravessa uma mesa (2 x 1,84, de z+0,94 a z+1,84 é o tampo)
+const crosses = ([x0, y0], [x1, y1], [dx, dz]) => {
+  for (let t = 0; t <= 1; t += 0.02) {
+    const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
+    if (x > dx + 0.05 && x < dx + 1.95 && y > dz + 0.95 && y < dz + 1.83) return true;
+  }
+  return false;
+};
+for (const room of m.ROOMS) room.desks.forEach((_, i) => {
+  const seat = m.place([{ key: 'q', room: room.id }], new Map([['q', `${room.id}:${i}`]])).get('q');
+  const path = m.route(null, seat);
+  for (let k = 1; k < path.length; k++) for (const d of room.desks)
+    ok(!crosses(path[k - 1], path[k], d), `${room.id}:${i}: o caminho atravessa a mesa (${d})`);
+});
+// as salas cobrem o andar sem sobrepor e as portas ficam dentro da parede da sala
+for (const r of m.ROOMS) ok(r.x + r.w <= m.MAP_W && r.y + r.d <= m.MAP_H && r.door > r.x && r.door + 1.2 < r.x + r.w, `${r.id}: fora do andar ou porta fora da parede`);
 
 console.log('office ok');
 

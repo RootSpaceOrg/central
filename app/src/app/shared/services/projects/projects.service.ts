@@ -156,6 +156,9 @@ export class ProjectsService {
     return id;
   }
 
+  /** o dono vai procurar trabalho agora (ronda); null = já estava numa passada */
+  ownerRound(slug: string): Promise<number | null> { return this.api.ownerRound(slug); }
+
   /** ambiente de dev publicado e como entrar nele (o agente que testa as histórias usa) */
   async setDev(slug: string, devUrl: string | null, devLogin: string | null): Promise<void> {
     await this.api.update(slug, { dev_url: devUrl, dev_login: devLogin });

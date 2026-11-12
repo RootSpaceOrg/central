@@ -1,10 +1,12 @@
 /**
  * Planta do Escritório (a mesma para o 3D): coordenadas em ladrilhos, x para a direita e y para a frente.
  *
- *   y 0..6   Gestão | Engenharia | Monitoração      (divisórias de vidro)
- *   y 6..8   Corredor (elevador à esquerda)
- *   y 8..14  Copa   | Estúdio criativo | Negócios  (mureta de vidro com porta para o corredor)
+ *   y 0..8    Gestão | Engenharia | Monitoração      (divisórias de vidro)
+ *   y 8..11   Corredor (elevador à esquerda; quadro de tarefas na parede da Gestão)
+ *   y 11..20  Copa   | Estúdio criativo | Negócios  (mureta de vidro com porta para o corredor)
  *
+ * As mesas ficam em fileiras viradas para a frente (quem senta fica de rosto para a câmera), com um corredor entre as
+ * colunas: quem chega entra pela porta, anda pelo corredor da coluna e senta por trás da mesa.
  * Aqui só fica o que é lógica (salas, lugares, caminhos); o desenho mora em office-world.ts.
  */
 
@@ -12,7 +14,9 @@ import { SKINS } from '../../shared/ui/avatar-look';
 
 export type RoomId = 'gestao' | 'eng' | 'monitor' | 'creative' | 'business' | 'copa';
 
-export const MAP_W = 24, MAP_H = 14;
+export const MAP_W = 30, MAP_H = 20;
+/** onde acabam as salas de cima e começam as de baixo (o corredor fica entre) */
+export const NORTH_D = 8, SOUTH_Y = 11;
 
 export interface RoomDef {
   id: RoomId;
@@ -24,34 +28,37 @@ export interface RoomDef {
   accent: string;
   /** x da porta (no lado do corredor) */
   door: number;
-  /** mesas (canto de trás, 2 ladrilhos de largura); quem trabalha senta na frente */
+  /** mesas (canto de trás, 2 x 1,84 ladrilhos); a cadeira fica atrás, do lado da parede, e quem senta olha para a frente */
   desks: [number, number][];
   /** lugares em pé (copa, ou quando acabam as mesas) */
   stands: [number, number][];
 }
 
-const desks4 = (x: number, y: number): [number, number][] => [[x + 1, y + 1], [x + 4, y + 1], [x + 1, y + 3.4], [x + 4, y + 3.4]];
+/** fileiras de mesas: colunas em x, linhas em y */
+const grid = (xs: number[], ys: number[]): [number, number][] => ys.flatMap(y => xs.map(x => [x, y] as [number, number]));
 
 export const ROOMS: RoomDef[] = [
-  { id: 'gestao', label: 'Gestão', x: 0, y: 0, w: 7, d: 6, floor: ['#3a3326', '#342e22'], wall: '#5b4f36', accent: '#E8C46A', door: 3,
-    desks: [[1, 1.2], [4, 1.2], [1, 3.6]], stands: [[5, 4.6], [4.2, 5.2], [3.4, 4.8]] },
-  { id: 'eng', label: 'Engenharia', x: 7, y: 0, w: 10, d: 6, floor: ['#253048', '#212b41'], wall: '#3b4a6b', accent: '#7FA2FF', door: 11,
-    desks: [[8, 1], [11, 1], [14, 1], [8, 3.4], [11, 3.4], [14, 3.4]], stands: [[16.2, 2.6], [16.3, 5.2], [10, 5.6], [13, 5.6]] },
-  { id: 'monitor', label: 'Monitoração', x: 17, y: 0, w: 7, d: 6, floor: ['#1d3433', '#1a2f2e'], wall: '#2f514f', accent: '#5FD3B5', door: 20,
-    desks: desks4(17, 0), stands: [[23, 5], [22, 5.4]] },
-  { id: 'copa', label: 'Copa', x: 0, y: 8, w: 7, d: 6, floor: ['#3b2d26', '#352821'], wall: '#5a4436', accent: '#E8A36A', door: 4,
-    desks: [], stands: [[2.4, 9.4], [4.6, 10.2], [2.2, 11.6], [5.4, 12.2], [3.6, 12.6], [6.1, 9.2], [1.6, 13.2], [4.4, 8.9], [6.2, 13.2], [1.6, 10.4]] },
-  { id: 'creative', label: 'Estúdio criativo', x: 7, y: 8, w: 9, d: 6, floor: ['#36263f', '#302239'], wall: '#55406a', accent: '#D69CFF', door: 11,
-    desks: [[8, 9.4], [12, 9.4], [8, 11.8], [12, 11.8]], stands: [[15, 13], [14, 13.4]] },
-  { id: 'business', label: 'Negócios', x: 16, y: 8, w: 8, d: 6, floor: ['#22352a', '#1e3026'], wall: '#365a43', accent: '#7ED69A', door: 19,
-    desks: [[17, 9.4], [20.5, 9.4], [17, 11.8], [20.5, 11.8]], stands: [[23, 13], [22, 13.4]] },
+  { id: 'gestao', label: 'Gestão', x: 0, y: 0, w: 9, d: NORTH_D, floor: ['#3a3326', '#342e22'], wall: '#5b4f36', accent: '#E8C46A', door: 7.2,
+    desks: [[1.2, 1.4], [4.4, 1.4], [1.2, 4.4]], stands: [[5.6, 3.6], [8.2, 3.2], [8.3, 7.0]] },
+  { id: 'eng', label: 'Engenharia', x: 9, y: 0, w: 13, d: NORTH_D, floor: ['#253048', '#212b41'], wall: '#3b4a6b', accent: '#7FA2FF', door: 14.9,
+    desks: grid([9.9, 12.7, 16.3, 19.1], [1.2, 4.3]), stands: [[13.2, 7.2], [17.6, 7.3], [11.2, 7.3], [20.2, 7.2]] },
+  { id: 'monitor', label: 'Monitoração', x: 22, y: 0, w: 8, d: NORTH_D, floor: ['#1d3433', '#1a2f2e'], wall: '#2f514f', accent: '#5FD3B5', door: 28.0,
+    desks: grid([22.9, 25.7], [1.8, 4.6]), stands: [[28.8, 6.2], [27.4, 7.2]] },
+  { id: 'copa', label: 'Copa', x: 0, y: SOUTH_Y, w: 9, d: 9, floor: ['#3b2d26', '#352821'], wall: '#5a4436', accent: '#E8A36A', door: 4.6,
+    desks: [], stands: [
+      [2.5, 13.1], [4.3, 13.1], [2.5, 14.7], [4.3, 14.7], [1.35, 12.4], [1.35, 13.8], [1.35, 15.2], [1.45, 17.3],
+      [5.3, 15.9], [5.3, 19.1], [7.5, 15.6], [7.6, 19.2], [3.0, 17.2], [4.2, 18.2], [3.0, 19.2], [6.6, 12.4], [7.9, 13.6], [6.3, 14.6]] },
+  { id: 'creative', label: 'Estúdio criativo', x: 9, y: SOUTH_Y, w: 10, d: 9, floor: ['#36263f', '#302239'], wall: '#55406a', accent: '#D69CFF', door: 11.8,
+    desks: grid([9.8, 13.0, 16.2], [12.2, 15.3]), stands: [[12.4, 18.6], [13.8, 19.0], [11.0, 19.0]] },
+  { id: 'business', label: 'Negócios', x: 19, y: SOUTH_Y, w: 11, d: 9, floor: ['#22352a', '#1e3026'], wall: '#365a43', accent: '#7ED69A', door: 22.0,
+    desks: grid([20.0, 23.2, 26.4], [12.2, 15.3]), stands: [[25.2, 18.6], [26.6, 19.1], [21.4, 18.9]] },
 ];
 export const ROOM = new Map(ROOMS.map(r => [r.id, r]));
-export const CORRIDOR_Y = 7;
+export const CORRIDOR_Y = 9.5;
 export const ELEVATOR: [number, number] = [0.6, CORRIDOR_Y];
-/** quadro de tarefas no corredor (encostado na divisória da Engenharia): quem começa uma tarefa passa nele */
-export const TASK_BOARD: [number, number] = [12, 6.15];
-export const BOARD_SPOT: [number, number] = [12, 6.85];
+/** quadro de tarefas na parede da Gestão, virado para o corredor, ao lado do elevador: quem começa uma tarefa passa nele */
+export const TASK_BOARD: [number, number] = [2.8, NORTH_D + 0.08];
+export const BOARD_SPOT: [number, number] = [2.8, NORTH_D + 0.85];
 
 /** Sala de um agente pelo papel, quando ele não escolheu uma. */
 export function inferRoom(text: string): RoomId {
@@ -65,7 +72,7 @@ export function inferRoom(text: string): RoomId {
 
 // ---------- quem senta onde ----------
 
-export interface Placement { room: RoomId; seat: string; x: number; y: number; seated: boolean }
+export interface Placement { room: RoomId; seat: string; x: number; y: number; seated: boolean; aisle?: number }
 
 /**
  * Distribui as pessoas nas salas mantendo quem já estava no mesmo lugar (não sai andando à toa quando chega alguém).
@@ -80,7 +87,7 @@ export function place(people: { key: string; room: RoomId }[], prev: Map<string,
     const r = ROOM.get(id)!;
     if (n.startsWith('s')) { const [x, y] = r.stands[+n.slice(1)]; return { room: id, seat, x, y, seated: false }; }
     const [x, y] = r.desks[+n];
-    return { room: id, seat, x: x + 1, y: y + 0.29, seated: true };
+    return { room: id, seat, x: x + 1, y: y + 0.29, seated: true, aisle: x - 0.45 };
   };
   // 1) quem continua na mesma sala fica no mesmo lugar
   for (const p of people) {
@@ -100,17 +107,32 @@ export function place(people: { key: string; room: RoomId }[], prev: Map<string,
   return out;
 }
 
+/** ponto logo dentro da porta de uma sala */
+const inside = (r: RoomDef): [number, number] => [r.door + 0.6, r.y === 0 ? r.d - 0.6 : r.y + 0.6];
+/** da porta até a mesa: pelo corredor da coluna (à esquerda da mesa), sem atravessar as outras mesas */
+const approach = (p: Placement): [number, number][] => {
+  if (p.aisle === undefined) return [];
+  const y = inside(ROOM.get(p.room)!)[1];
+  return [[p.aisle, y], [p.aisle, p.y]];
+};
+
 /** caminho entre dois lugares passando pelas portas e pelo corredor (null = de onde? vem do elevador) */
 export function route(from: Placement | null, to: Placement): [number, number][] {
   const door = (p: Placement): [number, number][] => {
     const r = ROOM.get(p.room)!;
-    const inside: [number, number] = r.y === 0 ? [r.door + 0.5, 5.4] : [r.door + 0.6, 8.6];
-    return [inside, [r.door + 0.5, CORRIDOR_Y]];
+    return [inside(r), [r.door + 0.6, CORRIDOR_Y]];
   };
   const a: [number, number] = from ? [from.x, from.y] : ELEVATOR;
-  if (from && from.room === to.room) return [a, [to.x, to.y]];
-  const out = from ? [a, ...door(from)] : [a];
-  return [...out, ...door(to).reverse(), [to.x, to.y]];
+  if (from && from.room === to.room) return [a, ...approach(from).reverse(), ...approach(to), [to.x, to.y]];
+  const out = from ? [a, ...approach(from).reverse(), ...door(from)] : [a];
+  return [...out, ...door(to).reverse(), ...approach(to), [to.x, to.y]];
+}
+
+/** de onde está até o elevador (indo embora) */
+export function exitPath(from: Placement | null): [number, number][] {
+  if (!from) return [ELEVATOR];
+  const r = ROOM.get(from.room)!;
+  return [...approach(from).reverse(), inside(r), [r.door + 0.6, CORRIDOR_Y], ELEVATOR];
 }
 
 /** cor de pele estável por pessoa */

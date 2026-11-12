@@ -21,16 +21,16 @@ const IDLE_EVERY_H = 20;
 
 export type EventKind =
   | 'historia_validada' | 'historia_devolvida' | 'entrega_devolvida' | 'execucao_falhou' | 'decisao_respondida'
-  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado' | 'medir' | 'fila_parada';
+  | 'ideia_aprovada' | 'insight' | 'fila_vazia' | 'rumo_atualizado' | 'alerta' | 'memoria_cresceu' | 'dono_ligado' | 'medir' | 'fila_parada' | 'ronda';
 
 const LABEL: Record<EventKind, string> = {
   historia_validada: 'história validada pelo Gustavo', historia_devolvida: 'história DEVOLVIDA pelo Gustavo ("não funcionou")',
   entrega_devolvida: 'entrega devolvida pelo Gustavo (pediu ajuste)', execucao_falhou: 'execução falhou',
   decisao_respondida: 'decisão respondida pelo Gustavo', ideia_aprovada: 'ideia aprovada pelo Gustavo (planejar)',
   insight: 'insight (cliente, conversa ou reunião)', fila_vazia: 'fila do projeto vazia', rumo_atualizado: 'rumo atualizado',
-  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)', medir: 'hora de medir os números combinados', fila_parada: 'decisões ou revisões paradas esperando o Gustavo (faxina)',
+  alerta: 'alerta de outro agente', memoria_cresceu: 'memória do projeto cresceu (curadoria)', dono_ligado: 'você virou o dono que age sozinho (primeira passada)', medir: 'hora de medir os números combinados', fila_parada: 'decisões ou revisões paradas esperando o Gustavo (faxina)', ronda: 'o Gustavo pediu: vá procurar trabalho (ronda)',
 };
-const URGENT: EventKind[] = ['historia_devolvida', 'alerta', 'dono_ligado'];
+const URGENT: EventKind[] = ['historia_devolvida', 'alerta', 'dono_ligado', 'ronda'];
 
 /** execução que é uma passada do dono (o que ela emite não acorda o dono de novo) */
 export const isOwnerRun = (runId: number | null | undefined) =>
@@ -214,7 +214,20 @@ const GUIDE: [EventKind[], string][] = [
      list_boards, list_routines): o que está repetido, sem uso ou amarrado a horário sem precisar (ex.: a mesma rotina
      copiada várias vezes) vira UMA proposta de simplificação (create_decision com o antes e o depois). (c) Ponha o próximo
      passo do rumo para andar. O limite de 3 histórias novas não vale para agrupar o que já existe.`],
-  [['fila_parada', 'dono_ligado'], CLEANUP],
+  [['fila_parada', 'dono_ligado', 'ronda'], CLEANUP],
+  [['ronda'],
+    `   - Ronda (o Gustavo pediu que você vá procurar trabalho; olhe tudo, nesta ordem, e aja no que couber):
+     a) Backlog (list_tasks): o que está em "backlog" e cabe no rumo e no marco atual sobe para "todo" (como história,
+        com as partes); o repetido vira um só ("duplicada da #N"); o que saiu do rumo vai para done com o motivo.
+     b) Revisão (list_deliveries status review): o que você consegue validar por ele (código só em develop, seguro, o
+        teste da entrega bate com o que mudou) fecha com close_review "mergear"; o resto fica, com refresh se precisar.
+     c) Rumo (get_direction): ainda descreve o produto de hoje? Se os sinais (entregas, números, insights) apontam outro
+        lado, proponha com propose_direction; se está certo, diga no diário em uma linha.
+     d) Marco (list_milestones): o atual acabou ou está quase? Ponha o próximo para andar (as primeiras histórias dele).
+     e) Ideias (list_ideas do projeto): descarte o que não cabe mais (update_idea status archived com o motivo: nesta ronda ele autorizou); o que está maduro e no rumo vira
+        história; o que é bom mas precisa da escolha dele vira decisão (create_decision) para começar.
+     O limite de 3 histórias novas vale; mover, agrupar, descartar e fechar não contam. Diga no diário o que achou em
+     cada item (a-e), mesmo que seja "nada a fazer".`],
   [['memoria_cresceu'],
     `   - Curadoria: a memória do projeto é uma só. Leia a do projeto (memory_recall, limit 30, algumas buscas) e a dos
      agentes do projeto (list_agent_memories). O que é sobre o projeto e está na memória de um agente:
@@ -252,6 +265,22 @@ cockpit e abre o 1:1 com você.
 Antes de decidir algo parecido com o que ele já decidiu, veja o critério dele: operator_history.
 Termine com o DIÁRIO (é o que o Gustavo lê): até 5 linhas "o que fiz e por quê" e, para cada erro, um post-mortem de 3
 linhas (o que houve, por quê, o que mudou). Não chame report_delivery.`;
+}
+
+/**
+ * O Gustavo mandou o dono procurar trabalho (botão): acorda na hora, mesmo com o "age sozinho" desligado, com a ronda e o
+ * que estava pendente. Uma passada por vez: já tem uma rodando, devolve null.
+ */
+export function ownerRound(slug: string, start: OwnerDeps['start']): number | null {
+  const o = get<{ agent: number | null; name: string }>(`select ${OWNER_OF} agent, p.name from projects p where p.slug = ?`, slug);
+  if (!o?.agent) throw new Error('Este produto não tem dono nem tech lead.');
+  if (get(`select 1 from runs where project_slug = ? and prompt like ? and status in ('queued','preparing','running')`, slug, `${OWNER_HEAD}%`)) return null;
+  emitEvent(slug, 'ronda', `ronda:${new Date().toISOString().slice(0, 16)}`, 'Backlog, revisões, rumo, próximo marco e ideias: veja o que dá para andar.');
+  const evs = all<{ id: number; kind: EventKind; ref: string; summary: string; created_at: string }>(
+    `select id, kind, ref, summary, created_at from events where project_slug = ? and handled_at is null order by id limit 30`, slug);
+  const runId = start({ project_slug: slug, agent_id: o.agent, prompt: ownerPrompt(slug, o.name, evs) });
+  run(`update events set handled_at = ?, pass_run_id = ? where id in (${evs.map(e => e.id).join(',')})`, new Date().toISOString(), typeof runId === 'number' ? runId : null);
+  return typeof runId === 'number' ? runId : null;
 }
 
 /** diário do dono: as últimas passadas com o resultado */

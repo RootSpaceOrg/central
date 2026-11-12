@@ -26,5 +26,6 @@ export class ProjectsApiService {
   owner(slug: string) { return this.ipc.invoke('owner:get', slug); }
   setOwner(slug: string, on: boolean) { return this.ipc.invoke('owner:set', slug, on); }
   createOwner(slug: string) { return this.ipc.invoke('owner:create', slug); }
+  ownerRound(slug: string) { return this.ipc.invoke('owner:round', slug); }
   onCloneProgress(cb: (p: CloneProgressDto) => void) { return this.ipc.on('clone:progress', cb); }
 }

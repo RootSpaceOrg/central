@@ -15,7 +15,7 @@ import { z } from 'zod';
 
 import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
-import { criticalAlert, emitEvent } from './owner';
+import { criticalAlert, emitEvent, ownerRound } from './owner';
 import { closeDecision, closeReview, ownerDecide, refreshDecision } from './cleanup';
 import { addInsight } from './insights';
 import { reportMetric } from './pulse';
@@ -248,6 +248,9 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     active: z.boolean().optional().describe('false = parar de medir'),
   }, a => defineMetric(a.project_slug, a), h.projects);
   tool('list_metrics', 'Os números combinados de um projeto (definição, meta, última medida).', { project_slug: z.string() }, a => listMetricDefs(a.project_slug));
+  tool('owner_round', 'Manda o dono do produto (ou o tech lead, se não houver dono) procurar trabalho AGORA, quando o Gustavo pedir: backlog que pode subir, revisões que ele valida, rumo, próximo marco e ideias (descartar, virar história ou decisão). Devolve a execução, ou null se ele já está numa passada.', {
+    project_slug: z.string(),
+  }, a => ({ run_id: ownerRound(a.project_slug, input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, h.emit).id) }), h.projects);
   tool('request_one_on_one', 'Dono pede um 1:1 com o Gustavo (aparece no cockpit, no seu produto). Use quando precisar dele para algo que não cabe numa decisão: rumo, time, uma escolha grande.', {
     project_slug: z.string(), why: z.string().describe('o assunto em uma linha'),
   }, a => requestOneOnOne(a.project_slug, a.why), h.projects);
