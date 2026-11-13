@@ -741,7 +741,8 @@ export class OfficeWorld {
     if (!w || !h) return;
     this.renderer.setSize(w, h);
     this.labels.setSize(w, h);
-    const view = 24, aspect = w / h;
+    // o andar cabe inteiro: na altura (24 ladrilhos) e, em tela estreita ou em pé, também na largura (~38 de lado a lado)
+    const aspect = w / h, view = Math.max(24, 38 / aspect);
     Object.assign(this.camera, { left: (-view * aspect) / 2, right: (view * aspect) / 2, top: view / 2, bottom: -view / 2 });
     this.camera.updateProjectionMatrix();
     this.fp.aspect = aspect;

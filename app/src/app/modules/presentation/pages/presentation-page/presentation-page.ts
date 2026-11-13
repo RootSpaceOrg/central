@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 
 import { RunsService } from '../../../../shared/services/runs/runs.service';
 import { CockpitService, Instrument } from '../../../cockpit/services/cockpit/cockpit.service';
@@ -7,8 +7,9 @@ import { OfficePage } from '../../../office/pages/office-page/office-page';
 
 /**
  * Modo apresentação: para deixar num monitor da mesa, em tela cheia (janela própria, F11). Os produtos rodando, como no
- * Cockpit, e o escritório com o time trabalhando. Só olhar: nada aqui é clicável. Tela larga: lado a lado; estreita: o
- * andar em cima e os produtos embaixo.
+ * Cockpit, e o escritório com o time trabalhando. Só olhar: nada aqui é clicável. Tela larga deitada: lado a lado; em pé
+ * (monitor girado) ou estreita: o andar em cima na largura toda e os produtos embaixo, em duas colunas. Os produtos que
+ * não cabem rolam sozinhos, devagar.
  */
 @Component({
   selector: 'app-presentation-page',
@@ -30,16 +31,16 @@ import { OfficePage } from '../../../office/pages/office-page/office-page';
       <span class="hidden text-[11.5px] text-faint xl:inline">F11 tela cheia</span>
     </header>
 
-    <div class="grid min-h-0 flex-1 grid-rows-[minmax(0,1.3fr)_minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(340px,30%)_minmax(0,1fr)] lg:grid-rows-1">
+    <div class="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-4 lg:landscape:grid-cols-[minmax(340px,30%)_minmax(0,1fr)] lg:landscape:grid-rows-1">
       <!-- produtos: os que têm gente trabalhando primeiro -->
-      <section class="min-h-0 overflow-y-auto [scrollbar-width:none]" aria-label="Produtos">
-        <div class="pointer-events-none grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+      <section #scroller class="min-h-0 overflow-y-auto [scrollbar-width:none]" aria-label="Produtos">
+        <div class="pointer-events-none grid items-start gap-3 sm:grid-cols-2 lg:landscape:grid-cols-1">
           @for (p of products(); track p.slug) { <app-instrument [product]="p" /> }
           @empty { <p class="py-10 text-center text-mute">Nenhum produto ativo.</p> }
         </div>
       </section>
       <!-- o andar -->
-      <app-office-page class="order-first min-h-0 lg:order-none" [stage]="true" />
+      <app-office-page class="order-first min-h-0 lg:landscape:order-none" [stage]="true" />
     </div>`,
 })
 export class PresentationPage {
@@ -48,7 +49,17 @@ export class PresentationPage {
 
   private readonly now = signal(new Date());
   private readonly timer = setInterval(() => this.now.set(new Date()), 15_000);
-  private readonly stop = inject(DestroyRef).onDestroy(() => clearInterval(this.timer));
+  private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
+  /** produtos que não cabem: desce devagar, para no fim uns segundos e volta ao topo */
+  private wait = 0;
+  private readonly roll = setInterval(() => {
+    const el = this.scroller()?.nativeElement;
+    if (!el || el.scrollHeight <= el.clientHeight + 4) return;
+    if (this.wait > 0) { this.wait--; if (!this.wait && el.scrollTop > 0) el.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    el.scrollTop += 1;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) this.wait = 120; // ~5 s parado no fim
+  }, 40);
+  private readonly stop = inject(DestroyRef).onDestroy(() => { clearInterval(this.timer); clearInterval(this.roll); });
   protected readonly clock = computed(() => this.now().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
   protected readonly date = computed(() => new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(this.now()));
 

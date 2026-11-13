@@ -711,6 +711,8 @@ function createWindow(): void {
     show: false,
     // print de depuração: fora da tela, sem foco e sem barra de tarefas, para não atrapalhar quem está usando o PC
     ...(CAPTURE ? { x: -4000, y: 0, focusable: false, skipTaskbar: true } : {}),
+    // print de outro tamanho (ex.: --size=1080x1920, monitor em pé)
+    ...(CAPTURE && arg('size') ? (([w, h]) => ({ width: w, height: h, minWidth: 300, minHeight: 300 }))(arg('size')!.split('x').map(Number)) : {}),
     webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: !CAPTURE },
   });
   // aberto pelo Windows ao iniciar (--hidden): fica só na bandeja
