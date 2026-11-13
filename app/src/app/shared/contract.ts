@@ -1152,6 +1152,8 @@ export interface Api {
   'proposals:delete': (id: number) => void;
   /** direcionar para quem pediu, na mesma sessão; null = sem sessão de origem (abrir conversa nova) */
   'proposals:steer': (id: number, agentId: number, text: string) => number | null;
+  /** abre a sessão de quem pediu a decisão como conversa (ou devolve a execução, se ainda roda) */
+  'proposals:chat': (id: number) => { chat: number } | { run: number } | null;
   'runs:list': (slug: string | null) => RunDto[];
   'runs:start': (input: NewRunInput) => RunDto;
   'runs:kill': (id: number) => void;

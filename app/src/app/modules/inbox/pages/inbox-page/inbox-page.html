@@ -283,6 +283,11 @@
           <button type="button" (click)="openSteer()" [attr.aria-pressed]="steering()" title="Dizer o que fazer: a Central lê e age"
                   class="rounded-full border-2 px-5 py-2.5 font-semibold text-frost hover:border-frost" [class]="steering() || hint === 'steer' ? 'border-frost' : 'border-edge'">
             Direcionar <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
+          @if (item.kind === 'decision' && askerName(item.p); as who) {
+            <button type="button" (click)="talkToAsker(item.p)" [disabled]="opening()" title="Abre a conversa com o agente na sessão da execução que pediu esta decisão (ele lembra de tudo o que fez)"
+                    class="flex items-center gap-1.5 rounded-full border-2 border-edge px-5 py-2.5 font-semibold text-mute hover:border-faint hover:text-text disabled:opacity-50">
+              <app-icon name="comments" [size]="15" />{{ opening() ? 'Abrindo…' : 'Conversar com ' + who }}</button>
+          }
           <span class="flex-1"></span>
           @if (item.kind === 'idea') {
             <button type="button" (click)="approveAndPlan()" title="Aprova e põe o gestor do projeto para quebrar em tarefas ou decisões"

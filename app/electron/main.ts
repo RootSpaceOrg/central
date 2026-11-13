@@ -295,6 +295,19 @@ function registerIpc(): void {
     return chatId;
   });
 
+  // "Conversar com o agente" na decisão: a mesma sessão da execução que pediu (vira conversa); rodando ainda, a execução
+  handle('proposals:chat', id => {
+    const p = get<{ origin_chat: number | null; origin_run: number | null; task_id: number | null; agent_id: number | null }>(
+      'select origin_chat, origin_run, task_id, agent_id from proposals where id = ?', id);
+    if (!p) return null;
+    if (p.origin_chat && get('select 1 from chats where id = ?', p.origin_chat)) return { chat: p.origin_chat };
+    // sem origem guardada: a última execução da tarefa da decisão (de preferência do agente que pediu)
+    const runId = p.origin_run ?? get<{ id: number }>(`select id from runs where task_id = ? and session_id is not null
+      order by (agent_id = ?) desc, id desc limit 1`, p.task_id ?? -1, p.agent_id ?? -1)?.id ?? null;
+    if (!runId) return null;
+    if (get(`select 1 from runs where id = ? and status in ('queued','preparing','running')`, runId)) return { run: runId };
+    try { const chat = chatFromRun(runId); changed(); return { chat }; } catch { return { run: runId }; }
+  });
   handle('runs:list', slug => listRuns(slug));
   handle('runs:start', input => startRun(input, emitRun));
   handle('runs:kill', id => killRun(id, emitRun));

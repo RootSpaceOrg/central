@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { AgentSelect } from '../../../../shared/components/pickers/agent-select';
 import { ProjectSelect } from '../../../../shared/components/pickers/project-select';
@@ -376,6 +376,30 @@ export class InboxPage {
   }
 
   protected openChat(id: number): void { this.chat.openInPanel(id); }
+
+  /** quem pediu a decisão (para o botão "Conversar com …"); a Central não conta: ela já é o chat do lado */
+  protected askerName(p: Proposal): string | null {
+    const id = this.askedBy(p);
+    const a = id ? this.agents.byId().get(id) : null;
+    return a && !a.builtin ? a.name : p.taskId ? 'o agente' : null;
+  }
+  protected readonly opening = signal(false);
+  private readonly router = inject(Router);
+  /** abre a sessão de quem pediu como conversa; se a execução ainda está rodando, abre a execução */
+  protected async talkToAsker(p: Proposal): Promise<void> {
+    this.opening.set(true);
+    this.error.set(null);
+    try {
+      const r = await this.ipc.invoke('proposals:chat', p.id);
+      if (!r) { this.error.set('Não achei a sessão do agente que pediu esta decisão. Use "Direcionar".'); return; }
+      if ('chat' in r) { await this.chat.loadChats(); this.chat.openInPanel(r.chat); }
+      else this.router.navigate(['/execucoes'], { queryParams: { run: r.run } });
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    } finally {
+      this.opening.set(false);
+    }
+  }
 }
 
 const ideaPrompt = (i: Idea, project: string | null, guidance: string) => `${PREFIX}${i.title}

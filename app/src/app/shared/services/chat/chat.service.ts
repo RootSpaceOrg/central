@@ -253,8 +253,8 @@ export class ChatService extends ChatSession {
 
   toggle(): void { this.open.update(o => !o); }
 
-  loadChats(): void {
-    this.api.list(null).then(list => this.chats.set(list.map(toChat)));
+  loadChats(): Promise<void> {
+    return this.api.list(null).then(list => this.chats.set(list.map(toChat)));
   }
 
   /** Muda de agente: mostra a última conversa que você abriu com ele (ou a mais recente, ou uma nova). */
