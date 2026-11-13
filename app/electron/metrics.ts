@@ -30,9 +30,17 @@ export function dueMetrics(slug: string, now = Date.now()): MetricDef[] {
 
 // ---------- pedido de 1:1 ----------
 
+/** quem avisa o Gustavo que um dono pediu 1:1 (o main liga: notificação do Windows) */
+let oneOnOneOut: (slug: string, product: string, why: string) => void = () => {};
+export const onOneOnOne = (fn: typeof oneOnOneOut) => { oneOnOneOut = fn; };
+
 export function requestOneOnOne(slug: string, why: string): string {
-  if (!get('select 1 from projects where slug = ?', slug)) throw new Error(`Projeto ${slug} não existe.`);
-  run('update projects set one_on_one = ?, one_on_one_at = ? where slug = ?', why.trim().slice(0, 300), new Date().toISOString(), slug);
+  const p = get<{ name: string; one_on_one: string | null }>('select name, one_on_one from projects where slug = ?', slug);
+  if (!p) throw new Error(`Projeto ${slug} não existe.`);
+  const text = why.trim().slice(0, 300);
+  run('update projects set one_on_one = ?, one_on_one_at = ? where slug = ?', text, new Date().toISOString(), slug);
+  // avisa na hora (só quando o pedido é novo: repetir o mesmo não notifica de novo)
+  if (p.one_on_one !== text) oneOnOneOut(slug, p.name, text);
   return 'Pedido de 1:1 aparece no cockpit do Gustavo, no seu produto.';
 }
 

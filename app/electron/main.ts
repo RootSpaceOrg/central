@@ -52,6 +52,7 @@ import { abandonGuide, answerCard, askTech, approvePlan, askStrategist, guideIdl
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
+import { onOneOnOne } from './metrics';
 import { cleanHousekeeping, measureSizes, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
@@ -183,6 +184,8 @@ const toast = (title: string, body: string, route: string | null, kind: NotifKin
 // a falha da rotina de comando já avisa como execução (abaixo); não avisa duas vezes
 onRoutineFail(() => {});
 // quebrou de verdade (emit_event critical): Windows + WhatsApp, e o cockpit fica vermelho
+// um dono pediu 1:1: notificação na hora (clicar abre a sala do produto) e o cockpit atualiza
+onOneOnOne((slug, product, why) => { toast(`${product}: o dono pediu um 1:1`, why, `/produtos/${slug}`, 'system', true); send('projects:changed', null); });
 onCriticalAlert((title, body) => { toast(title, body, '/', 'system', false); notifyOwners(`🚨 ${title}
 ${body}`); send('projects:changed', null); });
 /** avisa uma vez quando cada execução termina (o tipo decide se avisa: Preferências → Notificações) */

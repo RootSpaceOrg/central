@@ -11,6 +11,7 @@ import { RunsService } from '../../../../../../shared/services/runs/runs.service
 import { Task, TasksService } from '../../../../../../shared/services/tasks/tasks.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../../../shared/ui/icon';
+import { ProjectAvatar } from '../../../../../../shared/ui/project-avatar';
 import { CockpitService } from '../../../../services/cockpit/cockpit.service';
 import { StoryCard } from '../story-card/story-card';
 
@@ -20,7 +21,7 @@ import { StoryCard } from '../story-card/story-card';
  */
 @Component({
   selector: 'app-for-you',
-  imports: [AgoPipe, Icon, RouterLink, StoryCard],
+  imports: [AgoPipe, Icon, ProjectAvatar, RouterLink, StoryCard],
   template: `
     <!-- quebrou de verdade: acima de tudo, impossível de não ver -->
     @for (a of alerts(); track a.id) {
@@ -34,11 +35,24 @@ import { StoryCard } from '../story-card/story-card';
         <button type="button" class="btn btn-sm btn-ghost" (click)="cockpit.resolveAlert(a.id)">Resolvido</button>
       </div>
     }
-    @if (count() - alerts().length) {
+    <!-- um dono pediu 1:1: faixa própria (no meio dos cartões passava batido) -->
+    @for (p of oneOnOnes(); track p.slug) {
+      <a [routerLink]="['/produtos', p.slug]" class="ck-ping mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-[#B48CFF]/60 bg-[#B48CFF]/[0.09] px-5 py-3.5 transition hover:border-[#B48CFF]" [style.--c]="'#B48CFF'">
+        @if (p.face) { <app-project-avatar [project]="$any(p.face)" [size]="38" /> }
+        @else { <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-[#B48CFF]/20 text-[#C6A6FF]"><app-icon name="comments" [size]="17" /></span> }
+        <div class="min-w-[240px] flex-1">
+          <p class="text-[12px] font-bold uppercase tracking-wider text-[#C6A6FF]">{{ p.owner }} pediu um 1:1 · {{ p.name }}@if (p.at) { · {{ p.at | ago }} }</p>
+          <p class="leading-snug">{{ p.why }}</p>
+        </div>
+        <span class="btn btn-sm !border-[#B48CFF] !bg-[#B48CFF] !text-night"><app-icon name="comments" [size]="14" />Abrir o 1:1</span>
+      </a>
+    }
+    @if (count() - alerts().length - oneOnOnes().length) {
       <section aria-labelledby="pv" class="ck-rise">
         <div class="flex items-baseline gap-3">
           <h2 id="pv" class="font-display text-[20px] font-semibold">Para você</h2>
-          <span class="text-[13px] text-faint">{{ count() - alerts().length }} {{ count() - alerts().length === 1 ? 'coisa' : 'coisas' }} · o resto está com os donos</span>
+          @let n = count() - alerts().length - oneOnOnes().length;
+          <span class="text-[13px] text-faint">{{ n }} {{ n === 1 ? 'coisa' : 'coisas' }} · o resto está com os donos</span>
         </div>
         <div class="-mx-1 mt-3 flex snap-x gap-3 overflow-x-auto px-1 pb-2 [scrollbar-color:var(--color-edge)_transparent] [scrollbar-width:thin]">
           @for (r of runs.waiting(); track r.id) {
@@ -61,14 +75,6 @@ import { StoryCard } from '../story-card/story-card';
               <span class="flex-1"></span>
               <span class="mt-3 flex items-center gap-1.5 text-[12.5px] font-semibold text-frost"><app-icon name="play" [size]="13" />{{ s.d.video ? 'Ver o vídeo e usar' : 'Abrir o roteiro' }}</span>
             </button>
-          }
-          @for (p of oneOnOnes(); track p.slug) {
-            <a [routerLink]="['/produtos', p.slug]" class="flex w-[300px] shrink-0 snap-start flex-col rounded-2xl border border-[#B48CFF]/40 bg-[#B48CFF]/[0.07] p-4 hover:border-[#B48CFF]">
-              <p class="text-[11.5px] font-semibold uppercase tracking-wider text-[#C6A6FF]">{{ p.owner }} pediu um 1:1 · {{ p.name }}</p>
-              <p class="mt-1 line-clamp-3 text-[13.5px] leading-snug">{{ p.why }}</p>
-              <span class="flex-1"></span>
-              <span class="mt-3 text-[12.5px] font-semibold text-[#C6A6FF]">Abrir o 1:1</span>
-            </a>
           }
           @for (p of decisions(); track p.id) {
             <article class="flex w-[300px] shrink-0 snap-start flex-col rounded-2xl border border-edge bg-panel p-4">
@@ -116,7 +122,7 @@ export class ForYou {
 
   private readonly products = computed(() => this.cockpit.companies().flatMap(c => c.products));
   protected readonly alerts = computed(() => this.products().flatMap(p => p.alerts.map(a => ({ ...a, slug: p.slug, product: p.name }))));
-  protected readonly oneOnOnes = computed(() => this.products().filter(p => p.oneOnOne).map(p => ({ slug: p.slug, name: p.name, owner: p.owner?.name ?? 'O dono', why: p.oneOnOne!.why })));
+  protected readonly oneOnOnes = computed(() => this.products().filter(p => p.oneOnOne).map(p => ({ slug: p.slug, name: p.name, owner: p.owner?.name ?? 'O dono', face: p.owner, why: p.oneOnOne!.why, at: p.oneOnOne!.at })));
   private readonly byTask = computed(() => new Map(this.tasks.tasks().map(t => [t.id, t])));
   protected readonly stories = computed(() => this.deliveries.board()
     .filter(d => d.status === 'review' && d.taskId && (this.byTask().get(d.taskId)?.subtasks ?? 0) > 0)
