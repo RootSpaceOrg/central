@@ -144,7 +144,7 @@
               @for (g of past(); track g.id) {
                 <details class="mt-2 rounded-xl border border-edge/70 bg-panel/60 px-4 py-2.5">
                   <summary class="cursor-pointer truncate text-[13px] text-mute hover:text-text"><span class="font-semibold">{{ g.focus || 'Pauta do dono' }}</span> <span class="text-faint">· {{ g.finishedAt | ago }}</span></summary>
-                  @if (g.minutes) { <div class="md mt-2 text-[13.5px] leading-relaxed selectable" [innerHTML]="g.minutes | refs | markdown"></div> }
+                  @if (g.minutes) { <div class="md mt-2 text-[13.5px] leading-relaxed selectable" [innerHTML]="g.minutes | markdown"></div> }
                 </details>
               }
             </div>

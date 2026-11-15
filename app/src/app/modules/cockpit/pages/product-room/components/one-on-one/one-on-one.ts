@@ -4,7 +4,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { Guide, GuideCard, GuidePlanItem, GuidesService } from '../../../../../../shared/services/guides/guides.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon, IconName } from '../../../../../../shared/ui/icon';
-import { MarkdownPipe, RefsPipe } from '../../../../../../shared/ui/markdown';
+import { MarkdownPipe } from '../../../../../../shared/ui/markdown';
 
 const CARD_KIND: Record<string, string> = { pergunta: 'Pergunta', rumo: 'Rumo', direcao: 'Caminho', prioridade: 'Prioridade', time: 'Time', fluxo: 'Fluxo', rotina: 'Rotina' };
 const ITEM: Record<string, { label: string; icon: IconName }> = {
@@ -24,7 +24,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
  */
 @Component({
   selector: 'app-one-on-one',
-  imports: [AgoPipe, Icon, MarkdownPipe, NgTemplateOutlet, RefsPipe],
+  imports: [AgoPipe, Icon, MarkdownPipe, NgTemplateOutlet],
   template: `
     @let g = guide();
     <!-- etapas -->
@@ -41,7 +41,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
     </ol>
 
     @if (g.reading) {
-      <div class="md mt-5 rounded-2xl border border-edge bg-night/40 px-5 py-4 text-[14px] leading-relaxed selectable" [innerHTML]="g.reading | refs | markdown"></div>
+      <div class="md mt-5 rounded-2xl border border-edge bg-night/40 px-5 py-4 text-[14px] leading-relaxed selectable" [innerHTML]="g.reading | markdown"></div>
     }
 
     <!-- caminhos -->
@@ -90,9 +90,9 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
             }
             <span class="flex-1"></span>
             @if (answered()) { <span class="text-[12.5px] text-mute">{{ answered() }} de {{ g.cards.length }} respondidos</span> }
-            <button type="button" class="btn" [disabled]="!answered() || busy()" (click)="plan()" title="Pula as próximas rodadas e monta o plano com o que já respondeu">
+            <button type="button" class="btn" [disabled]="!answered() || thinking()" (click)="plan()" title="Pula as próximas rodadas e monta o plano com o que já respondeu">
               {{ g.plan.length ? 'Refazer o plano' : 'Montar o plano já' }}</button>
-            <button type="button" class="btn btn-primary" [disabled]="!answered() || busy()" (click)="submit()" title="O dono lê as respostas, repensa e pergunta o que ficou em aberto (ou fecha com o que entendeu)">
+            <button type="button" class="btn btn-primary" [disabled]="!answered() || thinking()" (click)="submit()" title="O dono lê as respostas, repensa e pergunta o que ficou em aberto (ou fecha com o que entendeu)">
               Enviar respostas<app-icon name="send" [size]="14" /></button>
           </div>
         </section>
@@ -102,17 +102,17 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
           <!-- o dono fechou as rodadas: o que entendeu, para confirmar ou corrigir -->
           <section class="mt-6 rounded-2xl border border-[#B48CFF]/50 bg-[#B48CFF]/[0.06] p-5" aria-labelledby="oo-und">
             <h3 id="oo-und" class="flex items-center gap-2 font-display text-[18px] font-semibold"><app-icon name="check" [size]="16" class="text-[#C6A6FF]" />O que o dono entendeu</h3>
-            <div class="md mt-2 text-[14px] leading-relaxed selectable" [innerHTML]="g.understanding | refs | markdown"></div>
+            <div class="md mt-2 text-[14px] leading-relaxed selectable" [innerHTML]="g.understanding | markdown"></div>
             <div class="mt-4 flex flex-wrap items-center gap-2">
               <input class="field min-w-[240px] flex-1 text-[13px]" placeholder="Algo errado ou faltando? (vira outra rodada)" [value]="hint()" (input)="hint.set($any($event.target).value)"
                      (keydown.enter)="more()" aria-label="Corrigir o entendimento" />
-              <button type="button" class="btn" [disabled]="busy()" (click)="more()">{{ hint().trim() ? 'Corrigir' : 'Me pergunte mais' }}</button>
-              <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="plan()">Está certo, monte o plano<app-icon name="arrowRight" [size]="14" /></button>
+              <button type="button" class="btn" [disabled]="thinking()" (click)="more()">{{ hint().trim() ? 'Corrigir' : 'Me pergunte mais' }}</button>
+              <button type="button" class="btn btn-primary" [disabled]="thinking()" (click)="plan()">Está certo, monte o plano<app-icon name="arrowRight" [size]="14" /></button>
             </div>
           </section>
         } @else {
           <div class="mt-6 rounded-2xl border border-dashed border-edge px-6 py-8 text-center text-[13.5px] text-mute">
-            @if (busy()) {
+            @if (thinking()) {
               <p class="flex items-center justify-center gap-2"><span class="pulse size-2 rounded-full bg-[#B48CFF]"></span>
                 {{ g.rounds.length ? 'O dono está repensando com as suas respostas…' : 'O dono está preparando a pauta…' }}</p>
             } @else if (g.rounds.length) {
@@ -167,7 +167,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
         @if (g.step < 4) {
           <div class="mt-5 flex items-center gap-3 rounded-2xl border border-yes/30 bg-yes/[0.05] px-5 py-4">
             <p class="min-w-0 flex-1 text-[13.5px]"><b>{{ included() }}</b> {{ included() === 1 ? 'item' : 'itens' }} · o dono executa e o time começa; você acompanha no cockpit.</p>
-            <button type="button" class="btn !border-yes !bg-yes px-5 !text-night" [disabled]="!included() || busy()" (click)="approve()"><app-icon name="check" [size]="15" />Aprovar</button>
+            <button type="button" class="btn !border-yes !bg-yes px-5 !text-night" [disabled]="!included() || thinking()" (click)="approve()"><app-icon name="check" [size]="15" />Aprovar</button>
           </div>
         }
       </section>
@@ -178,7 +178,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
         <h3 id="oo-run" class="flex items-center gap-2 font-semibold">
           @if (g.status === 'done') { <app-icon name="check" [size]="16" class="text-yes" />Feito } @else { <span class="pulse size-2 rounded-full bg-yes"></span>O dono está executando }
         </h3>
-        @if (g.minutes) { <div class="md mt-2 text-[14px] leading-relaxed selectable" [innerHTML]="g.minutes | refs | markdown"></div> }
+        @if (g.minutes) { <div class="md mt-2 text-[14px] leading-relaxed selectable" [innerHTML]="g.minutes | markdown"></div> }
         @else { <p class="mt-1 text-[13px] text-mute">Ele cria as histórias, ajusta o time e os números e fecha com a ata aqui. Pode acompanhar na conversa ao lado.</p> }
       </section>
     }
@@ -211,6 +211,8 @@ export class OneOnOne {
   protected readonly whens = WHEN;
   protected readonly asking = signal(false);
 
+  /** o dono está pensando: a conversa ocupada OU a sessão já mandou algo para ele (phase sai de 'idle' na hora do clique; a conversa só fica ocupada quando o processo sobe) */
+  protected readonly thinking = computed(() => this.busy() || this.sending() || ['reply', 'analysis', 'consult'].includes(this.guide().phase));
   protected readonly answered = computed(() => this.guide().cards.filter(c => c.answer).length);
   protected readonly included = computed(() => this.guide().plan.filter(i => i.include).length);
   protected readonly steps = computed(() => {
@@ -228,11 +230,14 @@ export class OneOnOne {
   protected note(c: GuideCard, text: string): void { this.guides.answer(this.guide().id, c.id, { choice: c.answer?.choice ?? null, note: text.trim() }); }
   protected when(i: GuidePlanItem, w: GuidePlanItem['when']): void { this.guides.item(this.guide().id, i.id, { when: w }); }
   protected toggle(i: GuidePlanItem): void { this.guides.item(this.guide().id, i.id, { include: !i.include }); }
-  protected plan(): void { this.guides.requestPlan(this.guide().id); }
-  protected submit(): void { this.guides.submitRound(this.guide().id); }
+  /** clicou: trava os botões na hora (até a sessão confirmar que mandou para o dono) */
+  protected readonly sending = signal(false);
+  private async send(p: Promise<unknown>): Promise<void> { this.sending.set(true); try { await p; } finally { this.sending.set(false); } }
+  protected plan(): void { this.send(this.guides.requestPlan(this.guide().id)); }
+  protected submit(): void { this.send(this.guides.submitRound(this.guide().id)); }
   /** "Me pergunte mais" / corrigir o entendimento: outra rodada, com o que ele quer explorar */
   protected readonly hint = signal('');
-  protected more(): void { this.guides.moreRound(this.guide().id, this.hint()); this.hint.set(''); }
+  protected more(): void { this.send(this.guides.moreRound(this.guide().id, this.hint())); this.hint.set(''); }
   protected answerText(c: GuideCard): string {
     const pick = c.answer?.choice != null ? c.options[c.answer.choice]?.label : null;
     return [pick, c.answer?.note].filter(Boolean).join(' · ') || 'sem resposta';

@@ -12,7 +12,7 @@ import { OwnerState as OwnerInfo } from '../../../../shared/services/projects/pr
 import { ProjectsService } from '../../../../shared/services/projects/projects.service';
 import { AgoPipe } from '../../../../shared/ui/ago.pipe';
 import { Icon } from '../../../../shared/ui/icon';
-import { MarkdownPipe, RefsPipe } from '../../../../shared/ui/markdown';
+import { MarkdownPipe } from '../../../../shared/ui/markdown';
 import { ProjectAvatar } from '../../../../shared/ui/project-avatar';
 import { Select, SelectOption } from '../../../../shared/ui/select';
 import { CockpitService } from '../../services/cockpit/cockpit.service';
@@ -28,7 +28,7 @@ const SUGGESTIONS = ['Organize o rumo comigo', 'Repense o time para esse rumo', 
  */
 @Component({
   selector: 'app-product-room',
-  imports: [AgoPipe, ChatView, DatePipe, Icon, InstrumentCard, MarkdownPipe, NgTemplateOutlet, OneOnOne, ProjectAvatar, RefsPipe, RouterLink, Select],
+  imports: [AgoPipe, ChatView, DatePipe, Icon, InstrumentCard, MarkdownPipe, NgTemplateOutlet, OneOnOne, ProjectAvatar, RouterLink, Select],
   host: { class: 'grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]' },
   templateUrl: './product-room.html',
 })
