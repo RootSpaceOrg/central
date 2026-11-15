@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 
 import { Guide, GuideCard, GuidePlanItem, GuidesService } from '../../../../../../shared/services/guides/guides.service';
@@ -5,7 +6,7 @@ import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
 import { Icon, IconName } from '../../../../../../shared/ui/icon';
 import { MarkdownPipe, RefsPipe } from '../../../../../../shared/ui/markdown';
 
-const CARD_KIND: Record<string, string> = { rumo: 'Rumo', direcao: 'Caminho', prioridade: 'Prioridade', time: 'Time', fluxo: 'Fluxo', rotina: 'Rotina' };
+const CARD_KIND: Record<string, string> = { pergunta: 'Pergunta', rumo: 'Rumo', direcao: 'Caminho', prioridade: 'Prioridade', time: 'Time', fluxo: 'Fluxo', rotina: 'Rotina' };
 const ITEM: Record<string, { label: string; icon: IconName }> = {
   historia: { label: 'história', icon: 'kanban' }, tarefa: { label: 'tarefa', icon: 'kanban' }, rumo: { label: 'rumo', icon: 'compass' },
   marco: { label: 'marco', icon: 'flag' }, cortar: { label: 'cortar', icon: 'close' }, metrica: { label: 'número', icon: 'activity' },
@@ -23,7 +24,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
  */
 @Component({
   selector: 'app-one-on-one',
-  imports: [AgoPipe, Icon, MarkdownPipe, RefsPipe],
+  imports: [AgoPipe, Icon, MarkdownPipe, NgTemplateOutlet, RefsPipe],
   template: `
     @let g = guide();
     <!-- etapas -->
@@ -47,9 +48,10 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
     @if (g.step < 4) {
       @if (g.cards.length) {
         <section class="mt-6" aria-labelledby="oo-cards">
+          <ng-container *ngTemplateOutlet="history" />
           <div class="flex items-baseline gap-3">
-            <h3 id="oo-cards" class="font-display text-[19px] font-semibold">Caminhos</h3>
-            <span class="text-[12.5px] text-faint">escolha em cada um; pode comentar e pedir outros na conversa</span>
+            <h3 id="oo-cards" class="font-display text-[19px] font-semibold">{{ g.rounds.length ? 'Rodada ' + (g.rounds.length + 1) : 'Caminhos e perguntas' }}</h3>
+            <span class="text-[12.5px] text-faint">responda e envie: o dono repensa e pergunta mais até ficar claro</span>
           </div>
           <div class="mt-3 space-y-3">
             @for (c of g.cards; track c.id) {
@@ -88,15 +90,40 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
             }
             <span class="flex-1"></span>
             @if (answered()) { <span class="text-[12.5px] text-mute">{{ answered() }} de {{ g.cards.length }} respondidos</span> }
-            <button type="button" class="btn btn-primary" [disabled]="!answered() || busy()" (click)="plan()">
-              {{ g.plan.length ? 'Refazer o plano' : 'Montar o plano' }}<app-icon name="arrowRight" [size]="14" /></button>
+            <button type="button" class="btn" [disabled]="!answered() || busy()" (click)="plan()" title="Pula as próximas rodadas e monta o plano com o que já respondeu">
+              {{ g.plan.length ? 'Refazer o plano' : 'Montar o plano já' }}</button>
+            <button type="button" class="btn btn-primary" [disabled]="!answered() || busy()" (click)="submit()" title="O dono lê as respostas, repensa e pergunta o que ficou em aberto (ou fecha com o que entendeu)">
+              Enviar respostas<app-icon name="send" [size]="14" /></button>
           </div>
         </section>
       } @else if (g.status === 'open') {
-        <div class="mt-6 rounded-2xl border border-dashed border-edge px-6 py-8 text-center text-[13.5px] text-mute">
-          @if (busy()) { <p class="flex items-center justify-center gap-2"><span class="pulse size-2 rounded-full bg-[#B48CFF]"></span>O dono está preparando a pauta…</p> }
-          @else { Peça algo na conversa ("organize o rumo", "nova frente: …", "repense o time"): os caminhos aparecem aqui como cards. }
-        </div>
+        <ng-container *ngTemplateOutlet="history" />
+        @if (g.understanding) {
+          <!-- o dono fechou as rodadas: o que entendeu, para confirmar ou corrigir -->
+          <section class="mt-6 rounded-2xl border border-[#B48CFF]/50 bg-[#B48CFF]/[0.06] p-5" aria-labelledby="oo-und">
+            <h3 id="oo-und" class="flex items-center gap-2 font-display text-[18px] font-semibold"><app-icon name="check" [size]="16" class="text-[#C6A6FF]" />O que o dono entendeu</h3>
+            <div class="md mt-2 text-[14px] leading-relaxed selectable" [innerHTML]="g.understanding | refs | markdown"></div>
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <input class="field min-w-[240px] flex-1 text-[13px]" placeholder="Algo errado ou faltando? (vira outra rodada)" [value]="hint()" (input)="hint.set($any($event.target).value)"
+                     (keydown.enter)="more()" aria-label="Corrigir o entendimento" />
+              <button type="button" class="btn" [disabled]="busy()" (click)="more()">{{ hint().trim() ? 'Corrigir' : 'Me pergunte mais' }}</button>
+              <button type="button" class="btn btn-primary" [disabled]="busy()" (click)="plan()">Está certo, monte o plano<app-icon name="arrowRight" [size]="14" /></button>
+            </div>
+          </section>
+        } @else {
+          <div class="mt-6 rounded-2xl border border-dashed border-edge px-6 py-8 text-center text-[13.5px] text-mute">
+            @if (busy()) {
+              <p class="flex items-center justify-center gap-2"><span class="pulse size-2 rounded-full bg-[#B48CFF]"></span>
+                {{ g.rounds.length ? 'O dono está repensando com as suas respostas…' : 'O dono está preparando a pauta…' }}</p>
+            } @else if (g.rounds.length) {
+              <p>O dono não puxou outra rodada nem fechou o entendimento.</p>
+              <div class="mt-3 flex justify-center gap-2">
+                <button type="button" class="btn btn-sm" (click)="more()">Me pergunte mais</button>
+                <button type="button" class="btn btn-sm btn-primary" (click)="plan()">Montar o plano</button>
+              </div>
+            } @else { Peça algo na conversa ("organize o rumo", "nova frente: …", "repense o time"): os caminhos e as perguntas aparecem aqui. }
+          </div>
+        }
       }
     }
 
@@ -154,7 +181,25 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
         @if (g.minutes) { <div class="md mt-2 text-[14px] leading-relaxed selectable" [innerHTML]="g.minutes | refs | markdown"></div> }
         @else { <p class="mt-1 text-[13px] text-mute">Ele cria as histórias, ajusta o time e os números e fecha com a ata aqui. Pode acompanhar na conversa ao lado.</p> }
       </section>
-    }`,
+    }
+
+    <!-- rodadas já respondidas: o que foi perguntado e o que você disse -->
+    <ng-template #history>
+      @if (guide().rounds.length) {
+        <details class="mb-5 rounded-2xl border border-edge bg-panel/60 px-5 py-3">
+          <summary class="cursor-pointer text-[13px] font-semibold text-mute hover:text-text">{{ guide().rounds.length }} {{ guide().rounds.length === 1 ? 'rodada respondida' : 'rodadas respondidas' }}</summary>
+          @for (r of guide().rounds; track r.n) {
+            <p class="mt-3 text-[11px] font-bold uppercase tracking-wider text-faint">Rodada {{ r.n }}</p>
+            <ul class="mt-1 space-y-1.5">
+              @for (c of r.cards; track c.id) {
+                <li class="text-[13px] leading-snug"><span class="text-mute">{{ c.question }}</span>
+                  <span class="block font-semibold text-text">→ {{ answerText(c) }}</span></li>
+              }
+            </ul>
+          }
+        </details>
+      }
+    </ng-template>`,
 })
 export class OneOnOne {
   private readonly guides = inject(GuidesService);
@@ -184,6 +229,14 @@ export class OneOnOne {
   protected when(i: GuidePlanItem, w: GuidePlanItem['when']): void { this.guides.item(this.guide().id, i.id, { when: w }); }
   protected toggle(i: GuidePlanItem): void { this.guides.item(this.guide().id, i.id, { include: !i.include }); }
   protected plan(): void { this.guides.requestPlan(this.guide().id); }
+  protected submit(): void { this.guides.submitRound(this.guide().id); }
+  /** "Me pergunte mais" / corrigir o entendimento: outra rodada, com o que ele quer explorar */
+  protected readonly hint = signal('');
+  protected more(): void { this.guides.moreRound(this.guide().id, this.hint()); this.hint.set(''); }
+  protected answerText(c: GuideCard): string {
+    const pick = c.answer?.choice != null ? c.options[c.answer.choice]?.label : null;
+    return [pick, c.answer?.note].filter(Boolean).join(' · ') || 'sem resposta';
+  }
   protected approve(): void { this.guides.approve(this.guide().id); }
   protected end(): void { this.guides.abandon(this.guide().id); }
   protected async askTech(): Promise<void> {

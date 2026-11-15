@@ -48,7 +48,7 @@ import { createMilestone, deleteMilestone, listMilestones, milestoneEvents, reor
 import { contextBlock, contextStatus, graphData, indexAll, indexProject, nodeDetail, searchHits, startContext } from './context/context';
 import { createFact, deleteFact, importClaudeMemory, listFacts, supersedeFact, updateFact } from './context/memory';
 import { directionHistory, getDirection, planBacklog, setDirection } from './direction';
-import { abandonGuide, answerCard, askTech, approvePlan, askStrategist, guideIdle, listGuides, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, talkGuide } from './guides';
+import { abandonGuide, answerCard, askTech, approvePlan, askStrategist, guideIdle, listGuides, moreRound, onGuidesChanged, requestPlan, setFocus, setPlanItem, setStep, startGuide, submitRound, talkGuide } from './guides';
 import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
@@ -441,6 +441,8 @@ function registerIpc(): void {
   handle('guides:step', (id, step) => { setStep(id, step); send('guides:changed', null); });
   handle('guides:answer', (id, cardId, answer) => { answerCard(id, cardId, answer); send('guides:changed', null); });
   handle('guides:plan', id => requestPlan(id, guideDeps));
+  handle('guides:submitRound', id => submitRound(id, guideDeps));
+  handle('guides:moreRound', (id, hint) => moreRound(id, hint, guideDeps));
   handle('guides:item', (id, itemId, patch) => { setPlanItem(id, itemId, patch); send('guides:changed', null); });
   handle('guides:approve', id => { approvePlan(id, guideDeps); backlogChanged(); });
   handle('guides:ask', (id, q) => askStrategist(id, q, guideDeps));

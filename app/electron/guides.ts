@@ -5,7 +5,7 @@
  * O debate é visível numa conversa só (a da Central): o estrategista analisa primeiro numa conversa dele e a fala dele
  * entra na conversa da Central como mensagem 'peer'; as instruções de cada passo vão para a Central sem aparecer na tela.
  */
-import type { ChatMessageDto, GuideCard, GuideDto, GuidePlanItem } from '../src/app/shared/contract';
+import type { ChatMessageDto, GuideCard, GuideDto, GuidePlanItem, GuideRound } from '../src/app/shared/contract';
 import { centralAgent, createAgent } from './agentdefs';
 import { saveMessage, sendChat } from './central-agent';
 import { DEV_ROOT, all, get, now, run } from './db';
@@ -316,15 +316,17 @@ partes)? qual o risco técnico? o que já existe e ajuda? Se o código mostrar a
 const parse = <T>(v: string | null): T[] => { try { return v ? JSON.parse(v) : []; } catch { return []; } };
 
 /** guide_update (MCP): a Central entrega a leitura, os cards e o plano */
-export function updateGuide(id: number, patch: { reading?: string; cards?: GuideCard[]; plan?: GuidePlanItem[] }): string {
+export function updateGuide(id: number, patch: { reading?: string; cards?: GuideCard[]; plan?: GuidePlanItem[]; understanding?: string }): string {
   const g = getGuide(id);
   if (!g || g.status !== 'open') throw new Error('Sessão de guia não encontrada ou já fechada.');
   if (patch.reading !== undefined) run('update guides set reading = ? where id = ?', patch.reading.trim(), id);
+  if (patch.understanding !== undefined) run('update guides set understanding = ? where id = ?', patch.understanding.trim() || null, id);
   if (patch.cards) {
     // card com o mesmo id mantém a resposta que o Gustavo já deu
     const old = new Map(parse<GuideCard>(g.cards).map(c => [c.id, c]));
     const cards = patch.cards.slice(0, 8).map((c, i) => ({ ...c, id: c.id || `c${i + 1}`, answer: old.get(c.id)?.answer ?? null }));
     run('update guides set cards = ?, step = max(step, 2) where id = ?', JSON.stringify(cards), id);
+    if (cards.length && patch.understanding === undefined) run('update guides set understanding = null where id = ?', id);
   }
   if (patch.plan) {
     const items = patch.plan.slice(0, 30).map((p, i) => ({ ...p, id: p.id || `p${i + 1}`, when: ['agora', 'backlog', 'depois'].includes(p.when) ? p.when : 'backlog', include: true }));
@@ -362,15 +364,68 @@ export function setPlanItem(id: number, itemId: string, patch: Partial<Pick<Guid
   run('update guides set plan = ? where id = ?', JSON.stringify(parse<GuidePlanItem>(g.plan).map(p => (p.id === itemId ? { ...p, ...patch } : p))), id);
 }
 
+/** as respostas de todas as rodadas (as já enviadas e a de agora) */
+const allCards = (g: GuideDto): GuideCard[] => [...parse<GuideRound>(g.rounds ?? null).flatMap(r => r.cards), ...parse<GuideCard>(g.cards)];
+
+/** o que já foi perguntado e respondido, rodada a rodada (para o agente repensar com tudo) */
+function roundsText(rounds: GuideRound[]): string {
+  return rounds.map(r => `Rodada ${r.n}:\n${cardsText(r.cards)}`).join('\n\n');
+}
+
+const ROUND_RULES = `Regras das rodadas:
+- Pergunte só o que muda o resultado; o resto decida você e diga no "o que eu entendi".
+- Até 4 perguntas por rodada, NOVAS (não repita o que ele já respondeu). Em cada uma, context = por que isso importa.
+- Pergunta aberta: kind 'pergunta', com 2 a 4 options prováveis (ele pode responder outra coisa no comentário).
+- Quase sempre é você quem puxa a próxima rodada: enquanto houver ponto em aberto que mude o plano, pergunte.`;
+
+/**
+ * Enviar as respostas da rodada: ela vai para o histórico e o agente repensa com tudo o que foi respondido. Ele decide:
+ * outra rodada (guide_update cards) ou fecha com o "o que eu entendi" (guide_update understanding), e o plano vem depois.
+ */
+export function submitRound(id: number, d: GuideDeps): void {
+  const g = getGuide(id);
+  if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
+  const cards = parse<GuideCard>(g.cards);
+  if (!cards.some(c => c.answer)) throw new Error('Responda pelo menos uma pergunta.');
+  const rounds = [...parse<GuideRound>(g.rounds ?? null), { n: parse<GuideRound>(g.rounds ?? null).length + 1, cards, at: now() }];
+  run(`update guides set rounds = ?, cards = '[]', understanding = null, phase = 'reply' where id = ?`, JSON.stringify(rounds), id);
+  const last = rounds[rounds.length - 1];
+  toCentral(g, `[Sessão #${id}] O Gustavo respondeu a rodada ${last.n}:
+${cardsText(last.cards)}
+${rounds.length > 1 ? `\nTudo o que ele já respondeu:\n${roundsText(rounds.slice(0, -1))}\n` : ''}
+REPENSE com essas respostas antes de qualquer coisa: escreva aqui, em 2 a 4 linhas, o que mudou no que você pensava (o que
+ficou claro, o que ele corrigiu, o que surgiu de novo). Depois decida:
+- ainda há ponto em aberto que muda o resultado → faça a próxima rodada: guide_update(guide_id ${id}, cards);
+- ficou claro → guide_update(guide_id ${id}, understanding) com "O que eu entendi" em markdown curto: objetivo, o que ele
+  decidiu, premissas que você assumiu e o que fica de fora. Diga que, se estiver certo, ele pode pedir o plano.
+${ROUND_RULES}`, d);
+  d.changed();
+}
+
+/** "Outra rodada": o Gustavo quer ser perguntado mais (opcionalmente sobre algo) */
+export function moreRound(id: number, hint: string, d: GuideDeps): void {
+  const g = getGuide(id);
+  if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
+  const h = hint.trim();
+  if (g.central_chat) saveMessage(g.central_chat, 'user', h ? `🔁 Outra rodada: ${h}` : '🔁 Me pergunte mais', d.notify);
+  run(`update guides set phase = 'reply' where id = ?`, id);
+  const rounds = parse<GuideRound>(g.rounds ?? null);
+  toCentral(g, `[Sessão #${id}] O Gustavo pediu outra rodada de perguntas${h ? `, sobre isto: "${h}"` : ': ele sente que ainda falta entender algo'}.
+${rounds.length ? `O que ele já respondeu:\n${roundsText(rounds)}\n` : ''}${g.understanding ? `\nO seu entendimento até aqui (ele quer ir além disso):\n${g.understanding}\n` : ''}
+Pense no que ainda está em aberto ou raso e faça a próxima rodada com guide_update(guide_id ${id}, cards). Diga em 1 linha o que vai explorar.
+${ROUND_RULES}`, d);
+  d.changed();
+}
+
 export function setStep(id: number, step: number): void { run('update guides set step = ? where id = ?', Math.max(1, Math.min(4, step)), id); }
 
 export function requestPlan(id: number, d: GuideDeps): void {
   const g = getGuide(id);
   if (!g) throw new Error('Sessão não encontrada.');
-  const cards = parse<GuideCard>(g.cards);
+  const cards = allCards(g);
   if (!cards.some(c => c.answer)) throw new Error('Responda pelo menos um card.');
   run(`update guides set phase = 'reply' where id = ?`, id);
-  toCentral(g, profileOf(g).plan(g, cards), d);
+  toCentral(g, profileOf(g).plan(g, cards) + (g.understanding ? `\n\nO que você entendeu (o Gustavo confirmou ao pedir o plano):\n${g.understanding}` : ''), d);
   d.changed();
 }
 
@@ -378,7 +433,7 @@ export function requestPlan(id: number, d: GuideDeps): void {
 export function approvePlan(id: number, d: GuideDeps): void {
   const g = getGuide(id);
   if (!g || g.status !== 'open') throw new Error('Sessão não encontrada.');
-  const cards = parse<GuideCard>(g.cards);
+  const cards = allCards(g);
   const plan = parse<GuidePlanItem>(g.plan).filter(p => p.include);
   if (!plan.length) throw new Error('Nenhum item no plano.');
   for (const c of cards.filter(x => x.answer)) {

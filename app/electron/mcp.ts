@@ -314,10 +314,11 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
     return { ...d, deliveries: d.deliveries.map(x => ({ project: x.project_slug, agent: x.agent_name, title: x.title, status: x.status, failed: x.outcome === 'failed' })) };
   });
   // ---------- guiar projeto ----------
-  tool('guide_update', 'Sessão de "Guiar projeto": entrega a leitura do momento (reading), os cards de decisão (cards) ou o plano (plan) para a tela do Gustavo. Use o guide_id que veio na instrução.', {
+  tool('guide_update', 'Sessão (Guiar, Agência, 1:1): entrega a leitura do momento (reading), os cards de decisão ou a rodada de perguntas (cards), o "o que eu entendi" que fecha as rodadas (understanding, markdown curto) ou o plano (plan) para a tela do Gustavo. Use o guide_id que veio na instrução.', {
     guide_id: z.number().int(), reading: z.string().optional(),
+    understanding: z.string().optional().describe('o que você entendeu depois das rodadas: objetivo, decisões dele, premissas suas, o que fica de fora'),
     cards: z.array(z.object({
-      id: z.string(), kind: z.enum(['rumo', 'direcao', 'prioridade', 'time', 'fluxo', 'rotina']), question: z.string(), context: z.string().optional(),
+      id: z.string(), kind: z.enum(['rumo', 'direcao', 'prioridade', 'time', 'fluxo', 'rotina', 'pergunta']), question: z.string(), context: z.string().optional(),
       options: z.array(z.object({ label: z.string(), detail: z.string().optional() })).min(1).max(5),
       recommended: z.number().int().optional(), strategist: z.string().optional(), central: z.string().optional(),
     })).optional(),
@@ -326,7 +327,7 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
       why: z.string().optional().describe('por quê, em uma linha: a decisão ou o motivo que levou a este item'),
       agent: z.string().optional(), when: z.enum(['agora', 'backlog', 'depois']),
     })).optional(),
-  }, a => updateGuide(a.guide_id, { reading: a.reading, cards: a.cards as never, plan: a.plan as never }), h.projects);
+  }, a => updateGuide(a.guide_id, { reading: a.reading, cards: a.cards as never, plan: a.plan as never, understanding: a.understanding }), h.projects);
   tool('agency_propose', 'Revisão da agência: deixa uma proposta de mudança no time (agentes, quadros, rotinas) esperando o Gustavo na tela Agência. cards no mesmo formato do guide_update (kinds time, fluxo, rotina). Não mude o time você mesmo.', {
     project_slug: z.string(), reading: z.string(),
     cards: z.array(z.object({

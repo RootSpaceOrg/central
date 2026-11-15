@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
-import { GuideCard, GuideDto, GuidePlanItem, PilotDto } from '../../contract';
+import { GuideCard, GuideDto, GuidePlanItem, GuideRound, PilotDto } from '../../contract';
 import { IpcService, errorMessage } from '../ipc/ipc.service';
 
 export type { GuideCard, GuidePlanItem };
@@ -21,6 +21,8 @@ export interface GuideSnapshot {
   waiting_production: { repo: string; commits: number; since: string | null }[];
 }
 
+export type { GuideRound };
+
 export interface Guide {
   id: number;
   projectSlug: string;
@@ -32,6 +34,10 @@ export interface Guide {
   reading: string | null;
   cards: GuideCard[];
   plan: GuidePlanItem[];
+  /** rodadas de perguntas já respondidas (a de agora fica em cards) */
+  rounds: GuideRound[];
+  /** "o que eu entendi": o agente fecha as rodadas com isso */
+  understanding: string | null;
   centralChat: number | null;
   strategistChat: number | null;
   minutes: string | null;
@@ -46,6 +52,7 @@ const json = <T>(v: string | null, d: T): T => { try { return v ? JSON.parse(v) 
 const toGuide = (d: GuideDto): Guide => ({
   id: d.id, projectSlug: d.project_slug, direct: !!d.direct, status: d.status, step: d.step, phase: d.phase,
   snapshot: json(d.snapshot, {} as GuideSnapshot), reading: d.reading, cards: json(d.cards, []), plan: json(d.plan, []),
+  rounds: json(d.rounds ?? null, []), understanding: d.understanding ?? null,
   centralChat: d.central_chat, strategistChat: d.strategist_chat, minutes: d.minutes, focus: d.focus ?? null, kind: d.kind ?? 'rumo', createdAt: new Date(d.created_at),
   approvedAt: d.approved_at ? new Date(d.approved_at) : null, finishedAt: d.finished_at ? new Date(d.finished_at) : null,
 });
@@ -121,6 +128,9 @@ export class GuidesService {
     return this.act(this.ipc.invoke('guides:answer', id, cardId, answer));
   }
   requestPlan(id: number) { return this.act(this.ipc.invoke('guides:plan', id)); }
+  /** envia as respostas: o agente repensa e pergunta mais ou fecha com o entendimento */
+  submitRound(id: number) { return this.act(this.ipc.invoke('guides:submitRound', id)); }
+  moreRound(id: number, hint: string) { return this.act(this.ipc.invoke('guides:moreRound', id, hint)); }
   item(id: number, itemId: string, patch: Partial<Pick<GuidePlanItem, 'when' | 'include'>>) {
     this.guides.update(l => l.map(g => (g.id === id ? { ...g, plan: g.plan.map(p => (p.id === itemId ? { ...p, ...patch } : p)) } : g)));
     return this.act(this.ipc.invoke('guides:item', id, itemId, patch));

@@ -334,7 +334,7 @@ export interface IdeaDto {
 /** Guiar projeto: um card de decisão (etapa 2) */
 export interface GuideCard {
   id: string;
-  kind: 'rumo' | 'direcao' | 'prioridade' | 'time' | 'fluxo' | 'rotina';
+  kind: 'rumo' | 'direcao' | 'prioridade' | 'time' | 'fluxo' | 'rotina' | 'pergunta';
   question: string;
   context?: string;
   options: { label: string; detail?: string }[];
@@ -376,6 +376,9 @@ export interface PilotDto {
   finished_at: string | null;
 }
 
+/** uma rodada de perguntas respondida (1:1 e sessões): o agente repensa e decide se pergunta mais */
+export interface GuideRound { n: number; cards: GuideCard[]; at: string }
+
 export interface GuideDto {
   id: number;
   project_slug: string;
@@ -395,6 +398,10 @@ export interface GuideDto {
   strategist_chat: number | null;
   /** 1:1: conversa com o tech lead quando ele foi ouvido */
   tech_chat?: number | null;
+  /** JSON GuideRound[]: rodadas de perguntas já respondidas (as de agora ficam em cards) */
+  rounds?: string | null;
+  /** "o que eu entendi": o agente fecha as rodadas com isso antes do plano */
+  understanding?: string | null;
   minutes: string | null;
   /** o que o Gustavo disse que quer focar (antes das decisões) */
   focus: string | null;
@@ -1268,6 +1275,10 @@ export interface Api {
   'guides:step': (id: number, step: number) => void;
   'guides:answer': (id: number, cardId: string, answer: GuideCard['answer']) => void;
   'guides:plan': (id: number) => void;
+  /** envia as respostas da rodada: o agente repensa e faz a próxima rodada ou fecha com o entendimento */
+  'guides:submitRound': (id: number) => void;
+  /** o Gustavo pede outra rodada (com o que quer explorar, opcional) */
+  'guides:moreRound': (id: number, hint: string) => void;
   'guides:item': (id: number, itemId: string, patch: Partial<Pick<GuidePlanItem, 'when' | 'include'>>) => void;
   'guides:approve': (id: number) => void;
   'guides:ask': (id: number, question: string) => void;

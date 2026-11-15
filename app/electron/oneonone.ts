@@ -64,7 +64,10 @@ no time; 'fluxo' = quadros; 'rotina' = algo periódico), question, context (o qu
 Durante o 1:1: quando ele pedir uma organização ou uma demanda nova ("nova frente de X", "repense o time"), responda com
 caminhos em cards do mesmo jeito; ajuste os cards (guide_update) conforme a conversa. Se o assunto for rumo e você quiser
 outra cabeça, diga que vale ouvir o estrategista (ele tem um botão para chamar). Não mude nada no projeto ainda: tudo
-passa pelo plano que ele aprova.`;
+passa pelo plano que ele aprova.
+Os cards são a PRIMEIRA rodada: quando ele enviar as respostas você repensa e, enquanto houver ponto em aberto que mude o
+plano, faz outra rodada (perguntas abertas: kind 'pergunta'); quando estiver claro, fecha com o "o que eu entendi"
+(guide_update understanding). Se o pedido dele ainda for vago, comece já com perguntas em vez de caminhos.`;
 };
 
 const replyPrompt = (g: GuideDto, said: string) => `[1:1 #${g.id}] ${said}`;
