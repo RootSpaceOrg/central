@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 
 import { Guide, GuideCard, GuidePlanItem, GuidesService } from '../../../../../../shared/services/guides/guides.service';
 import { AgoPipe } from '../../../../../../shared/ui/ago.pipe';
@@ -96,7 +96,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
               Enviar respostas<app-icon name="send" [size]="14" /></button>
           </div>
         </section>
-      } @else if (g.status === 'open') {
+      } @else if (g.status === 'open' && !g.plan.length) {
         <ng-container *ngTemplateOutlet="history" />
         @if (g.understanding) {
           <!-- o dono fechou as rodadas: o que entendeu, para confirmar ou corrigir -->
@@ -129,7 +129,7 @@ const WHEN: { id: GuidePlanItem['when']; label: string; hint: string }[] = [
 
     <!-- o plano: o que muda na prática -->
     @if (g.plan.length) {
-      <section class="mt-8" aria-labelledby="oo-plan">
+      <section #planBox class="mt-8 scroll-mt-6" aria-labelledby="oo-plan">
         <div class="flex items-baseline gap-3">
           <h3 id="oo-plan" class="font-display text-[19px] font-semibold">O que vai ser feito, na prática</h3>
           @if (g.step < 4) { <span class="text-[12.5px] text-faint">tire o que não quiser e escolha o quando</span> }
@@ -209,6 +209,14 @@ export class OneOnOne {
   /** o produto tem tech lead (quem executa) para ser ouvido */
   readonly hasTech = input(false);
   protected readonly whens = WHEN;
+  private readonly planBox = viewChild<ElementRef<HTMLElement>>('planBox');
+  /** o plano chegou (ou foi refeito): a tela vai direto para o que vai ser feito */
+  private planSeen = -1;
+  private readonly toPlan = effect(() => {
+    const n = this.guide().plan.length, box = this.planBox();
+    if (n && box && n !== this.planSeen && this.planSeen !== -1) untracked(() => box.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    if (box || !n) this.planSeen = n;
+  });
   protected readonly asking = signal(false);
 
   /** o dono está pensando: a conversa ocupada OU a sessão já mandou algo para ele (phase sai de 'idle' na hora do clique; a conversa só fica ocupada quando o processo sobe) */
