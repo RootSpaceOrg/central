@@ -233,6 +233,8 @@ export function agentPromptFile(a: AgentDto): string {
       : 'Você não edita arquivos de código: para isso, crie tarefas ou coloque um agente para trabalhar (start_agent).',
   ];
   parts.push(OPTIONS_RULE);
+  // servidor deixado pelo Bash prende a sessão (ela não termina e a conversa fica 'rodando' para sempre)
+  parts.push('Servidor para o Gustavo testar (ng serve, npm run dev, vite…): suba com serve_for_review (ferramenta da Central), nunca deixe rodando pelo Bash, nem em segundo plano: a sua sessão não termina enquanto ele roda. Servidor só para o seu teste: suba, teste e derrube no mesmo comando.');
   const owns = all<{ slug: string; name: string }>('select slug, name from projects where coalesce(owner_agent_id, todo_agent_id) = ? and status <> ?', a.id, 'dead');
   const leads = all<{ slug: string; name: string }>('select slug, name from projects where todo_agent_id = ? and owner_agent_id is not null and owner_agent_id <> ? and status <> ?', a.id, a.id, 'dead');
   if (leads.length) parts.push(`## Você é o tech lead de: ${leads.map(p => `${p.name} (${p.slug})`).join(', ')}

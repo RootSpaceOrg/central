@@ -7,7 +7,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { app } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { rmSync, writeFileSync } from 'node:fs';
+import { spawn as spawnProc } from 'node:child_process';
+import { existsSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
+import { stopServer, trackServer } from './leftovers';
 import { createServer } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -435,6 +437,23 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('list_agent_runs', 'Execuções de agentes recentes (status, projeto, PR, resultado).', { project_slug: z.string().optional(), limit: z.number().int().max(50).optional() }, a =>
     listRuns(a.project_slug ?? null).slice(0, a.limit ?? 15).map(r => ({ id: r.id, project: r.project_slug, scope: r.scope, status: r.paused ? `pausada (${(JSON.parse(r.paused) as { reason: string }).reason})` : r.status,
       priority: ['alta', 'normal', 'baixa'][r.priority ?? 1], called_by_run: r.parent_run_id ?? null, took_over_from: r.handoff_from ?? null, prompt: r.prompt.slice(0, 160), pr: r.pr_url, result: r.result?.slice(0, 400), session_used: r.usage_start != null && r.usage_end != null ? `${Math.max(r.usage_end - r.usage_start, 0)}%` : null })));
+  tool('serve_for_review', 'Sobe um servidor de desenvolvimento para o Gustavo testar (ng serve, npm run dev…) FORA da sua sessão: ela termina normalmente e o servidor fica no ar (até 8 h, ou até ele revisar a entrega). NUNCA deixe servidor rodando pelo Bash (nem em segundo plano): a sua sessão não termina enquanto ele roda e o Gustavo vê você "rodando" para sempre. Devolve o pid, o log e o endereço.', {
+    command: z.string().describe('o comando, ex.: npx ng serve kultivai --port 4300'), cwd: z.string().describe('pasta onde rodar'),
+    port: z.number().int().optional().describe('a porta, para devolver o endereço'),
+  }, async a => {
+    if (!existsSync(a.cwd)) throw new Error(`Pasta não existe: ${a.cwd}`);
+    mkdirSync(join(a.cwd, '.central-tmp'), { recursive: true });
+    const log = join(a.cwd, '.central-tmp', `serve-${a.port ?? Date.now()}.log`);
+    const out = openSync(log, 'a');
+    const child = spawnProc(a.command, { cwd: a.cwd, shell: true, detached: true, stdio: ['ignore', out, out], windowsHide: true });
+    child.unref();
+    if (!child.pid) throw new Error('Não deu para subir o servidor.');
+    await trackServer(caller?.kind === 'run' ? caller.id : 0, child.pid, a.command, 8 * 3600_000);
+    return { pid: child.pid, log, url: a.port ? `http://localhost:${a.port}` : null, stops: 'em 8 h, ou quando o Gustavo revisar a entrega (serve_stop derruba antes)' };
+  });
+  tool('serve_stop', 'Derruba um servidor que você subiu com serve_for_review (pelo pid), por exemplo para subir de novo na mesma porta.', {
+    pid: z.number().int(),
+  }, async a => ((await stopServer(a.pid)) ? 'Servidor derrubado.' : 'Esse pid não é de um servidor que a Central subiu.'));
   tool('get_agent_run', 'Log de uma execução de agente (últimos eventos).', { id: z.number().int() }, ({ id }) => listEvents(id).slice(-40).map(e => `${e.kind}: ${e.text.slice(0, 400)}`));
   tool('start_agent', 'Coloca um agente para trabalhar numa tarefa. agent_id usa o papel e as ferramentas de um agente definido. Sem repo_path atua na pasta do projeto inteira (edits = só lê e organiza); com repo_path trabalha numa worktree e termina em PR draft; sem projeto (agente sem projeto) trabalha na pasta do agente.', {
     prompt: z.string(), project_slug: z.string().optional(), agent_id: z.number().int().optional(), repo_path: z.string().optional(),

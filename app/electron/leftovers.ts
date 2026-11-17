@@ -104,6 +104,30 @@ export async function reap(): Promise<number> {
   return n;
 }
 
+/**
+ * Servidor que a Central subiu para o Gustavo testar (serve_for_review): fica vigiado como os das execuções e cai no prazo
+ * (ou quando a entrega da execução é revisada). Anota a hora de criação para não matar outro processo com o mesmo pid.
+ */
+export async function trackServer(runId: number, pid: number, cmd: string, ttlMs: number): Promise<void> {
+  let start = '';
+  for (let i = 0; i < 5 && !start; i++) {
+    start = (await snapshot()).find(p => p.pid === pid)?.start ?? '';
+    if (!start) await new Promise(r => setTimeout(r, 300));
+  }
+  run('insert into run_procs (run_id, pid, start, cmd, server, kill_after) values (?,?,?,?,1,?)', runId, pid, start, cmd.slice(0, 400), new Date(Date.now() + ttlMs).toISOString());
+  ensureTimer();
+}
+
+/** derruba agora um servidor que a Central subiu (conferindo a hora de criação) */
+export async function stopServer(pid: number): Promise<boolean> {
+  const row = all<{ id: number; start: string }>('select id, start from run_procs where pid = ? and server = 1', pid)[0];
+  if (!row) return false;
+  const alive = (await snapshot()).find(p => p.pid === pid);
+  if (alive && alive.start === row.start) killTree(pid);
+  run('delete from run_procs where id = ?', row.id);
+  return true;
+}
+
 /** ao abrir a Central: o que venceu enquanto ela estava fechada cai; o resto volta a ser vigiado pelo prazo */
 export function startLeftovers(): void {
   setTimeout(() => { reap().catch(() => {}); }, 15_000);

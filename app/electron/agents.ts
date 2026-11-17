@@ -609,7 +609,7 @@ type Where = { kind: 'repo'; branch: string; base: string } | { kind: 'project';
  * mudança crítica não). Sem isso, ou na dúvida, decide o Gustavo.
  */
 /** onde vai o que é descartável: a limpeza da Central (Utils > Limpeza) apaga essas pastas */
-const TMP_RULE = 'Arquivo temporário (script de teste, print, dump, saída de comando): ponha em `.central-tmp/` na pasta onde você trabalha e não faça commit dele. A limpeza da Central apaga essa pasta.';
+const TMP_RULE = 'Arquivo temporário (script de teste, print, dump, saída de comando): ponha em `.central-tmp/` na pasta onde você trabalha e não faça commit dele. A limpeza da Central apaga essa pasta. Servidor para o Gustavo testar: suba com serve_for_review, nunca deixe rodando pelo Bash (a sessão não termina enquanto ele roda).';
 const PROD_POLICY = 'Produção (main/master, deploy em prod): hotfix pequeno que destrava algo quebrado pode subir sem esperar o Gustavo, se as suas instruções ou memórias não proibirem; logo depois, avise o dono (emit_event: o que subiu, por quê e como desfazer). Mudança maior, de comportamento para o usuário, de dados ou de cobrança: crie uma decisão (create_decision) com o que vai subir, o risco e como desfazer, e espere. Develop é seguro: trabalhe à vontade.';
 
 /** Projeto com dono por eventos: dúvida que não é crítica vai para o dono, não para o Gustavo. */
