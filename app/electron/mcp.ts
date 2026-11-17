@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
 import { criticalAlert, emitEvent, ownerRound } from './owner';
-import { getMeeting, listMeetings } from './meetings';
+import { getMeeting, listMeetings, meetingFrames } from './meetings';
 import { closeDecision, closeReview, ownerDecide, refreshDecision } from './cleanup';
 import { addInsight } from './insights';
 import { reportMetric } from './pulse';
@@ -259,6 +259,11 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('get_meeting', 'Uma reunião gravada: a transcrição inteira e onde estão os prints da tela (abra os que importarem com a ferramenta de ler arquivos).', {
     meeting_id: z.number().int(),
   }, a => { const m = getMeeting(a.meeting_id); if (!m) throw new Error('Reunião não encontrada.'); return { ...m, prints_dir: `${m.path}\\prints` }; });
+  tool('meeting_frames', 'Quadros do vídeo de uma reunião gravada com tela, em resolução cheia, para olhar o que foi mostrado: um momento (at: "12:30") ou um trecho (from, to) a cada `every` segundos (máx. 60 quadros por vez). Quer mais detalhe: chame de novo com trecho e intervalo menores (até 1 s). Devolve os caminhos: abra as imagens com a ferramenta de ler arquivos.', {
+    meeting_id: z.number().int(), at: z.string().optional().describe('momento, ex.: 12:30 ou 1:02:03'),
+    from: z.string().optional().describe('começo do trecho, ex.: 12:00'), to: z.string().optional().describe('fim do trecho, ex.: 13:00'),
+    every: z.number().optional().describe('segundos entre um quadro e outro no trecho (padrão 5, mínimo 1)'),
+  }, a => meetingFrames(a.meeting_id, { at: a.at, from: a.from, to: a.to, every: a.every }));
   tool('request_one_on_one', 'Dono pede um 1:1 com o Gustavo (aparece no cockpit, no seu produto). Use quando precisar dele para algo que não cabe numa decisão: rumo, time, uma escolha grande.', {
     project_slug: z.string(), why: z.string().describe('o assunto em uma linha'),
   }, a => requestOneOnOne(a.project_slug, a.why), h.projects);

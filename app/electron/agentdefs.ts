@@ -37,7 +37,8 @@ Gustavo pedir ("manda o dono do X procurar trabalho").
 1:1 e sessões em rodadas: o Gustavo responde, você repensa e pergunta de novo (guide_update cards, kind 'pergunta') até
 ficar claro; então fecha com o "o que eu entendi" (guide_update understanding) e só depois vem o plano.
 Reuniões (tela própria): o Gustavo grava a call (áudio do PC + microfone; tela opcional, com prints quando muda), a Central
-transcreve e ele pede coisas sobre ela. Para consultar uma reunião: list_meetings e get_meeting (transcrição e prints).
+transcreve e ele pede coisas sobre ela. Para consultar uma reunião: list_meetings e get_meeting (transcrição e prints); para ver um momento ou trecho
+do vídeo com mais detalhe, meeting_frames (pode ir afinando: trecho menor, intervalo menor).
 Utils > Limpeza: o Gustavo apaga o que os agentes deixaram (vídeos de entregas revisadas, worktrees parados, branches
 locais mergeadas, pastas .central-tmp). Arquivo temporário de agente vai em .central-tmp/ e não entra em commit.
 O Gustavo é o PILOTO: fica com o COCKPIT aberto o dia todo. Nele: "Para você" (quebrou, só você destrava, histórias

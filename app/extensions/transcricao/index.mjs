@@ -128,8 +128,16 @@ const seconds = async file => {
   return Number.isFinite(s) ? Math.round(s) : null;
 };
 
-/** áudio (qualquer formato que o ffmpeg abre) → texto */
-async function transcribe({ path, engine = 'local', model = 'small', language = 'pt', apiKey, openaiModel = 'gpt-4o-transcribe' }) {
+/** segundos → "12:30" (ou "1:02:03") */
+const clock = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
+/** trechos com início → texto com o tempo de cada um ("[12:30] o que foi dito") */
+const timedText = segs => segs.filter(s => s.text.trim()).map(s => `[${clock(s.start)}] ${s.text.trim()}`).join('\n');
+
+/**
+ * áudio (qualquer formato que o ffmpeg abre) → texto. timestamps: devolve também `timed`, o texto com o tempo de cada
+ * trecho ("[12:30] …"), para achar o momento do vídeo (reuniões).
+ */
+async function transcribe({ path, engine = 'local', model = 'small', language = 'pt', apiKey, openaiModel = 'gpt-4o-transcribe', timestamps = false }) {
   if (!path || !existsSync(path)) throw new Error('Arquivo de áudio não encontrado.');
   const dur = await seconds(path);
   if (engine === 'openai') {
@@ -142,21 +150,32 @@ async function transcribe({ path, engine = 'local', model = 'small', language = 
       await run(paths.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', path, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libopus', '-b:a', '24k', file], { windowsHide: true });
     }
     const form = new FormData();
-    form.append('model', openaiModel);
+    // com tempos: só o whisper-1 devolve os trechos com início (verbose_json); o gpt-4o-transcribe devolve só o texto
+    form.append('model', timestamps ? 'whisper-1' : openaiModel);
     form.append('language', language);
+    if (timestamps) { form.append('response_format', 'verbose_json'); form.append('timestamp_granularities[]', 'segment'); }
     form.append('file', new Blob([readFileSync(file)]), basename(file));
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form });
     if (file !== path) rmSync(file, { force: true });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`OpenAI: ${body?.error?.message ?? res.status}`);
-    return { text: String(body.text ?? '').trim(), seconds: dur, engine: 'openai' };
+    const timed = timestamps && Array.isArray(body.segments) ? timedText(body.segments.map(s => ({ start: Number(s.start) || 0, text: String(s.text ?? '') }))) : null;
+    return { text: String(body.text ?? '').trim(), timed, seconds: dur, engine: 'openai' };
   }
   if (!have.whisper() || !have.ffmpeg() || !have.model(model)) throw new Error('O motor local ainda não está pronto: em Extensões → Transcrição, clique em Preparar.');
   const wav = join(tmp, `${Date.now()}-${Math.random().toString(36).slice(2)}.wav`);
   try {
     await run(paths.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', path, '-vn', '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wav], { windowsHide: true });
-    const { stdout } = await run(paths.whisper, ['-m', paths.model(model), '-f', wav, '-l', language, '-nt', '-np', '-t', String(Math.max(2, Math.min(8, (await import('node:os')).cpus().length - 1)))], { windowsHide: true, maxBuffer: 32 * 1024 * 1024 });
-    return { text: stdout.replace(/\s+/g, ' ').trim(), seconds: dur, engine: 'local' };
+    const threads = String(Math.max(2, Math.min(8, (await import('node:os')).cpus().length - 1)));
+    // com tempos: sem o -nt, cada linha vem "[00:12:30.000 --> 00:12:34.000]  texto"
+    const { stdout } = await run(paths.whisper, ['-m', paths.model(model), '-f', wav, '-l', language, ...(timestamps ? [] : ['-nt']), '-np', '-t', threads], { windowsHide: true, maxBuffer: 32 * 1024 * 1024 });
+    if (!timestamps) return { text: stdout.replace(/\s+/g, ' ').trim(), seconds: dur, engine: 'local' };
+    const segs = [];
+    for (const line of stdout.split(/\r?\n/)) {
+      const m = line.match(/^\[(\d+):(\d+):(\d+(?:\.\d+)?)\s*-->[^\]]*\]\s*(.*)$/);
+      if (m) segs.push({ start: Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]), text: m[4] });
+    }
+    return { text: segs.map(s => s.text.trim()).join(' ').replace(/\s+/g, ' ').trim(), timed: timedText(segs), seconds: dur, engine: 'local' };
   } finally { rmSync(wav, { force: true }); }
 }
 

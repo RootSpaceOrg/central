@@ -56,8 +56,8 @@ const engineArgs = () => { const c = sttConfig(); return { engine: c.engine, mod
 
 /** áudio → texto (minutos de áudio podem levar alguns minutos no processador) */
 /** limite padrão de 20 min; reunião longa no whisper local passa disso (a gravação de 1 h pede mais) */
-export const transcribeFile = (path: string, timeoutMs = 20 * 60_000) =>
-  callExtension<{ text: string; seconds: number | null; engine: string }>(EXT, 'transcribe', { path, ...engineArgs() }, timeoutMs);
+export const transcribeFile = (path: string, timeoutMs = 20 * 60_000, timestamps = false) =>
+  callExtension<{ text: string; timed?: string | null; seconds: number | null; engine: string }>(EXT, 'transcribe', { path, ...engineArgs(), timestamps }, timeoutMs);
 
 /** vídeo → quadros (imagens) + fala; out = onde salvar os quadros */
 export const analyzeVideo = (path: string, out?: string, frames = 8) =>

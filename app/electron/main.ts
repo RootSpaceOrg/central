@@ -657,7 +657,7 @@ function registerIpc(): void {
     try { return (await transcribeFile(file)).text; } finally { rmSync(file, { force: true }); }
   });
   // só nos testes (--capture): transcrever/analisar direto
-  if (CAPTURE) ipcMain.handle('stt:test', async (_e, kind: string, path: string) => (kind === 'video' ? analyzeVideo(path) : transcribeFile(path)));
+  if (CAPTURE) ipcMain.handle('stt:test', async (_e, kind: string, path: string) => (kind === 'video' ? analyzeVideo(path) : transcribeFile(path, undefined, kind === 'timed')));
   // só nos testes (--capture): simula uma mensagem chegando e devolve o que a Central responderia pelo WhatsApp
   if (CAPTURE) ipcMain.handle('wa:test-presence', (_e, account: string, chat: string, state: string) => { waPresence(account, chat, state); });
   if (CAPTURE) ipcMain.handle('wa:test-inbound', async (_e, m: Record<string, unknown>) => {
