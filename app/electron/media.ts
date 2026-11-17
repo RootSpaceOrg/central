@@ -55,8 +55,9 @@ export const prepareLocal = () => callExtension(EXT, 'setup', sttConfig().engine
 const engineArgs = () => { const c = sttConfig(); return { engine: c.engine, model: c.model, openaiModel: c.openaiModel, apiKey: c.engine === 'openai' ? apiKey() : undefined }; };
 
 /** áudio → texto (minutos de áudio podem levar alguns minutos no processador) */
-export const transcribeFile = (path: string) =>
-  callExtension<{ text: string; seconds: number | null; engine: string }>(EXT, 'transcribe', { path, ...engineArgs() }, 20 * 60_000);
+/** limite padrão de 20 min; reunião longa no whisper local passa disso (a gravação de 1 h pede mais) */
+export const transcribeFile = (path: string, timeoutMs = 20 * 60_000) =>
+  callExtension<{ text: string; seconds: number | null; engine: string }>(EXT, 'transcribe', { path, ...engineArgs() }, timeoutMs);
 
 /** vídeo → quadros (imagens) + fala; out = onde salvar os quadros */
 export const analyzeVideo = (path: string, out?: string, frames = 8) =>

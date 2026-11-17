@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { Emit, continueRun, dto as runDto, handoffRun, killRun, listEvents, listRuns, listTurns, startRun, startTurn } from './agents';
 import { chainProblem } from './governor';
 import { criticalAlert, emitEvent, ownerRound } from './owner';
+import { getMeeting, listMeetings } from './meetings';
 import { closeDecision, closeReview, ownerDecide, refreshDecision } from './cleanup';
 import { addInsight } from './insights';
 import { reportMetric } from './pulse';
@@ -251,6 +252,11 @@ function build(h: Hooks, caller: { kind: 'chat' | 'run'; id: number } | null): M
   tool('owner_round', 'Manda o dono do produto (ou o tech lead, se não houver dono) procurar trabalho AGORA, quando o Gustavo pedir: backlog que pode subir, revisões que ele valida, rumo, próximo marco e ideias (descartar, virar história ou decisão). Devolve a execução, ou null se ele já está numa passada.', {
     project_slug: z.string(),
   }, a => ({ run_id: ownerRound(a.project_slug, input => startRun({ ...input, repo_path: null, permission: 'edits', budget_usd: SIZE_BUDGET.medium, proposal_id: null, task_id: null }, h.emit).id) }), h.projects);
+  tool('list_meetings', 'Reuniões gravadas na Central (tela Reuniões): id, título, data, duração, projeto e se já tem transcrição.', {}, () =>
+    listMeetings().map(m => ({ id: m.id, title: m.title, started_at: m.started_at, minutes: Math.round((m.duration ?? 0) / 60), project: m.project_slug, status: m.status, prints: m.frames })));
+  tool('get_meeting', 'Uma reunião gravada: a transcrição inteira e onde estão os prints da tela (abra os que importarem com a ferramenta de ler arquivos).', {
+    meeting_id: z.number().int(),
+  }, a => { const m = getMeeting(a.meeting_id); if (!m) throw new Error('Reunião não encontrada.'); return { ...m, prints_dir: `${m.path}\\prints` }; });
   tool('request_one_on_one', 'Dono pede um 1:1 com o Gustavo (aparece no cockpit, no seu produto). Use quando precisar dele para algo que não cabe numa decisão: rumo, time, uma escolha grande.', {
     project_slug: z.string(), why: z.string().describe('o assunto em uma linha'),
   }, a => requestOneOnOne(a.project_slug, a.why), h.projects);

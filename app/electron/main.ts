@@ -1,4 +1,4 @@
-import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, nativeImage, net, protocol, screen, shell } from 'electron';
+import { BrowserWindow, Notification, app, clipboard, desktopCapturer, dialog, ipcMain, nativeImage, net, protocol, screen, session, shell } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { copyFileSync, createReadStream, existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -53,6 +53,7 @@ import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
 import { onOneOnOne } from './metrics';
+import { askMeeting, deleteMeeting, listMeetings, meetingChunk, meetingFrame, meetingMedia, recoverMeetings, startMeeting, stopMeeting, transcribe as transcribeMeeting, updateMeeting } from './meetings';
 import { cleanHousekeeping, measureSizes, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
@@ -229,6 +230,18 @@ const emitRun = {
 
 function registerIpc(): void {
   handle('window:fullscreen', on => { win?.setFullScreen(!!on); });
+  // Reuniões
+  const meetingsChanged = () => send('meetings:changed', null);
+  handle('meetings:list', () => listMeetings());
+  handle('meetings:start', (title, slug, screenToo) => { const m = startMeeting(title, slug, screenToo); meetingsChanged(); return m; });
+  handle('meetings:chunk', (id, bytes) => meetingChunk(id, bytes));
+  handle('meetings:frame', (id, seconds, png) => meetingFrame(id, seconds, png));
+  handle('meetings:stop', (id, seconds) => { stopMeeting(id, seconds, meetingsChanged).catch(e => console.error('reunião', e)); });
+  handle('meetings:transcribe', id => { transcribeMeeting(id, meetingsChanged).catch(e => console.error('reunião', e)); });
+  handle('meetings:ask', (id, text, agentId) => askMeeting(id, text, agentId, chatNotify, () => { changed(); backlogChanged(); }));
+  handle('meetings:update', (id, patch) => { updateMeeting(id, patch); meetingsChanged(); });
+  handle('meetings:delete', id => { deleteMeeting(id); meetingsChanged(); });
+  handle('meetings:open', id => { const f = meetingMedia(id); if (f) shell.showItemInFolder(f); });
   handle('present:open', displayId => openPresentation(displayId ?? null));
   handle('present:displays', () => {
     const here = win ? screen.getDisplayMatching(win.getBounds()).id : null;
@@ -754,7 +767,9 @@ function createWindow(): void {
 app.whenReady().then(() => {
   setVideoDir(join(app.getPath('userData'), 'videos'));
   protocol.handle('central-media', req => {
-    const file = videoPath(decodeURIComponent(new URL(req.url).pathname.replace(/^\//, '')));
+    // central-media://m/<id> = gravação de reunião; central-media://v/<nome> = vídeo de entrega
+    const u = new URL(req.url);
+    const file = u.host === 'm' ? meetingMedia(Number(u.pathname.replace(/^\//, ''))) : videoPath(decodeURIComponent(u.pathname.replace(/^\//, '')));
     if (!file || !existsSync(file)) return new Response('não encontrado', { status: 404 });
     // pedido de trecho (Range): sem 206 o player não consegue pular para outro ponto do vídeo
     const size = statSync(file).size;
@@ -768,6 +783,12 @@ app.whenReady().then(() => {
       status: 206, headers: { 'content-type': type, 'content-length': String(end - start + 1), 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes' },
     });
   });
+  // gravar reunião: a tela pede a captura e recebe a tela principal com o áudio do sistema (loopback do Windows), sem o
+  // seletor do navegador. Só a janela da Central chega aqui (getDisplayMedia não é chamado em nenhum outro lugar).
+  session.defaultSession.setDisplayMediaRequestHandler((_req, cb) => {
+    desktopCapturer.getSources({ types: ['screen'] }).then(s => cb(s[0] ? { video: s[0], audio: 'loopback' } : {}), () => cb({}));
+  });
+  recoverMeetings();
   seedAgents();
   seedAgentsV2();
   registerIpc();

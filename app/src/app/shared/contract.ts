@@ -377,6 +377,17 @@ export interface PilotDto {
 }
 
 /** uma rodada de perguntas respondida (1:1 e sessões): o agente repensa e decide se pergunta mais */
+/** reunião gravada na Central: recording → transcribing → ready (recorded = gravada sem transcrição; failed) */
+export interface MeetingDto {
+  id: number; title: string; project_slug: string | null; screen: number;
+  status: 'recording' | 'transcribing' | 'ready' | 'recorded' | 'failed';
+  started_at: string; ended_at: string | null; duration: number | null; transcript: string | null; chat_id: number | null; error: string | null;
+  /** quantos prints da tela foram guardados */
+  frames: number;
+  /** pasta da reunião */
+  path: string;
+}
+
 export interface GuideRound { n: number; cards: GuideCard[]; at: string }
 
 export interface GuideDto {
@@ -1135,6 +1146,17 @@ export interface Api {
   'window:fullscreen': (on: boolean) => void;
   /** modo apresentação: abre a janela (outro monitor, tela cheia) */
   'present:open': (displayId?: number | null) => void;
+  /** Reuniões: gravar (a tela grava e manda os pedaços), transcrever e conversar sobre ela */
+  'meetings:list': () => MeetingDto[];
+  'meetings:start': (title: string, projectSlug: string | null, screen: boolean) => MeetingDto;
+  'meetings:chunk': (id: number, bytes: Uint8Array) => void;
+  'meetings:frame': (id: number, seconds: number, png: Uint8Array) => void;
+  'meetings:stop': (id: number, seconds: number) => void;
+  'meetings:transcribe': (id: number) => void;
+  'meetings:ask': (id: number, text: string, agentId: number | null) => number;
+  'meetings:update': (id: number, patch: { title?: string; project_slug?: string | null }) => void;
+  'meetings:delete': (id: number) => void;
+  'meetings:open': (id: number) => void;
   /** monitores conectados (a apresentação abre no escolhido) */
   'present:displays': () => { id: number; label: string; width: number; height: number; primary: boolean; central: boolean; presenting: boolean }[];
   /** Utils > Limpeza: o que dá para apagar (com o motivo) e apagar o que foi marcado */
@@ -1447,6 +1469,7 @@ export interface Events {
   'update:built': { ok: boolean; message: string };
   'clone:progress': CloneProgressDto;
   'housekeeping:size': { id: string; size: number };
+  'meetings:changed': null;
 }
 
 /** algo que a limpeza pode apagar: vídeo de entrega revisada, worktree parado, branch mergeada, pasta .central-tmp */

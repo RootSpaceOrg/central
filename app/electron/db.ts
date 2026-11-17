@@ -273,6 +273,21 @@ db.exec(`
 
   -- números do produto como dado: combinados no 1:1 ou propostos pelo dono; o dono mede na frequência combinada
   -- quebrou de verdade (emit_event critical): vermelho no cockpit até alguém resolver
+  -- reuniões gravadas na Central (áudio do sistema + microfone, tela opcional): transcrição e conversa sobre ela
+  create table if not exists meetings (
+    id           integer primary key autoincrement,
+    title        text not null,
+    project_slug text,
+    screen       integer not null default 0,
+    status       text not null default 'recording',
+    started_at   text not null,
+    ended_at     text,
+    duration     integer,
+    transcript   text,
+    chat_id      integer,
+    error        text
+  );
+
   create table if not exists alerts (
     id           integer primary key autoincrement,
     project_slug text not null,

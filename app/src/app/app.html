@@ -37,6 +37,9 @@
           @if (n.path === '/escritorio' && working()) {
             <span class="absolute -right-1 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-yes px-1 text-[10.5px] font-bold text-night ring-2 ring-night">{{ working() }}</span>
           }
+          @if (n.path === '/reunioes' && rec.active()) {
+            <span class="pulse absolute -right-1 -top-1 rounded-full bg-no px-1 text-[9.5px] font-bold tabular-nums text-night ring-2 ring-night" [title]="'Gravando: ' + rec.active()!.title">REC</span>
+          }
           @if (n.path === '/agentes' && runs.active().length) {
             <span class="pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-yes ring-2 ring-night"></span>
           }
