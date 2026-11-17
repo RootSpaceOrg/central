@@ -2,9 +2,11 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 
 import { IpcService, errorMessage } from '../ipc/ipc.service';
 
-/** prints da tela: de quanto em quanto tempo olha, e quanto precisa mudar para guardar outro */
-const FRAME_EVERY_MS = 12_000;
-const FRAME_DIFF = 7;
+/** prints da tela: de quanto em quanto tempo olha (miniatura, barato) e quanto precisa mudar para guardar outro */
+const FRAME_EVERY_MS = 3000;
+const FRAME_DIFF = 4;
+/** maior largura do print (texto legível para o agente) */
+const FRAME_MAX_W = 2560;
 const CHUNK_MS = 4000;
 
 /**
@@ -41,7 +43,10 @@ export class RecorderService {
     this.starting.set(true);
     try {
       // a Central entrega a tela principal com o áudio do sistema, sem perguntar (main: setDisplayMediaRequestHandler)
-      const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: screen ? 4 : 1 }, audio: true });
+      // a 10 qps (4 deixava o texto borrado); o tamanho fica o da tela (pedir largura/altura acabava reduzindo)
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: screen ? 10 : 1 }, audio: true });
+      // "detail": o codificador prioriza nitidez (texto, interface) em vez de movimento
+      for (const t of display.getVideoTracks()) t.contentHint = 'detail';
       this.streams.push(display);
       if (!display.getAudioTracks().length) throw new Error('O Windows não entregou o áudio do sistema.');
       const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).catch(() => null);
@@ -54,7 +59,8 @@ export class RecorderService {
       const m = await this.ipc.invoke('meetings:start', title, projectSlug, screen);
       const tracks = [...dest.stream.getAudioTracks(), ...(screen ? display.getVideoTracks() : [])];
       const rec = new MediaRecorder(new MediaStream(tracks), {
-        mimeType: screen ? 'video/webm;codecs=vp8,opus' : 'audio/webm;codecs=opus', audioBitsPerSecond: 96_000, videoBitsPerSecond: 900_000,
+        mimeType: screen ? (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm;codecs=vp8,opus') : 'audio/webm;codecs=opus',
+        audioBitsPerSecond: 128_000, videoBitsPerSecond: 4_000_000,
       });
       rec.ondataavailable = e => {
         if (!e.data.size) return;
@@ -80,6 +86,8 @@ export class RecorderService {
     const a = this.active();
     const rec = this.rec;
     if (!a || !rec) return;
+    // último print: como a tela estava no fim (mesmo sem mudar desde o anterior)
+    await this.lastLook?.(true);
     await new Promise<void>(resolve => { rec.onstop = () => resolve(); rec.stop(); });
     await this.chain;
     this.cleanup();
@@ -87,7 +95,11 @@ export class RecorderService {
     await this.ipc.invoke('meetings:stop', a.id, (Date.now() - a.startedAt) / 1000);
   }
 
+  /** olhar a tela agora (force = guarda mesmo sem mudança); só existe gravando com tela */
+  private lastLook: ((force?: boolean) => Promise<void>) | null = null;
+
   private cleanup(): void {
+    this.lastLook = null;
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     for (const s of this.streams) for (const t of s.getTracks()) t.stop();
@@ -104,26 +116,29 @@ export class RecorderService {
     video.srcObject = new MediaStream(display.getVideoTracks());
     video.play().catch(() => {});
     const thumb = document.createElement('canvas');
-    thumb.width = 32; thumb.height = 18;
+    thumb.width = 64; thumb.height = 36;
     let last: Uint8ClampedArray | null = null;
-    const look = () => {
+    const look = async (force = false): Promise<void> => {
       if (!video.videoWidth) return;
       const t = thumb.getContext('2d', { willReadFrequently: true })!;
-      t.drawImage(video, 0, 0, 32, 18);
-      const px = t.getImageData(0, 0, 32, 18).data;
-      if (last) {
+      t.drawImage(video, 0, 0, 64, 36);
+      const px = t.getImageData(0, 0, 64, 36).data;
+      if (last && !force) {
         let diff = 0;
         for (let i = 0; i < px.length; i += 4) diff += Math.abs(px[i] - last[i]) + Math.abs(px[i + 1] - last[i + 1]) + Math.abs(px[i + 2] - last[i + 2]);
-        if (diff / (32 * 18 * 3) < FRAME_DIFF) return;
+        if (diff / (64 * 36 * 3) < FRAME_DIFF) return;
       }
       last = px;
-      const w = Math.min(1600, video.videoWidth), h = Math.round((video.videoHeight / video.videoWidth) * w);
+      const w = Math.min(FRAME_MAX_W, video.videoWidth), h = Math.round((video.videoHeight / video.videoWidth) * w);
       const full = document.createElement('canvas');
       full.width = w; full.height = h;
       full.getContext('2d')!.drawImage(video, 0, 0, w, h);
-      full.toBlob(b => b?.arrayBuffer().then(buf => this.ipc.invoke('meetings:frame', id, (Date.now() - startedAt) / 1000, new Uint8Array(buf))), 'image/png');
+      const blob = await new Promise<Blob | null>(r => full.toBlob(r, 'image/png'));
+      if (blob) await this.ipc.invoke('meetings:frame', id, (Date.now() - startedAt) / 1000, new Uint8Array(await blob.arrayBuffer()));
     };
-    setTimeout(look, 3000);
-    this.timers.push(setInterval(look, FRAME_EVERY_MS));
+    this.lastLook = look;
+    // primeiro print assim que a tela aparece; depois, a cada 3 s se mudou
+    setTimeout(() => look(), 800);
+    this.timers.push(setInterval(() => look(), FRAME_EVERY_MS));
   }
 }

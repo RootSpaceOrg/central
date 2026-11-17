@@ -14,7 +14,11 @@ import { DEV_ROOT, all, get, now, run } from './db';
 import { sttStatus, transcribeFile } from './media';
 
 const ROOT = join(DEV_ROOT, '.central-meetings');
-const dirOf = (id: number) => join(ROOT, String(id));
+/**
+ * pasta da reunião: <id>-<quando começou> (nome único: duas Centrais, ou uma cópia de teste, não escrevem na mesma pasta);
+ * as primeiras reuniões ficaram em <id>, e continuam lá
+ */
+const dirOf = (id: number) => join(ROOT, get<{ dir: string | null }>('select dir from meetings where id = ?', id)?.dir ?? String(id));
 const fileOf = (m: { id: number; screen: number }) => join(dirOf(m.id), m.screen ? 'gravacao.webm' : 'audio.webm');
 
 type Notify = (chatId: number, message: ChatMessageDto | null, busy: boolean) => void;
@@ -32,8 +36,11 @@ export const getMeeting = (id: number) => { const m = row(id); return m ? dto(m)
 
 export function startMeeting(title: string, projectSlug: string | null, screen: boolean): MeetingDto {
   if (get(`select 1 from meetings where status = 'recording'`)) throw new Error('Já tem uma reunião sendo gravada.');
+  const at = now();
   const id = Number(run(`insert into meetings (title, project_slug, screen, status, started_at) values (?,?,?, 'recording', ?)`,
-    title.trim() || 'Reunião', projectSlug, screen ? 1 : 0, now()).lastInsertRowid);
+    title.trim() || 'Reunião', projectSlug, screen ? 1 : 0, at).lastInsertRowid);
+  // nome único guardado no registro: nunca cai na pasta de outra reunião (outra Central, cópia de teste)
+  run('update meetings set dir = ? where id = ?', `${id}-${at.replace(/\D/g, '').slice(0, 14)}`, id);
   mkdirSync(dirOf(id), { recursive: true });
   return getMeeting(id)!;
 }
