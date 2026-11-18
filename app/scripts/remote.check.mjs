@@ -36,6 +36,10 @@ let cookie = '';
 const call = (channel, args = []) => fetch(base + '/api/invoke', { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ channel, args }) });
 
 ok((await fetch(base + '/')).status === 200, 'o app (arquivos) abre sem parear');
+// DNS rebinding: um site que aponta outro nome para este endereço não passa
+const { request } = await import('node:http');
+const evil = await new Promise(res => request({ host: '127.0.0.1', port: r.REMOTE_PORT, path: '/', headers: { host: 'site-malicioso.com' } }, x => { x.resume(); res(x.statusCode); }).end());
+ok(evil === 403, 'outro nome de site: recusa');
 ok((await call('projects:list')).status === 401, 'sem parear: recusa');
 r.newPairing();
 ok((await fetch(base + '/api/pair', { method: 'POST', body: JSON.stringify({ code: '000000' }) })).status === 403, 'código errado: recusa');

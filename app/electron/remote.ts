@@ -40,7 +40,11 @@ type Handler = (...args: any[]) => unknown;
 interface Deps { handlers: Map<string, Handler>; webRoot: string; media: (kind: string, name: string) => string | null; changed: () => void }
 
 let server: Server | null = null;
+/** o mesmo servidor também em 127.0.0.1: é por aí que o tailscale serve (endereço com cadeado) entrega
+ * (repassar para o próprio IP do Tailscale volta 502) */
+let loop: Server | null = null;
 let boundIp: string | null = null;
+const LOOP = '127.0.0.1';
 let deps: Deps | null = null;
 const clients = new Set<ServerResponse>();
 let pairing: { code: string; until: number } | null = null;
@@ -76,7 +80,12 @@ async function checkHttps(): Promise<void> {
   if (https.state === 'waiting' || !boundIp) return;
   const serve = await tsRun(['serve', 'status']);
   const name = /https:\/\/([a-z0-9.-]+\.ts\.net)/i.exec(serve)?.[1] ?? null;
-  const on = !!name && serve.includes(`${boundIp}:${REMOTE_PORT}`);
+  // ativado antes apontando para o IP do Tailscale (dava 502): refaz para 127.0.0.1, sem pedir nada (o HTTPS já está ativo)
+  if (name && serve.includes(`${boundIp}:${REMOTE_PORT}`) && !serve.includes(`${LOOP}:${REMOTE_PORT}`)) {
+    await new Promise<void>(res => execFile(TS, ['serve', '--bg', '--https=443', `http://${LOOP}:${REMOTE_PORT}`], { windowsHide: true, timeout: 20_000 }, () => res()));
+    return checkHttps();
+  }
+  const on = !!name && serve.includes(`${LOOP}:${REMOTE_PORT}`);
   https = on ? { state: 'on', url: `https://${name}`, enableUrl: null, error: null } : { ...https, state: https.state === 'error' ? 'error' : 'off', url: null };
 }
 
@@ -86,7 +95,7 @@ export function enableHttps(): void {
   if (https.state === 'waiting') return;
   https = { state: 'waiting', url: null, enableUrl: null, error: null };
   deps?.changed();
-  const p = spawn(TS, ['serve', '--bg', '--https=443', `http://${boundIp}:${REMOTE_PORT}`], { windowsHide: true });
+  const p = spawn(TS, ['serve', '--bg', '--https=443', `http://${LOOP}:${REMOTE_PORT}`], { windowsHide: true });
   let out = '';
   const read = (b: Buffer) => {
     out += b.toString();
@@ -127,13 +136,21 @@ export function syncRemote(): void {
   // teste: CENTRAL_REMOTE_HOST força outro endereço (127.0.0.1); no uso normal, só o do Tailscale
   const want = remoteOn() ? (process.env.CENTRAL_REMOTE_HOST || tailscaleIp()) : null;
   if (server && boundIp === want) return;
-  if (server) { for (const c of clients) c.end(); clients.clear(); server.close(); server = null; boundIp = null; }
+  if (server) { for (const c of clients) c.end(); clients.clear(); server.close(); server = null; boundIp = null; loop?.close(); loop = null; }
   if (!want || !deps) { deps?.changed(); return; }
-  const s = createServer((req, res) => handle(req, res).catch(e => send(res, 500, { error: String((e as Error)?.message ?? e) })));
+  const make = () => createServer((req, res) => handle(req, res).catch(e => send(res, 500, { error: String((e as Error)?.message ?? e) })));
+  const s = make();
   s.on('error', e => { console.error('remoto', e); server = null; boundIp = null; deps?.changed(); });
-  // só no endereço do Tailscale: nunca 0.0.0.0 (a rede de casa e a internet não chegam aqui)
-  s.listen(REMOTE_PORT, want, () => { boundIp = want; deps?.changed(); });
+  // no endereço do Tailscale e no 127.0.0.1 (o do serve): nunca 0.0.0.0 (a rede de casa e a internet não chegam aqui)
+  // subiu: confere (e corrige, se precisar) o endereço com cadeado sem esperar alguém abrir a tela
+  s.listen(REMOTE_PORT, want, () => { boundIp = want; deps?.changed(); checkHttps().then(() => deps?.changed(), () => {}); });
   server = s;
+  if (want !== LOOP) {
+    const l = make();
+    l.on('error', e => { console.error('remoto (127.0.0.1)', e); loop = null; });
+    l.listen(REMOTE_PORT, LOOP);
+    loop = l;
+  }
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -150,6 +167,7 @@ export function stopRemote(): Promise<void> {
   for (const c of clients) c.end();
   clients.clear();
   const s = server;
+  loop?.closeAllConnections(); loop?.close(); loop = null;
   server = null; boundIp = null;
   if (!s) return Promise.resolve();
   s.closeAllConnections();
@@ -204,7 +222,15 @@ function file(req: IncomingMessage, res: ServerResponse, path: string, cache = f
   createReadStream(path, { start, end }).pipe(res);
 }
 
+/** só pedidos endereçados à Central: o IP do Tailscale, 127.0.0.1 ou o nome .ts.net (um site no navegador do PC
+ * apontando outro nome para 127.0.0.1, o "DNS rebinding", é recusado) */
+function hostOk(req: IncomingMessage): boolean {
+  const host = (req.headers.host ?? '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  return host === boundIp || host === LOOP || host === 'localhost' || /\.ts\.net$/.test(host);
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!hostOk(req)) return send(res, 403, { error: 'endereço não reconhecido' });
   const url = new URL(req.url ?? '/', 'http://x');
   const d = deps!;
 
