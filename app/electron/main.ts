@@ -710,7 +710,7 @@ function openPresentation(displayId: number | null = null): void {
     x: area.x + 40, y: area.y + 40, width: Math.min(1600, area.width - 80), height: Math.min(1000, area.height - 80), minWidth: 480, minHeight: 360,
     fullscreen: !!other && (!!chosen || other.id !== here), autoHideMenuBar: true, backgroundColor: '#141922', title: 'Central · Apresentação',
     icon: join(__dirname, '..', 'build', 'icon.png'),
-    webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+    webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   show.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   show.webContents.on('before-input-event', (e, i) => {
@@ -736,7 +736,9 @@ function createWindow(): void {
     ...(CAPTURE ? { x: -4000, y: 0, focusable: false, skipTaskbar: true } : {}),
     // print de outro tamanho (ex.: --size=1080x1920, monitor em pé)
     ...(CAPTURE && arg('size') ? (([w, h]) => ({ width: w, height: h, minWidth: 300, minHeight: 300 }))(arg('size')!.split('x').map(Number)) : {}),
-    webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: !CAPTURE },
+    // sem congelar com a janela minimizada ou na bandeja: o selo da barra de tarefas, os avisos e a gravação de reunião
+    // (prints por timer) continuam em dia; o custo é pouco (a tela só redesenha quando algo muda)
+    webPreferences: { preload: join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
   });
   // aberto pelo Windows ao iniciar (--hidden): fica só na bandeja
   win.once('ready-to-show', () => (CAPTURE ? win!.showInactive() : process.argv.includes('--hidden') && getPrefs().tray ? null : win!.show()));
