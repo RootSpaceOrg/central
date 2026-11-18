@@ -242,6 +242,11 @@ function registerIpc(): void {
   handle('meetings:update', (id, patch) => { updateMeeting(id, patch); meetingsChanged(); });
   handle('meetings:delete', id => { deleteMeeting(id); meetingsChanged(); });
   handle('meetings:open', id => { const f = meetingMedia(id); if (f) shell.showItemInFolder(f); });
+  // selo no ícone da barra de tarefas (Windows) / número no Dock (Mac): quantos agentes trabalham agora
+  handle('app:badge', (count, image) => {
+    if (process.platform === 'darwin') { app.setBadgeCount(count); return; }
+    win?.setOverlayIcon(count && image ? nativeImage.createFromDataURL(image) : null, count ? `${count} ${count === 1 ? 'agente trabalhando' : 'agentes trabalhando'}` : '');
+  });
   handle('present:open', displayId => openPresentation(displayId ?? null));
   handle('present:displays', () => {
     const here = win ? screen.getDisplayMatching(win.getBounds()).id : null;

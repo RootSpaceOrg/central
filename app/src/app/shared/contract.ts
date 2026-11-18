@@ -1146,6 +1146,8 @@ export interface Api {
   'window:fullscreen': (on: boolean) => void;
   /** modo apresentação: abre a janela (outro monitor, tela cheia) */
   'present:open': (displayId?: number | null) => void;
+  /** selo no ícone da barra de tarefas (quantos agentes trabalham); 0 tira; image = PNG em data URL */
+  'app:badge': (count: number, image: string | null) => void;
   /** Reuniões: gravar (a tela grava e manda os pedaços), transcrever e conversar sobre ela */
   'meetings:list': () => MeetingDto[];
   'meetings:start': (title: string, projectSlug: string | null, screen: boolean) => MeetingDto;

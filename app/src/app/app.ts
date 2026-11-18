@@ -3,7 +3,7 @@ import { NotifSoundService } from './shared/services/notif-sound/notif-sound.ser
 import { IS_WIN, IpcService } from './shared/services/ipc/ipc.service';
 import { CdkDrag, CdkDragDrop, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { QuickBar } from './shared/components/quick-bar/quick-bar';
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ProjectDialog } from './shared/components/project-dialog/project-dialog';
@@ -56,6 +56,21 @@ const GROUPS: { status: ProjectStatus; label: string }[] = [
   { status: 'maintenance', label: 'Em manutenção' },
   { status: 'frozen', label: 'Congelados' },
 ];
+
+/** selo da barra de tarefas: bolinha verde com o número (99+ no máximo), 32x32 para ficar nítido */
+function badgeImage(n: number): string {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#5FD38F';
+  g.beginPath(); g.arc(16, 16, 15.5, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#0B0E14';
+  const t = n > 99 ? '99+' : String(n);
+  g.font = `800 ${t.length > 2 ? 13 : t.length > 1 ? 17 : 21}px "Segoe UI", system-ui, sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(t, 16, 17);
+  return c.toDataURL('image/png');
+}
 
 @Component({
   selector: 'app-root',
@@ -207,6 +222,16 @@ export class App {
   protected readonly showDead = signal(false);
   /** reavalia o "há X min" da barra de status */
   protected readonly tick = signal(0);
+
+  /**
+   * quantos trabalham agora viram o selo no ícone da Central na barra de tarefas (como as mensagens do WhatsApp).
+   * A tela desenha o número; a janela de apresentação não manda (a principal é quem fala).
+   */
+  private readonly taskbarBadge = effect(() => {
+    const n = this.working();
+    if (this.presenting()) return;
+    untracked(() => this.ipc.invoke('app:badge', n, n ? badgeImage(n) : null).catch(() => {}));
+  });
 
   constructor() {
     // "#67" nos textos (markdown e cards): abre a tarefa (ou a execução). Na captura, para não marcar a opção em volta
