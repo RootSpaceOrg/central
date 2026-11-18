@@ -5,6 +5,7 @@
  * terminal, shell, merge ficam de fora). Pareamento por código de 6 dígitos (ou QR) mostrado no PC; o aparelho recebe um
  * token guardado num cookie HttpOnly (só o hash fica no banco). Texto que vem do celular chega aos agentes marcado.
  */
+import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { IncomingMessage, Server, ServerResponse, createServer } from 'node:http';
@@ -62,11 +63,53 @@ export function tailscaleIp(): string | null {
 
 export const remoteOn = () => getSetting('remote:on') === '1';
 
+// ---------- endereço com cadeado (HTTPS do Tailscale: o celular instala como app) ----------
+
+const TS = process.platform === 'win32' ? 'C:\\Program Files\\Tailscale\\tailscale.exe'
+  : process.platform === 'darwin' ? '/Applications/Tailscale.app/Contents/MacOS/Tailscale' : 'tailscale';
+const tsRun = (args: string[]) => new Promise<string>(res => execFile(TS, args, { windowsHide: true, timeout: 15_000 }, (_e, out) => res(String(out ?? ''))));
+/** waiting = esperando você ativar o HTTPS na conta do Tailscale (enableUrl) */
+let https: { state: 'off' | 'waiting' | 'on' | 'error'; url: string | null; enableUrl: string | null; error: string | null } = { state: 'off', url: null, enableUrl: null, error: null };
+
+/** o nome do PC no Tailscale (gustavo-pc.xxxx.ts.net) e se o serve já aponta para a Central */
+async function checkHttps(): Promise<void> {
+  if (https.state === 'waiting' || !boundIp) return;
+  const serve = await tsRun(['serve', 'status']);
+  const name = /https:\/\/([a-z0-9.-]+\.ts\.net)/i.exec(serve)?.[1] ?? null;
+  const on = !!name && serve.includes(`${boundIp}:${REMOTE_PORT}`);
+  https = on ? { state: 'on', url: `https://${name}`, enableUrl: null, error: null } : { ...https, state: https.state === 'error' ? 'error' : 'off', url: null };
+}
+
+/** liga o HTTPS: tailscale serve passa https://<pc>.ts.net para a Central; sem HTTPS na conta, mostra o link para ativar */
+export function enableHttps(): void {
+  if (!boundIp) throw new Error('Ligue o celular e conecte o Tailscale antes.');
+  if (https.state === 'waiting') return;
+  https = { state: 'waiting', url: null, enableUrl: null, error: null };
+  deps?.changed();
+  const p = spawn(TS, ['serve', '--bg', '--https=443', `http://${boundIp}:${REMOTE_PORT}`], { windowsHide: true });
+  let out = '';
+  const read = (b: Buffer) => {
+    out += b.toString();
+    const link = /https:\/\/login\.tailscale\.com\/\S+/.exec(out)?.[0] ?? null;
+    if (link && link !== https.enableUrl) { https = { ...https, enableUrl: link }; deps?.changed(); }
+  };
+  p.stdout.on('data', read); p.stderr.on('data', read);
+  const kill = setTimeout(() => p.kill(), 10 * 60_000);
+  p.on('close', async code => {
+    clearTimeout(kill);
+    https = code === 0 ? { state: 'off', url: null, enableUrl: null, error: null } : { state: 'error', url: null, enableUrl: null, error: out.trim().split('\n').slice(-2).join(' ') || 'O Tailscale não ativou o endereço.' };
+    await checkHttps();
+    deps?.changed();
+  });
+}
+
 export async function remoteStatus() {
   const ip = tailscaleIp();
-  const url = boundIp ? `http://${boundIp}:${REMOTE_PORT}` : null;
+  await checkHttps();
+  // com o HTTPS do Tailscale, o endereço é o com cadeado (o celular instala como app)
+  const url = https.url ?? (boundIp ? `http://${boundIp}:${REMOTE_PORT}` : null);
   return {
-    on: remoteOn(), tailscale: !!ip, ip, running: !!server, url,
+    on: remoteOn(), tailscale: !!ip, ip, running: !!server, url, https: { state: https.state, enableUrl: https.enableUrl, error: https.error },
     pairing: pairing && pairing.until > Date.now() && url ? { code: pairing.code, until: new Date(pairing.until).toISOString(), qr: await QRCode.toDataURL(`${url}/#/parear/${pairing.code}`, { margin: 1, width: 240 }) } : null,
     devices: devices().map(d => ({ id: d.hash.slice(0, 12), name: d.name, created: d.created, last: d.last })),
   };

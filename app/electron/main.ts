@@ -53,7 +53,7 @@ import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
 import { onOneOnOne } from './metrics';
-import { newPairing, remoteBroadcast, remoteStatus, revokeDevice, setRemote, startRemote } from './remote';
+import { enableHttps, newPairing, remoteBroadcast, remoteStatus, revokeDevice, setRemote, startRemote } from './remote';
 import { askMeeting, deleteMeeting, listMeetings, meetingChunk, meetingFrame, meetingMedia, recoverMeetings, startMeeting, stopMeeting, transcribe as transcribeMeeting, updateMeeting } from './meetings';
 import { cleanHousekeeping, measureSizes, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
@@ -257,6 +257,7 @@ function registerIpc(): void {
   handle('remote:status', () => remoteStatus());
   handle('remote:set', on => setRemote(on));
   handle('remote:pair', () => newPairing());
+  handle('remote:https', () => enableHttps());
   handle('remote:revoke', id => revokeDevice(id));
   handle('present:open', displayId => openPresentation(displayId ?? null));
   handle('present:displays', () => {

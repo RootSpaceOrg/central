@@ -58,7 +58,23 @@ import { Switch } from '../../../../../../shared/ui/switch';
               } @else {
                 <button type="button" class="btn btn-primary mt-4" (click)="pair()"><app-icon name="plus" [size]="14" />Gerar código de pareamento</button>
               }
-              <p class="mt-3 text-[12px] text-faint">Dica: no celular, use "Adicionar à tela de início" do navegador para abrir como app.</p>
+              <!-- endereço com cadeado: sem ele o Chrome só cria um atalho; com ele, instala como app (tela cheia, ícone) -->
+              <div class="mt-4 rounded-xl border px-4 py-3" [class]="s.https.state === 'on' ? 'border-yes/40 bg-yes/[0.05]' : 'border-edge bg-night/40'">
+                @switch (s.https.state) {
+                  @case ('on') { <p class="text-[13px] text-yes"><b>Endereço com cadeado ligado.</b> No Chrome do celular: menu ⋮ › <b>Instalar app</b> (ou "Adicionar à tela inicial").</p> }
+                  @case ('waiting') {
+                    @if (s.https.enableUrl; as link) {
+                      <p class="text-[13px]"><b>Falta um clique na sua conta do Tailscale:</b> abra o link, confirme e volte aqui (ativa o HTTPS do seu PC; a Central termina sozinha).</p>
+                      <button type="button" class="btn btn-sm btn-primary mt-2" (click)="open(link)"><app-icon name="external" [size]="13" />Ativar no Tailscale</button>
+                    } @else { <p class="flex items-center gap-2 text-[13px] text-mute"><span class="pulse size-2 rounded-full bg-frost"></span>Pedindo o endereço ao Tailscale…</p> }
+                  }
+                  @default {
+                    <p class="text-[13px] text-mute">Para virar <b class="text-text">app no celular</b> (ícone e tela cheia, sem a barra do Chrome), o endereço precisa de cadeado. O Tailscale dá um, de graça.</p>
+                    @if (s.https.error; as e) { <p class="mt-1 text-[12px] text-no">{{ e }}</p> }
+                    <button type="button" class="btn btn-sm mt-2" (click)="https()"><app-icon name="lock" [size]="13" />Endereço com cadeado</button>
+                  }
+                }
+              </div>
             } @else { <p class="mt-2 text-[13px] text-faint">Aparece quando o Tailscale conectar.</p> }
           </li>
 
@@ -96,6 +112,8 @@ export class Phone {
 
   protected date(s: string) { return new Date(s); }
   protected set(on: boolean): void { this.ipc.invoke('remote:set', on).then(() => this.ipc.invoke('remote:status')).then(s => this.st.set(s)); }
+  protected https(): void { this.ipc.invoke('remote:https').then(() => this.ipc.invoke('remote:status')).then(s => this.st.set(s)); }
+  protected open(url: string): void { this.ipc.invoke('shell:external', url); }
   protected pair(): void { this.ipc.invoke('remote:pair').then(() => this.ipc.invoke('remote:status')).then(s => this.st.set(s)); }
   protected async revoke(id: string, name: string): Promise<void> {
     if (!(await this.ask.confirm(`Desparear "${name}"? Ele perde o acesso na hora.`, { confirmLabel: 'Desparear' }))) return;

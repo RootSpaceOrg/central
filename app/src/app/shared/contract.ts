@@ -380,6 +380,8 @@ export interface PilotDto {
 /** a Central no celular: Tailscale, endereço, pareamento em andamento e aparelhos pareados */
 export interface RemoteStatus {
   on: boolean; tailscale: boolean; ip: string | null; running: boolean; url: string | null;
+  /** endereço com cadeado (tailscale serve): waiting = esperando você ativar o HTTPS na conta (enableUrl) */
+  https: { state: 'off' | 'waiting' | 'on' | 'error'; enableUrl: string | null; error: string | null };
   pairing: { code: string; until: string; qr: string } | null;
   devices: { id: string; name: string; created: string; last: string | null }[];
 }
@@ -1157,6 +1159,7 @@ export interface Api {
   'remote:status': () => RemoteStatus;
   'remote:set': (on: boolean) => void;
   'remote:pair': () => void;
+  'remote:https': () => void;
   'remote:revoke': (id: string) => void;
   /** selo no ícone da barra de tarefas (quantos agentes trabalham); 0 tira; image = PNG em data URL */
   'app:badge': (count: number, image: string | null) => void;
