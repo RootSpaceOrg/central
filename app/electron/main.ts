@@ -53,6 +53,7 @@ import { agencyRoutines, setAgencyRoutines, teamSnapshot } from './agency';
 import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, startPilot } from './pilot';
 import { startLeftovers } from './leftovers';
 import { onOneOnOne } from './metrics';
+import { newPairing, remoteBroadcast, remoteStatus, revokeDevice, setRemote, startRemote } from './remote';
 import { askMeeting, deleteMeeting, listMeetings, meetingChunk, meetingFrame, meetingMedia, recoverMeetings, startMeeting, stopMeeting, transcribe as transcribeMeeting, updateMeeting } from './meetings';
 import { cleanHousekeeping, measureSizes, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
@@ -111,6 +112,7 @@ function send<K extends keyof Events>(channel: K, payload: Events[K]): void {
   if (payload === null && COALESCE.has(channel)) return coalesce(channel);
   win?.webContents.send(channel, payload);
   show?.webContents.send(channel, payload);
+  remoteBroadcast(channel, payload);
 }
 
 /**
@@ -127,10 +129,14 @@ function coalesce(channel: keyof Events): void {
   windows.set(channel, state);
   win?.webContents.send(channel, null);
   show?.webContents.send(channel, null);
+  remoteBroadcast(channel, null);
   setTimeout(() => { windows.delete(channel); if (state.again) coalesce(channel); }, COALESCE_MS);
 }
 
+/** todos os canais (o servidor do celular chama os mesmos, só os da lista dele) */
+const handlers = new Map<string, (...args: any[]) => unknown>();
 function handle<K extends keyof Api>(channel: K, fn: (...args: Parameters<Api[K]>) => ReturnType<Api[K]> | Promise<ReturnType<Api[K]>>): void {
+  handlers.set(channel, fn as (...args: any[]) => unknown);
   ipcMain.handle(channel, (_e, ...args) => fn(...(args as Parameters<Api[K]>)));
 }
 
@@ -247,6 +253,11 @@ function registerIpc(): void {
     if (process.platform === 'darwin') { app.setBadgeCount(count); return; }
     win?.setOverlayIcon(count && image ? nativeImage.createFromDataURL(image) : null, count ? `${count} ${count === 1 ? 'agente trabalhando' : 'agentes trabalhando'}` : '');
   });
+  // Central no celular (Tailscale)
+  handle('remote:status', () => remoteStatus());
+  handle('remote:set', on => setRemote(on));
+  handle('remote:pair', () => newPairing());
+  handle('remote:revoke', id => revokeDevice(id));
   handle('present:open', displayId => openPresentation(displayId ?? null));
   handle('present:displays', () => {
     const here = win ? screen.getDisplayMatching(win.getBounds()).id : null;
@@ -796,6 +807,11 @@ app.whenReady().then(() => {
     desktopCapturer.getSources({ types: ['screen'] }).then(s => cb(s[0] ? { video: s[0], audio: 'loopback' } : {}), () => cb({}));
   });
   recoverMeetings();
+  // celular: só no endereço do Tailscale, com a lista fechada de ações (remote.ts)
+  startRemote({
+    handlers, webRoot: join(__dirname, '..', 'dist', 'web', 'browser'), changed: () => send('remote:changed', null),
+    media: (kind, name) => (kind === 'm' ? meetingMedia(Number(name)) : videoPath(name)),
+  });
   seedAgents();
   seedAgentsV2();
   registerIpc();

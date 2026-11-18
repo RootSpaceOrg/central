@@ -377,6 +377,13 @@ export interface PilotDto {
 }
 
 /** uma rodada de perguntas respondida (1:1 e sessões): o agente repensa e decide se pergunta mais */
+/** a Central no celular: Tailscale, endereço, pareamento em andamento e aparelhos pareados */
+export interface RemoteStatus {
+  on: boolean; tailscale: boolean; ip: string | null; running: boolean; url: string | null;
+  pairing: { code: string; until: string; qr: string } | null;
+  devices: { id: string; name: string; created: string; last: string | null }[];
+}
+
 /** reunião gravada na Central: recording → transcribing → ready (recorded = gravada sem transcrição; failed) */
 export interface MeetingDto {
   id: number; title: string; project_slug: string | null; screen: number;
@@ -1146,6 +1153,11 @@ export interface Api {
   'window:fullscreen': (on: boolean) => void;
   /** modo apresentação: abre a janela (outro monitor, tela cheia) */
   'present:open': (displayId?: number | null) => void;
+  /** Central no celular (Tailscale): estado, ligar, código de pareamento, desparear */
+  'remote:status': () => RemoteStatus;
+  'remote:set': (on: boolean) => void;
+  'remote:pair': () => void;
+  'remote:revoke': (id: string) => void;
   /** selo no ícone da barra de tarefas (quantos agentes trabalham); 0 tira; image = PNG em data URL */
   'app:badge': (count: number, image: string | null) => void;
   /** Reuniões: gravar (a tela grava e manda os pedaços), transcrever e conversar sobre ela */
@@ -1472,6 +1484,7 @@ export interface Events {
   'clone:progress': CloneProgressDto;
   'housekeeping:size': { id: string; size: number };
   'meetings:changed': null;
+  'remote:changed': null;
 }
 
 /** algo que a limpeza pode apagar: vídeo de entrega revisada, worktree parado, branch mergeada, pasta .central-tmp */

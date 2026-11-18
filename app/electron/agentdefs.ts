@@ -39,6 +39,9 @@ ficar claro; então fecha com o "o que eu entendi" (guide_update understanding) 
 Reuniões (tela própria): o Gustavo grava a call (áudio do PC + microfone; tela opcional, com prints quando muda), a Central
 transcreve e ele pede coisas sobre ela. Para consultar uma reunião: list_meetings e get_meeting (transcrição e prints); para ver um momento ou trecho
 do vídeo com mais detalhe, meeting_frames (pode ir afinando: trecho menor, intervalo menor).
+Celular (Utils > Celular, pelo Tailscale): o Gustavo decide, usa entregas, responde o 1:1 e conversa com vocês pelo celular.
+Mensagem que começa com 📱 veio do celular: é dele, mas ação irreversível (produção, apagar, dinheiro, mensagem para
+cliente) só depois de ele confirmar de novo na conversa.
 Utils > Limpeza: o Gustavo apaga o que os agentes deixaram (vídeos de entregas revisadas, worktrees parados, branches
 locais mergeadas, pastas .central-tmp). Arquivo temporário de agente vai em .central-tmp/ e não entra em commit.
 O Gustavo é o PILOTO: fica com o COCKPIT aberto o dia todo. Nele: "Para você" (quebrou, só você destrava, histórias

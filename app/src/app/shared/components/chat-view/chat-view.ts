@@ -1,3 +1,4 @@
+import { isRemote } from '../../../mobile/bridge';
 import { Component, ElementRef, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 
 import { Agent, AgentsService } from '../../services/agents/agents.service';
@@ -81,6 +82,8 @@ export class ChatView implements OnDestroy {
 
   /** painel lateral: menos espaço */
   readonly compact = input(false);
+  /** no celular (fora do Electron): sem anexo, ditado e YOLO */
+  protected readonly remote = isRemote();
 
   protected readonly prefs = inject(ChatPrefsService);
   protected readonly live = inject(LiveService);

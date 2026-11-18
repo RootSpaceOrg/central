@@ -1,4 +1,6 @@
-import { Component, ElementRef, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, input, signal, viewChild } from '@angular/core';
+
+import { mediaUrl } from '../../mobile/bridge';
 
 import { Icon } from './icon';
 
@@ -17,7 +19,7 @@ const clock = (s: number) => (isFinite(s) ? `${Math.floor(s / 60)}:${String(Math
   template: `
     <div #box class="group relative overflow-hidden rounded-2xl border border-edge bg-black outline-none focus-visible:ring-2 focus-visible:ring-frost"
          tabindex="0" (keydown)="key($event)" [attr.aria-label]="label() + ' (espaço toca e pausa, setas pulam 5 segundos)'">
-      <video #v class="block max-h-[70vh] w-full cursor-pointer" [src]="src()" preload="metadata" playsinline
+      <video #v class="block max-h-[70vh] w-full cursor-pointer" [src]="url()" preload="metadata" playsinline
              (click)="toggle()" (dblclick)="full()" (play)="playing.set(true)" (pause)="playing.set(false)" (ended)="playing.set(false)"
              (loadedmetadata)="meta()" (durationchange)="durationFix()" (timeupdate)="tick()" (progress)="buffer()"></video>
       @if (!playing()) {
@@ -60,6 +62,8 @@ const clock = (s: number) => (isFinite(s) ? `${Math.floor(s / 60)}:${String(Math
 export class VideoPlayer {
   readonly src = input.required<string>();
   readonly label = input('Vídeo');
+  /** no celular, o vídeo vem do servidor do PC (/media/…) em vez do central-media:// */
+  protected readonly url = computed(() => mediaUrl(this.src()));
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('v');
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
   protected readonly playing = signal(false);

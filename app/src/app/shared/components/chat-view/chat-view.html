@@ -191,14 +191,17 @@
         <button type="button" class="flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] text-mute hover:bg-raise hover:text-text" (click)="pickEffort($event)"
                 title="Nível de raciocínio (quanto o Claude pensa antes de agir)" aria-label="Nível de raciocínio">{{ effortLabel() }}<app-icon name="chevron" [size]="11" class="rotate-90" /></button>
         @if (chatInfo(); as ci) {
-          @if (!chat.agent()?.restricted) {
+          @if (!chat.agent()?.restricted && !remote) {
             <button type="button" (click)="toggleYolo(ci.yolo)" [attr.aria-pressed]="ci.yolo"
                     class="rounded-lg px-2 py-1 text-[12px] font-semibold transition-colors" [class]="ci.yolo ? 'bg-no/20 text-no hover:bg-no/30' : 'text-faint hover:bg-raise hover:text-text'"
                     [title]="ci.yolo ? 'YOLO ligado: o Claude não pede permissão para nada nesta conversa. Clique para desligar.' : 'YOLO: o Claude faz tudo sem pedir permissão (qualquer pasta, qualquer comando) nesta conversa'">YOLO</button>
           }
         }
+        <!-- no celular: sem anexo, ditado e YOLO (o PC não libera essas ações para fora) -->
+        @if (!remote) {
         <label class="grid size-8 cursor-pointer place-items-center rounded-lg text-mute hover:bg-raise hover:text-text" title="Anexar imagem (ou cole um print com Ctrl+V)">
           <app-icon name="image" [size]="16" /><input type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple class="sr-only" (change)="onPick($event)" aria-label="Anexar imagem"></label>
+        }
         <span class="flex-1"></span>
         @if (mic() === 'rec') {
           <span class="flex items-center gap-1.5 px-1 text-[12.5px] tabular-nums text-no" aria-live="polite"><span class="pulse size-2 rounded-full bg-no"></span>{{ micSecs() }}s</span>
@@ -206,7 +209,7 @@
         } @else if (mic() === 'busy') {
           <span class="px-1 text-[12.5px] text-mute" aria-live="polite">Transcrevendo…</span>
         }
-        @if (dictation.ready() || mic() !== 'idle') {
+        @if (!remote && (dictation.ready() || mic() !== 'idle')) {
           <button type="button" class="grid size-8 place-items-center rounded-lg transition disabled:opacity-40" (click)="toggleMic()" [disabled]="mic() === 'busy'"
                   [class]="mic() === 'rec' ? 'bg-no text-night hover:brightness-110' : 'text-mute hover:bg-raise hover:text-text'"
                   [attr.aria-label]="mic() === 'rec' ? 'Parar e transcrever' : 'Ditar mensagem'" [attr.aria-pressed]="mic() === 'rec'"
