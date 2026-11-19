@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 
 import { ChatView } from '../../../../shared/components/chat-view/chat-view';
@@ -101,6 +101,23 @@ const PRESETS: { label: string; text: string }[] = [
 
           @if (m.status !== 'recording') {
             <app-video-player class="mt-5" [src]="m.media" [label]="m.title" />
+            <!-- cortar: fica só o trecho escolhido (o resto sai do arquivo; transcreve de novo) -->
+            @if (m.status === 'ready' || m.status === 'recorded') {
+              <details class="mt-3 rounded-2xl border border-edge bg-panel px-4 py-3" [open]="cutting()" (toggle)="cutting.set($any($event.target).open)">
+                <summary class="cursor-pointer text-[13.5px] font-semibold">Cortar a gravação <span class="font-normal text-faint">· tirar o começo ou o fim que sobraram</span></summary>
+                <div class="mt-3 flex flex-wrap items-end gap-3">
+                  <label class="text-[12px] text-mute">Começa em
+                    <span class="mt-1 flex gap-1.5"><input class="field !w-24 text-center tabular-nums" [value]="clock(cutFrom())" (change)="cutFrom.set(secs($any($event.target).value, cutFrom()))" aria-label="Começo do trecho" />
+                      <button type="button" class="btn btn-sm" (click)="cutFrom.set(here())" title="Usar o momento do player">aqui</button></span></label>
+                  <label class="text-[12px] text-mute">Termina em
+                    <span class="mt-1 flex gap-1.5"><input class="field !w-24 text-center tabular-nums" [value]="clock(cutTo() ?? m.duration ?? 0)" (change)="cutTo.set(secs($any($event.target).value, cutTo() ?? m.duration ?? 0))" aria-label="Fim do trecho" />
+                      <button type="button" class="btn btn-sm" (click)="cutTo.set(here())" title="Usar o momento do player">aqui</button></span></label>
+                  <span class="flex-1 text-[12px] text-faint">fica {{ clock((cutTo() ?? m.duration ?? 0) - cutFrom()) }} de {{ clock(m.duration ?? 0) }}</span>
+                  <button type="button" class="btn btn-sm !border-no !bg-no !text-night" (click)="trim(m)"><app-icon name="delete" [size]="13" />Cortar</button>
+                </div>
+                <p class="mt-2 text-[11.5px] text-faint">Dê play e use "aqui" para marcar. O que ficar de fora sai do arquivo (não volta); a transcrição e os prints acompanham.</p>
+              </details>
+            }
           }
           @if (m.status === 'recorded' || m.status === 'failed') {
             <button type="button" class="btn btn-sm mt-3" (click)="svc.transcribe(m.id)"><app-icon name="sync" [size]="14" />Transcrever</button>
@@ -157,6 +174,21 @@ export class MeetingsPage {
   protected readonly screen = signal(false);
   protected readonly prompt = signal('');
   protected readonly asking = signal(false);
+  /** cortar: começo e fim (s); null = até o fim */
+  protected readonly cutting = signal(false);
+  protected readonly cutFrom = signal(0);
+  protected readonly cutTo = signal<number | null>(null);
+  private readonly player = viewChild(VideoPlayer);
+  protected here(): number { return Math.round(this.player()?.time() ?? 0); }
+  protected clock(s: number): string { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; }
+  protected secs(v: string, fallback: number): number { const p = v.trim().split(':').map(Number); return p.some(n => Number.isNaN(n)) ? fallback : p.reduce((a, n) => a * 60 + n, 0); }
+  protected async trim(m: Meeting): Promise<void> {
+    const from = this.cutFrom(), to = this.cutTo() ?? m.duration ?? 0;
+    if (!(to - from >= 1)) return;
+    if (!(await this.askDlg.confirm(`Ficar só com ${this.clock(from)} até ${this.clock(to)}? O resto sai do arquivo e não volta; a reunião é transcrita de novo.`, { confirmLabel: 'Cortar' }))) return;
+    await this.svc.trim(m.id, from, to);
+    this.cutting.set(false); this.cutFrom.set(0); this.cutTo.set(null);
+  }
   private readonly picked = signal<number | null>(null);
   /** a escolhida; sem escolha, a que está gravando ou a mais recente */
   protected readonly current = computed(() => {
@@ -184,7 +216,7 @@ export class MeetingsPage {
   protected minutes(s: number): string { return s < 60 ? `${s} s` : `${Math.round(s / 60)} min`; }
   protected words(t: string): number { return t.split(/\s+/).filter(Boolean).length; }
   protected projectName(slug: string | null): string | null { return slug ? this.projects.bySlug().get(slug)?.name ?? null : null; }
-  protected pick(id: number): void { this.picked.set(id); this.prompt.set(''); }
+  protected pick(id: number): void { this.picked.set(id); this.prompt.set(''); this.cutFrom.set(0); this.cutTo.set(null); this.cutting.set(false); }
 
   protected async start(): Promise<void> {
     const id = await this.rec.start(this.title().trim() || `Reunião de ${new Date().toLocaleDateString('pt-BR')}`, this.slug() || null, this.screen());

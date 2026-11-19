@@ -15,6 +15,8 @@ await build({ entryPoints: [join(root, 'electron/remote.ts')], outfile: join(dir
   plugins: [{ name: 'stub', setup: b => b.onResolve({ filter: /^\.\/backlog$/ }, () => ({ path: stub, external: true })) }] });
 const req = createRequire(import.meta.url);
 process.env.CENTRAL_REMOTE_HOST = '127.0.0.1';
+// porta própria: a Central aberta no PC já usa a 4790 (o teste não pode falar com ela)
+process.env.CENTRAL_REMOTE_PORT = '47917';
 process.env.CENTRAL_REMOTE_TESTCODE = '424242';
 const r = req(join(dir, 'r.js'));
 const ok = (c, m) => { if (!c) throw new Error(m); };
@@ -53,6 +55,11 @@ ok((await call('runs:start', [{}])).status === 403, 'iniciar agente: recusa');
 ok(!calls.some(c => c[0] === 'runs:start'), 'o handler proibido nem é chamado');
 ok((await call('settings:get', ['stt:openai_key'])).status === 403, 'configuração sensível: recusa');
 ok((await call('settings:get', ['chat:last'])).status === 200, 'configuração de tela: libera');
+ok((await call('tasks:create', [{ project_slug: 'x', title: 't', column: 'doing', repo_path: null, body: null }])).status === 403, 'tarefa direto em Fazendo: recusa');
+ok((await call('tasks:create', [{ project_slug: 'x', title: 't', column: 'backlog', repo_path: null, body: null }])).status === 200, 'tarefa no Backlog: libera');
+ok((await call('ideas:update', [1, { title: 'outro' }])).status === 403, 'editar texto da ideia: recusa');
+ok((await call('ideas:update', [1, { status: 'approved' }])).status === 200, 'aprovar ideia: libera');
+ok((await call('guides:start', ['x', false, null, 'rumo'])).status === 403, 'sessão que não é o 1:1: recusa');
 await call('chat:send', [null, 1, 'oi']);
 ok(calls.find(c => c[0] === 'chat:send')?.[1][2] === '📱 oi', 'mensagem do celular chega marcada');
 r.revokeDevice((await r.remoteStatus()).devices[0].id);

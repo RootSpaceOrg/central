@@ -7,14 +7,16 @@ import { ChatService } from '../../shared/services/chat/chat.service';
 import { AgoPipe } from '../../shared/ui/ago.pipe';
 import { Icon } from '../../shared/ui/icon';
 import { ProjectAvatar } from '../../shared/ui/project-avatar';
+import { MobileScope, ScopePicker } from '../scope';
 
 /** Conversas no celular: as recentes e os agentes para começar uma nova */
 @Component({
   selector: 'app-mobile-chats',
-  imports: [AgoPipe, ProjectAvatar, RouterLink],
+  imports: [AgoPipe, ProjectAvatar, RouterLink, ScopePicker],
   host: { class: 'block px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-8' },
   template: `
     <h1 class="font-display text-[24px] font-bold">Conversas</h1>
+    <div class="mt-2"><app-scope-picker /></div>
     <h2 class="mt-5 text-[11.5px] font-bold uppercase tracking-wider text-faint">Recentes</h2>
     <ul class="mt-2 divide-y divide-edge/60 overflow-hidden rounded-2xl border border-edge bg-panel">
       @for (c of recent(); track c.id) {
@@ -39,8 +41,9 @@ import { ProjectAvatar } from '../../shared/ui/project-avatar';
 export class ChatsPage {
   protected readonly chat = inject(ChatService);
   private readonly agents = inject(AgentsService);
-  protected readonly recent = computed(() => [...this.chat.chats()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, 25));
-  protected readonly agentsList = computed(() => [...this.agents.agents()].sort((a, b) => Number(b.builtin) - Number(a.builtin) || a.name.localeCompare(b.name)));
+  private readonly scope = inject(MobileScope);
+  protected readonly recent = computed(() => this.chat.chats().filter(c => this.scope.matches(c.projectSlug ?? this.agent(c.agentId)?.projectSlug)).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, 25));
+  protected readonly agentsList = computed(() => this.agents.agents().filter(a => !a.projectSlug || this.scope.matches(a.projectSlug)).sort((a, b) => Number(b.builtin) - Number(a.builtin) || a.name.localeCompare(b.name)));
   protected agent(id: number) { return this.agents.byId().get(id) ?? null; }
   constructor() { this.chat.loadChats(); }
 }

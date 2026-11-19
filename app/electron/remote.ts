@@ -15,7 +15,8 @@ import QRCode from 'qrcode';
 
 import { getSetting, setSetting } from './backlog';
 
-export const REMOTE_PORT = 4790;
+/** teste: CENTRAL_REMOTE_PORT usa outra porta (nunca a da Central aberta) */
+export const REMOTE_PORT = Number(process.env.CENTRAL_REMOTE_PORT) || 4790;
 
 /** o que o celular pode chamar (o resto responde 403) */
 export const ALLOW = new Set<string>([
@@ -28,7 +29,24 @@ export const ALLOW = new Set<string>([
   'guides:answer', 'guides:submitRound', 'guides:moreRound', 'guides:plan', 'guides:item', 'guides:approve',
   // conversar com os agentes
   'chat:send', 'chat:stop', 'proposals:chat',
+  // projetos (sem código): rumo, marcos, backlog, ideias; e pôr para andar
+  'app:info', 'direction:get', 'milestones:list', 'ideas:list', 'ideas:seen', 'ideas:create', 'ideas:update', 'tasks:create',
+  'owner:round', 'owner:set', 'guides:start', 'guides:abandon',
 ]);
+
+/**
+ * Regras das escritas liberadas (o PC confere, não a tela): tarefa nova só no Backlog ou no A fazer; ideia só muda de
+ * status (aprovar, descartar, voltar a nova) ou de projeto; sessão nova só o 1:1 com o dono. Devolve o motivo da recusa.
+ */
+const RULES: Record<string, (a: any[]) => string | null> = {
+  'tasks:create': a => (['backlog', 'todo'].includes(a[0]?.column ?? 'backlog') && !a[0]?.repo_path ? null : 'Pelo celular, tarefa nova só no Backlog ou no A fazer.'),
+  'ideas:update': a => {
+    const patch = a[1] ?? {};
+    if (Object.keys(patch).some(k => !['status', 'project_slug'].includes(k))) return 'Pelo celular, a ideia só muda de status ou de projeto.';
+    return patch.status === undefined || ['approved', 'archived', 'new'].includes(patch.status) ? null : 'Status de ideia não liberado.';
+  },
+  'guides:start': a => (a[3] === 'dono' ? null : 'Pelo celular, só o 1:1 com o dono.'),
+};
 /** chaves de configuração que o celular pode ler (nada de chave de API, token, etc.) */
 const SETTINGS_ALLOW = new Set(['chief:chat', 'chat:last', 'stt:dictation']);
 /** e as que pode gravar (só preferência de tela) */
@@ -288,6 +306,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     let a: unknown[] = Array.isArray(args) ? args : [];
     if (channel === 'settings:get' && !SETTINGS_ALLOW.has(String(a[0]))) return send(res, 403, { error: 'configuração não liberada' });
     if (channel === 'settings:set' && !SETTINGS_WRITE.has(String(a[0]))) return send(res, 403, { error: 'configuração não liberada' });
+    const why = RULES[channel]?.(a);
+    if (why) return send(res, 403, { error: why });
     // o que você escreve pelo celular chega aos agentes marcado (eles sabem que veio de fora do PC)
     if (channel === 'chat:send' && typeof a[2] === 'string') a = [a[0], a[1], `📱 ${a[2]}`, ...a.slice(3)];
     try { return send(res, 200, { ok: true, value: await fn(...a) }); }

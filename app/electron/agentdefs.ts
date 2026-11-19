@@ -38,8 +38,12 @@ Gustavo pedir ("manda o dono do X procurar trabalho").
 ficar claro; então fecha com o "o que eu entendi" (guide_update understanding) e só depois vem o plano.
 Reuniões (tela própria): o Gustavo grava a call (áudio do PC + microfone; tela opcional, com prints quando muda), a Central
 transcreve e ele pede coisas sobre ela. Para consultar uma reunião: list_meetings e get_meeting (transcrição e prints); para ver um momento ou trecho
-do vídeo com mais detalhe, meeting_frames (pode ir afinando: trecho menor, intervalo menor).
-Celular (Utils > Celular, pelo Tailscale): o Gustavo decide, usa entregas, responde o 1:1 e conversa com vocês pelo celular.
+do vídeo com mais detalhe, meeting_frames (pode ir afinando: trecho menor, intervalo menor). Durante a gravação um
+controle fica sobre as outras janelas; o silêncio longo no fim é cortado sozinho e ele pode cortar a gravação (os prints e a
+transcrição se refazem): tempos e prints de antes do corte não valem mais.
+Celular (Utils > Celular, pelo Tailscale): o Gustavo decide, usa entregas, responde o 1:1, conversa com vocês e vê os projetos
+(dono, rumo, marcos, backlog, ideias, diário): aprova/descarta ideias, anota ideia, cria tarefa no Backlog/A fazer, põe o dono
+para procurar trabalho, liga/desliga o "age sozinho" e abre o 1:1. Sem código pelo celular.
 Mensagem que começa com 📱 veio do celular: é dele, mas ação irreversível (produção, apagar, dinheiro, mensagem para
 cliente) só depois de ele confirmar de novo na conversa.
 Utils > Limpeza: o Gustavo apaga o que os agentes deixaram (vídeos de entregas revisadas, worktrees parados, branches

@@ -9,6 +9,7 @@ import { ProposalsService } from '../../shared/services/proposals/proposals.serv
 import { MarkdownPipe } from '../../shared/ui/markdown';
 import { VideoPlayer } from '../../shared/ui/video-player';
 import { CockpitService } from '../../modules/cockpit/services/cockpit/cockpit.service';
+import { MobileScope, ScopePicker } from '../scope';
 
 /**
  * Para você, no celular: o que destrava os agentes. Pedidos de 1:1 e rodadas esperando resposta, decisões (com as
@@ -16,10 +17,11 @@ import { CockpitService } from '../../modules/cockpit/services/cockpit/cockpit.s
  */
 @Component({
   selector: 'app-mobile-for-you',
-  imports: [MarkdownPipe, RouterLink, VideoPlayer],
+  imports: [MarkdownPipe, RouterLink, ScopePicker, VideoPlayer],
   host: { class: 'block px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-8' },
   template: `
     <h1 class="font-display text-[24px] font-bold">Para você</h1>
+    <div class="my-2"><app-scope-picker /></div>
     <p class="text-[13px] text-mute">{{ total() ? total() + ' coisas esperam você' : 'Nada esperando você agora.' }}</p>
 
     <!-- 1:1: pedidos e rodadas abertas -->
@@ -104,11 +106,12 @@ export class ForYouPage {
   protected readonly note = signal('');
   protected readonly error = signal<string | null>(null);
 
-  private readonly products = computed(() => this.cockpit.companies().flatMap(c => c.products));
-  protected readonly decisions = computed(() => this.proposals.inbox());
-  protected readonly reviews = computed(() => this.deliveries.board().filter(d => d.status === 'review' || d.status === 'pending'));
+  private readonly scope = inject(MobileScope);
+  private readonly products = computed(() => this.cockpit.companies().flatMap(c => c.products).filter(p => this.scope.matches(p.slug)));
+  protected readonly decisions = computed(() => this.proposals.inbox().filter(p => this.scope.matches(p.projectSlug)));
+  protected readonly reviews = computed(() => this.deliveries.board().filter(d => (d.status === 'review' || d.status === 'pending') && this.scope.matches(d.projectSlug)));
   /** 1:1 aberto em que a vez é sua (rodada, entendimento ou plano) */
-  protected readonly rounds = computed(() => this.guides.open().filter(g => g.kind === 'dono' && (g.cards.length || g.understanding || g.plan.length || g.phase !== 'idle')));
+  protected readonly rounds = computed(() => this.guides.open().filter(g => g.kind === 'dono' && this.scope.matches(g.projectSlug) && (g.cards.length || g.understanding || g.plan.length || g.phase !== 'idle')));
   protected readonly asked = computed(() => this.products().filter(p => p.oneOnOne && !this.rounds().some(g => g.projectSlug === p.slug))
     .map(p => ({ slug: p.slug, name: p.name, owner: p.owner?.name ?? 'O dono', why: p.oneOnOne!.why })));
   protected readonly total = computed(() => this.decisions().length + this.reviews().length + this.rounds().length + this.asked().length);

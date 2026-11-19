@@ -4,6 +4,8 @@ import { Routes, provideRouter, withComponentInputBinding, withHashLocation } fr
 /** rotas do celular (só o que se resolve fora do PC) */
 const routes: Routes = [
   { path: '', loadComponent: () => import('./pages/home-page').then(m => m.HomePage) },
+  { path: 'projetos', loadComponent: () => import('./pages/projects-page').then(m => m.ProjectsPage) },
+  { path: 'projetos/:slug', loadComponent: () => import('./pages/projects-page').then(m => m.ProjectPage) },
   { path: 'para-voce', loadComponent: () => import('./pages/for-you-page').then(m => m.ForYouPage) },
   { path: 'um-a-um/:id', loadComponent: () => import('./pages/one-on-one-page').then(m => m.OneOnOnePage) },
   { path: 'conversas', loadComponent: () => import('./pages/chats-page').then(m => m.ChatsPage) },

@@ -7,6 +7,7 @@ import { Icon, IconName } from '../shared/ui/icon';
 
 const TABS: { path: string; label: string; icon: IconName }[] = [
   { path: '/', label: 'Início', icon: 'desk' },
+  { path: '/projetos', label: 'Projetos', icon: 'layers' },
   { path: '/para-voce', label: 'Para você', icon: 'inbox' },
   { path: '/conversas', label: 'Conversas', icon: 'comments' },
 ];
@@ -22,7 +23,7 @@ const TABS: { path: string; label: string; icon: IconName }[] = [
   template: `
     <main class="min-h-0 flex-1 overflow-y-auto"><router-outlet /></main>
     @if (!pairing()) {
-      <nav class="grid shrink-0 grid-cols-3 border-t border-edge bg-panel pb-[env(safe-area-inset-bottom)]" aria-label="Seções">
+      <nav class="grid shrink-0 grid-cols-4 border-t border-edge bg-panel pb-[env(safe-area-inset-bottom)]" aria-label="Seções">
         @for (t of tabs; track t.path) {
           @let on = active() === t.path;
           <a [routerLink]="t.path" class="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold" [class]="on ? 'text-frost' : 'text-mute'" [attr.aria-current]="on ? 'page' : null">

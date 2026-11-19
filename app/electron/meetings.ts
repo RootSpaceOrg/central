@@ -68,7 +68,7 @@ export function meetingFrame(id: number, seconds: number, png: Uint8Array): void
 }
 
 /** parou: transcreve (se a extensão estiver pronta) e avisa a tela a cada mudança */
-export async function stopMeeting(id: number, seconds: number, changed: () => void): Promise<void> {
+export async function stopMeeting(id: number, seconds: number, changed: () => void, trimTo: number | null = null): Promise<void> {
   const m = row(id);
   if (!m) throw new Error('Reunião não encontrada.');
   run(`update meetings set status = 'transcribing', ended_at = ?, duration = ? where id = ?`, now(), Math.round(seconds), id);
@@ -78,6 +78,47 @@ export async function stopMeeting(id: number, seconds: number, changed: () => vo
     run(`update meetings set status = 'failed', error = ? where id = ?`, 'A gravação ficou vazia (o áudio não foi capturado).', id);
     return changed();
   }
+  // ficou ligada depois do fim da call: o fim mudo sai antes de transcrever
+  if (trimTo && trimTo < seconds - 5) {
+    try { await cut(id, 0, trimTo); run('update meetings set error = ? where id = ?', `O silêncio do fim foi cortado (a gravação seguiu ${Math.round((seconds - trimTo) / 60)} min depois do último som).`, id); }
+    catch (e) { console.error('reunião: cortar o fim', e); }
+  }
+  await transcribe(id, changed);
+}
+
+/** fica só o trecho de `from` a `to` (s): o arquivo, a duração e os prints (renomeados para o tempo novo) */
+async function cut(id: number, from: number, to: number): Promise<void> {
+  const m = row(id);
+  if (!m) throw new Error('Reunião não encontrada.');
+  const ff = ffmpegPath();
+  if (!ff) throw new Error('Falta o ffmpeg: prepare a extensão Transcrição (Extensões).');
+  const file = fileOf(m), tmp = `${file}.corte.webm`;
+  await execFileP(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(from), '-to', String(to), '-i', file, '-c', 'copy', tmp], { windowsHide: true, timeout: 10 * 60_000 });
+  if (!existsSync(tmp) || statSync(tmp).size < 1000) throw new Error('O corte saiu vazio.');
+  renameSync(tmp, file);
+  // prints: os de fora saem, os de dentro ganham o tempo novo
+  const dir = join(dirOf(id), 'prints');
+  for (const f of framesOf(id)) {
+    const mm = /^(\d+)m(\d+)s\.png$/.exec(f);
+    const t = mm ? Number(mm[1]) * 60 + Number(mm[2]) : 0;
+    if (t < from || t > to) rmSync(join(dir, f), { force: true });
+    else if (from > 0) renameSync(join(dir, f), join(dir, `${stamp(t - from)}.png`));
+  }
+  rmSync(join(dirOf(id), 'quadros'), { recursive: true, force: true });
+  run('update meetings set duration = ?, transcript = null where id = ?', Math.round(to - from), id);
+}
+
+/** cortar pela tela: fica de `from` a `to`; transcreve de novo (os tempos mudaram) */
+export async function trimMeeting(id: number, from: number, to: number, changed: () => void): Promise<void> {
+  const m = row(id);
+  if (!m) throw new Error('Reunião não encontrada.');
+  if (m.status === 'recording' || m.status === 'transcribing') throw new Error('Espere a gravação e a transcrição terminarem.');
+  const a = Math.max(0, from), b = Math.min(to, m.duration ?? to);
+  if (!(b - a >= 1)) throw new Error('O trecho precisa ter pelo menos 1 segundo.');
+  run(`update meetings set status = 'transcribing', error = null where id = ?`, id);
+  changed();
+  try { await cut(id, a, b); }
+  catch (e) { run(`update meetings set status = 'recorded', error = ? where id = ?`, `Não deu para cortar: ${(e as Error).message}`, id); return changed(); }
   await transcribe(id, changed);
 }
 

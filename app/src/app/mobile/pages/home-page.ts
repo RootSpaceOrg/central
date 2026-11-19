@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 
 import { ProjectAvatar } from '../../shared/ui/project-avatar';
 import { CockpitService, Instrument } from '../../modules/cockpit/services/cockpit/cockpit.service';
+import { MobileScope, ScopePicker } from '../scope';
 
 const STATE: Record<string, { label: string; tone: string }> = {
   working: { label: 'trabalhando', tone: 'text-yes' }, waiting: { label: 'esperando você', tone: 'text-later' },
@@ -12,7 +13,7 @@ const STATE: Record<string, { label: string; tone: string }> = {
 /** Início no celular: quem trabalha agora e cada produto em uma linha (dono, marco, o que espera você) */
 @Component({
   selector: 'app-mobile-home',
-  imports: [ProjectAvatar, RouterLink],
+  imports: [ProjectAvatar, RouterLink, ScopePicker],
   host: { class: 'block px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-6' },
   template: `
     <header class="flex items-center gap-3">
@@ -23,6 +24,7 @@ const STATE: Record<string, { label: string; tone: string }> = {
       </div>
       @if (waiting(); as n) { <a routerLink="/para-voce" class="rounded-full bg-later/15 px-3 py-1.5 text-[13px] font-bold text-later">{{ n }} para você</a> }
     </header>
+    <div class="mt-3"><app-scope-picker /></div>
 
     @for (a of alerts(); track a.id) {
       <a routerLink="/para-voce" class="mt-4 block rounded-2xl border border-no/60 bg-no/[0.08] px-4 py-3">
@@ -61,7 +63,8 @@ const STATE: Record<string, { label: string; tone: string }> = {
 })
 export class HomePage {
   private readonly cockpit = inject(CockpitService);
-  private readonly all = computed(() => this.cockpit.companies().flatMap(c => c.products));
+  private readonly scope = inject(MobileScope);
+  private readonly all = computed(() => this.cockpit.companies().flatMap(c => c.products).filter(p => this.scope.matches(p.slug)));
   protected readonly products = computed(() => this.all()
     .filter(p => p.owner || p.activeRuns || p.storiesOpen || p.toValidate || p.alerts.length || p.metrics.length)
     .sort((a, b) => b.activeRuns - a.activeRuns || (b.toValidate + b.decisions) - (a.toValidate + a.decisions)));

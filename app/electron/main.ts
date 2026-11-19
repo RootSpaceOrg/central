@@ -54,7 +54,7 @@ import { abandonPilot, approvePilot, feedbackPilot, initPilot, listPilots, start
 import { startLeftovers } from './leftovers';
 import { onOneOnOne } from './metrics';
 import { enableHttps, newPairing, remoteBroadcast, remoteStatus, revokeDevice, setRemote, startRemote } from './remote';
-import { askMeeting, deleteMeeting, listMeetings, meetingChunk, meetingFrame, meetingMedia, recoverMeetings, startMeeting, stopMeeting, transcribe as transcribeMeeting, updateMeeting } from './meetings';
+import { askMeeting, trimMeeting, deleteMeeting, listMeetings, meetingChunk, meetingFrame, meetingMedia, recoverMeetings, startMeeting, stopMeeting, transcribe as transcribeMeeting, updateMeeting } from './meetings';
 import { cleanHousekeeping, measureSizes, scanHousekeeping } from './housekeeping';
 import { centralAgent, createAgent, deleteAgent, listAgents, seedAgents, seedAgentsV2, updateAgent, sessionPromptFile } from './agentdefs';
 import { startMcp } from './mcp';
@@ -242,7 +242,9 @@ function registerIpc(): void {
   handle('meetings:start', (title, slug, screenToo) => { const m = startMeeting(title, slug, screenToo); meetingsChanged(); return m; });
   handle('meetings:chunk', (id, bytes) => meetingChunk(id, bytes));
   handle('meetings:frame', (id, seconds, png) => meetingFrame(id, seconds, png));
-  handle('meetings:stop', (id, seconds) => { stopMeeting(id, seconds, meetingsChanged).catch(e => console.error('reunião', e)); });
+  handle('meetings:stop', (id, seconds, trimTo) => { stopMeeting(id, seconds, meetingsChanged, trimTo ?? null).catch(e => console.error('reunião', e)); });
+  handle('meetings:trim', (id, from, to) => { trimMeeting(id, from, to, meetingsChanged).catch(e => console.error('reunião', e)); });
+  handle('recorder:state', state => recorderWidget(state));
   handle('meetings:transcribe', id => { transcribeMeeting(id, meetingsChanged).catch(e => console.error('reunião', e)); });
   handle('meetings:ask', (id, text, agentId) => askMeeting(id, text, agentId, chatNotify, () => { changed(); backlogChanged(); }));
   handle('meetings:update', (id, patch) => { updateMeeting(id, patch); meetingsChanged(); });
@@ -701,6 +703,49 @@ function registerIpc(): void {
  * Modo apresentação: abre (ou traz para frente) a janela que mostra os produtos e o escritório. Com mais de um monitor,
  * vai para um que não é o da Central, já em tela cheia; F11 alterna e Esc sai da tela cheia.
  */
+/**
+ * Gravando reunião: uma mini janela sempre por cima de tudo (a call, o navegador), no canto da tela, com o tempo e o
+ * "Parar" (funciona com a Central minimizada). Com muito silêncio, avisa que a call parece ter acabado.
+ */
+let widget: BrowserWindow | null = null;
+function recorderWidget(state: { title: string; startedAt: number; silentFor: number } | null): void {
+  if (!state) { widget?.close(); widget = null; return; }
+  const js = `update(${JSON.stringify(state)})`;
+  if (widget) { widget.webContents.executeJavaScript(js).catch(() => {}); return; }
+  const area = screen.getPrimaryDisplay().workArea;
+  widget = new BrowserWindow({
+    width: 280, height: 64, x: area.x + area.width - 300, y: area.y + area.height - 84,
+    frame: false, transparent: true, resizable: false, alwaysOnTop: true, skipTaskbar: true, focusable: true, show: false,
+    webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false },
+  });
+  widget.setAlwaysOnTop(true, 'screen-saver');
+  // os botões navegam para https://central.local/…: a Central intercepta (sem preload nem IPC nesta janelinha)
+  widget.webContents.on('will-navigate', (e, url) => {
+    e.preventDefault();
+    if (url.startsWith('https://central.local/parar')) send('recorder:stop', null);
+    if (url.startsWith('https://central.local/abrir')) { win?.show(); win?.focus(); navigate('/reunioes'); }
+  });
+  widget.on('closed', () => { widget = null; });
+  widget.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(WIDGET_HTML)}`).then(() => { widget?.webContents.executeJavaScript(js); widget?.showInactive(); });
+}
+const WIDGET_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;background:transparent;font:600 13px "Segoe UI",system-ui,sans-serif;color:#eef2f8;user-select:none;overflow:hidden}
+.p{display:flex;align-items:center;gap:10px;height:56px;margin:4px;padding:0 8px 0 14px;border-radius:16px;background:rgba(14,18,26,.94);border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 24px rgba(0,0,0,.5);-webkit-app-region:drag}
+.p.warn{border-color:#E8C46A}
+.d{width:10px;height:10px;border-radius:50%;background:#F26D6D;animation:b 1.2s infinite}@keyframes b{50%{opacity:.25}}
+.t{flex:1;min-width:0;line-height:1.25}.t b{display:block;font-size:14px;font-variant-numeric:tabular-nums}.t span{display:block;font-weight:400;font-size:11.5px;color:#9aa3b5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.warn .t span{color:#E8C46A}
+a{-webkit-app-region:no-drag;text-decoration:none;font-weight:700;border-radius:10px;padding:8px 12px;color:#0b0e14;background:#F26D6D}a:hover{filter:brightness(1.1)}
+a.o{background:transparent;color:#9aa3b5;padding:8px 6px}
+</style></head><body><div class="p" id="p"><span class="d"></span><div class="t"><b id="c">0:00</b><span id="s"></span></div>
+<a class="o" href="https://central.local/abrir" title="Abrir na Central">↗</a><a href="https://central.local/parar">Parar</a></div><script>
+let st=null,at=Date.now();function f(s){s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=String(s%60).padStart(2,'0');return h?h+':'+String(m).padStart(2,'0')+':'+x:m+':'+x}
+function update(v){st=v;at=Date.now();draw()}
+function draw(){if(!st)return;document.getElementById('c').textContent='Gravando · '+f((Date.now()-st.startedAt)/1000);
+const sil=st.silentFor>=300?st.silentFor+(Date.now()-at)/1000:0;document.getElementById('p').className='p'+(sil?' warn':'');
+document.getElementById('s').textContent=sil?'Silêncio há '+Math.floor(sil/60)+' min · a call acabou?':st.title}
+setInterval(draw,1000)</script></body></html>`;
+
 function openPresentation(displayId: number | null = null): void {
   const all = screen.getAllDisplays();
   const here = win ? screen.getDisplayMatching(win.getBounds()).id : screen.getPrimaryDisplay().id;

@@ -8,6 +8,14 @@ const FRAME_DIFF = 4;
 /** maior largura do print (texto legível para o agente) */
 const FRAME_MAX_W = 2560;
 const CHUNK_MS = 4000;
+/** silêncio (call acabou e a gravação ficou ligada): avisa, para sozinha, e o fim mudo é cortado */
+const SILENCE_WARN_S = 5 * 60;
+const SILENCE_STOP_S = 15 * 60;
+/** fim mudo maior que isso é cortado ao parar (fica até TAIL_KEEP_S depois do último som) */
+const TAIL_TRIM_S = 2 * 60;
+const TAIL_KEEP_S = 20;
+/** volume (RMS) abaixo disso conta como silêncio */
+const SILENT_RMS = 0.008;
 
 /**
  * Gravador de reunião (vive no app inteiro: trocar de tela não para a gravação). Áudio do sistema (o que a call toca, via
@@ -22,6 +30,15 @@ export class RecorderService {
   readonly error = signal<string | null>(null);
   readonly starting = signal(false);
   private readonly now = signal(Date.now());
+  /** segundos desde o último som (o aviso de "a call acabou?") */
+  readonly silentFor = signal(0);
+  /** momento (s desde o começo) do último som: o fim mudo é cortado a partir daqui */
+  private lastSound = 0;
+
+  constructor() {
+    // "Parar" da mini janela (fora da Central) chega pelo main
+    this.ipc.on('recorder:stop', () => { this.stop(); });
+  }
   /** "12:34" desde o começo */
   readonly elapsed = computed(() => {
     const a = this.active();
@@ -72,6 +89,8 @@ export class RecorderService {
       this.active.set({ id: m.id, title: m.title, startedAt, screen, mic: !!mic });
       this.timers.push(setInterval(() => this.now.set(Date.now()), 1000));
       if (screen) this.watchScreen(m.id, display, startedAt);
+      this.watchSilence(ctx, dest.stream, startedAt);
+      this.tellMain();
       return m.id;
     } catch (e) {
       this.cleanup();
@@ -90,16 +109,51 @@ export class RecorderService {
     await this.lastLook?.(true);
     await new Promise<void>(resolve => { rec.onstop = () => resolve(); rec.stop(); });
     await this.chain;
+    const total = (Date.now() - a.startedAt) / 1000;
+    // ficou ligada depois do fim da call: corta o fim mudo (fica um respiro depois do último som)
+    const trimTo = total - this.lastSound > TAIL_TRIM_S ? this.lastSound + TAIL_KEEP_S : null;
     this.cleanup();
     this.active.set(null);
-    await this.ipc.invoke('meetings:stop', a.id, (Date.now() - a.startedAt) / 1000);
+    this.tellMain();
+    await this.ipc.invoke('meetings:stop', a.id, total, trimTo);
   }
 
   /** olhar a tela agora (force = guarda mesmo sem mudança); só existe gravando com tela */
   private lastLook: ((force?: boolean) => Promise<void>) | null = null;
 
+  /** a mini janela fora da Central (sempre por cima): gravando, há quanto tempo, silêncio */
+  private tellMain(): void {
+    const a = this.active();
+    this.ipc.invoke('recorder:state', a ? { title: a.title, startedAt: a.startedAt, silentFor: this.silentFor() } : null).catch(() => {});
+  }
+
+  /** mede o volume a cada 2 s: guarda o último som, avisa a mini janela e para sozinha depois de muito silêncio */
+  private watchSilence(ctx: AudioContext, stream: MediaStream, startedAt: number): void {
+    const an = ctx.createAnalyser();
+    an.fftSize = 2048;
+    ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    this.lastSound = 0;
+    this.silentFor.set(0);
+    let warned = false;
+    this.timers.push(setInterval(() => {
+      an.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (const v of buf) sum += v * v;
+      const now = (Date.now() - startedAt) / 1000;
+      if (Math.sqrt(sum / buf.length) > SILENT_RMS) this.lastSound = now;
+      const silent = Math.round(now - this.lastSound);
+      this.silentFor.set(silent);
+      // muda de faixa (som voltou, 5 min, 15 min): avisa a mini janela
+      const warn = silent >= SILENCE_WARN_S;
+      if (warn !== warned) { warned = warn; this.tellMain(); }
+      if (silent >= SILENCE_STOP_S) this.stop();
+    }, 2000));
+  }
+
   private cleanup(): void {
     this.lastLook = null;
+    this.silentFor.set(0);
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     for (const s of this.streams) for (const t of s.getTracks()) t.stop();

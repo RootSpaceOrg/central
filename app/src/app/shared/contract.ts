@@ -1168,7 +1168,11 @@ export interface Api {
   'meetings:start': (title: string, projectSlug: string | null, screen: boolean) => MeetingDto;
   'meetings:chunk': (id: number, bytes: Uint8Array) => void;
   'meetings:frame': (id: number, seconds: number, png: Uint8Array) => void;
-  'meetings:stop': (id: number, seconds: number) => void;
+  'meetings:stop': (id: number, seconds: number, trimTo?: number | null) => void;
+  /** cortar a reunião: fica só de `from` a `to` (s); transcreve de novo */
+  'meetings:trim': (id: number, from: number, to: number) => void;
+  /** a tela conta ao main que está gravando (mini janela por cima de tudo, com Parar) */
+  'recorder:state': (state: { title: string; startedAt: number; silentFor: number } | null) => void;
   'meetings:transcribe': (id: number) => void;
   'meetings:ask': (id: number, text: string, agentId: number | null) => number;
   'meetings:update': (id: number, patch: { title?: string; project_slug?: string | null }) => void;
@@ -1488,6 +1492,8 @@ export interface Events {
   'housekeeping:size': { id: string; size: number };
   'meetings:changed': null;
   'remote:changed': null;
+  /** "Parar" da mini janela: a tela para a gravação */
+  'recorder:stop': null;
 }
 
 /** algo que a limpeza pode apagar: vídeo de entrega revisada, worktree parado, branch mergeada, pasta .central-tmp */

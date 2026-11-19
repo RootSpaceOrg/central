@@ -67,7 +67,8 @@ export class VideoPlayer {
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('v');
   private readonly box = viewChild.required<ElementRef<HTMLElement>>('box');
   protected readonly playing = signal(false);
-  protected readonly time = signal(0);
+  /** onde está tocando (s): a tela de reuniões usa para marcar o corte */
+  readonly time = signal(0);
   protected readonly duration = signal(0);
   protected readonly buffered = signal(0);
   protected readonly speed = signal(1);

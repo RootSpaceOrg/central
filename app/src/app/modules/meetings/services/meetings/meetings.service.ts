@@ -41,5 +41,7 @@ export class MeetingsService {
   update(id: number, patch: { title?: string; project_slug?: string | null }) { return this.ipc.invoke('meetings:update', id, patch); }
   remove(id: number) { return this.ipc.invoke('meetings:delete', id); }
   transcribe(id: number) { return this.ipc.invoke('meetings:transcribe', id); }
+  /** fica só de `from` a `to` (s) */
+  trim(id: number, from: number, to: number) { return this.ipc.invoke('meetings:trim', id, from, to); }
   openFolder(id: number) { return this.ipc.invoke('meetings:open', id); }
 }
