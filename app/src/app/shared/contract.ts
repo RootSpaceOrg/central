@@ -1172,6 +1172,8 @@ export interface Api {
   /** cortar a reunião: fica só de `from` a `to` (s); transcreve de novo */
   'meetings:trim': (id: number, from: number, to: number) => void;
   /** a tela conta ao main que está gravando (mini janela por cima de tudo, com Parar) */
+  'media:copy': (src: string) => 'copiado' | 'pasta';
+  'media:show': (src: string) => void;
   'recorder:state': (state: { title: string; startedAt: number; silentFor: number } | null) => void;
   'meetings:transcribe': (id: number) => void;
   'meetings:ask': (id: number, text: string, agentId: number | null) => number;

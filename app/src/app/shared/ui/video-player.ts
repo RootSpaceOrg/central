@@ -1,6 +1,7 @@
-import { Component, ElementRef, computed, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
 
-import { mediaUrl } from '../../mobile/bridge';
+import { isRemote, mediaUrl } from '../../mobile/bridge';
+import { IpcService } from '../services/ipc/ipc.service';
 
 import { Icon } from './icon';
 
@@ -45,6 +46,11 @@ const clock = (s: number) => (isFinite(s) ? `${Math.floor(s / 60)}:${String(Math
           <button type="button" class="vp-btn" (click)="jump(5)" aria-label="Avançar 5 segundos" title="Avançar 5 s (→)">+5s</button>
           <span class="ml-1 tabular-nums">{{ clock(time()) }} <span class="text-white/50">/ {{ clock(duration()) }}</span></span>
           <span class="flex-1"></span>
+          @if (!remote) {
+            <button type="button" class="vp-btn !flex items-center gap-1.5 font-semibold" (click)="copy()" title="Copiar o arquivo do vídeo (cole no WhatsApp, e-mail ou numa pasta)" aria-label="Copiar o vídeo">
+              <app-icon name="copy" [size]="14" />{{ copied() ?? 'Copiar' }}</button>
+            <button type="button" class="vp-btn" (click)="show()" title="Mostrar o arquivo na pasta" aria-label="Mostrar o vídeo na pasta"><app-icon name="folder" [size]="15" /></button>
+          }
           <button type="button" class="vp-btn min-w-[44px] font-semibold tabular-nums" (click)="nextSpeed()" title="Velocidade (< >)" aria-label="Velocidade">{{ speed() }}×</button>
           <button type="button" class="vp-btn" (click)="full()" aria-label="Tela cheia" title="Tela cheia (F)"><app-icon name="expand" [size]="15" /></button>
         </div>
@@ -73,6 +79,10 @@ export class VideoPlayer {
   protected readonly buffered = signal(0);
   protected readonly speed = signal(1);
   protected readonly clock = clock;
+  private readonly ipc = inject(IpcService);
+  /** no celular não há arquivo para copiar (o vídeo vem do PC) */
+  protected readonly remote = isRemote();
+  protected readonly copied = signal<string | null>(null);
   /** descobrindo a duração do webm (pulou para o fim de propósito) */
   private probing = false;
 
@@ -103,6 +113,14 @@ export class VideoPlayer {
     this.speed.set(SPEEDS[i]);
     this.v.playbackRate = SPEEDS[i];
   }
+  protected async copy(): Promise<void> {
+    try {
+      const r = await this.ipc.invoke('media:copy', this.src());
+      this.copied.set(r === 'copiado' ? 'Copiado! Cole onde quiser' : 'Abri a pasta');
+    } catch (e) { this.copied.set((e as Error).message); }
+    setTimeout(() => this.copied.set(null), 3500);
+  }
+  protected show(): void { this.ipc.invoke('media:show', this.src()).catch(e => { this.copied.set((e as Error).message); setTimeout(() => this.copied.set(null), 3500); }); }
   protected full(): void {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else this.box().nativeElement.requestFullscreen().catch(() => {});

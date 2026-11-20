@@ -26,6 +26,18 @@ import { createBoard, deleteBoard, listBoards, removeFromBoard, saveColumns, set
 import { digest, listDeliveries, reviewDelivery, reviewBoard, setVideoDir, videoPath } from './deliveries';
 
 // vídeos das entregas: a tela toca por central-media://v/<arquivo> (só a pasta de vídeos da Central)
+/** central-media://m/<id> = gravação de reunião; central-media://v/<nome> = vídeo de entrega → o arquivo (ou null) */
+/** põe o arquivo ($env:CENTRAL_CLIP) na área de transferência como arquivo: dá para colar no WhatsApp, e-mail ou pasta. Set-Clipboard
+ * chamado de dentro do Electron não grava; o SetDataObject com copy=true e novas tentativas grava e sobrevive ao fim do processo. */
+const CLIP_FILE = 'Add-Type -AssemblyName System.Windows.Forms; $c = New-Object System.Collections.Specialized.StringCollection; [void]$c.Add($env:CENTRAL_CLIP); ' +
+  '$d = New-Object System.Windows.Forms.DataObject; $d.SetFileDropList($c); [System.Windows.Forms.Clipboard]::SetDataObject($d, $true, 10, 100); ' +
+  '[System.Windows.Forms.Clipboard]::GetFileDropList().Count';
+function mediaFile(src: string): string | null {
+  const u = URL.canParse(src) ? new URL(src) : null;
+  if (u?.protocol !== 'central-media:') return null;
+  const file = u.host === 'm' ? meetingMedia(Number(u.pathname.replace(/^\//, ''))) : videoPath(decodeURIComponent(u.pathname.replace(/^\//, '')));
+  return file && existsSync(file) ? file : null;
+}
 protocol.registerSchemesAsPrivileged([{ scheme: 'central-media', privileges: { stream: true, supportFetchAPI: true, standard: true, secure: true } }]);
 import { dispatchTodo, dispatchTriage } from './dispatch';
 import { OwnerDeps, dispatchOwners, onCriticalAlert, ownerDiary, ownerRound, pendingEvents, resolveAlert, setOwnerOn } from './owner';
@@ -255,6 +267,15 @@ function registerIpc(): void {
     if (process.platform === 'darwin') { app.setBadgeCount(count); return; }
     win?.setOverlayIcon(count && image ? nativeImage.createFromDataURL(image) : null, count ? `${count} ${count === 1 ? 'agente trabalhando' : 'agentes trabalhando'}` : '');
   });
+  // vídeo (entrega ou reunião): copiar o arquivo para colar em outro app, ou abrir a pasta dele
+  handle('media:copy', src => {
+    const file = mediaFile(src);
+    if (!file) throw new Error('Vídeo não encontrado.');
+    if (process.platform !== 'win32') { shell.showItemInFolder(file); return 'pasta'; }
+    return new Promise<'copiado'>((ok, fail) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', CLIP_FILE],
+      { windowsHide: true, env: { ...process.env, CENTRAL_CLIP: file } }, (e, out) => (e || !out.trim().endsWith('1') ? fail(new Error('Não deu para copiar o vídeo.')) : ok('copiado'))));
+  });
+  handle('media:show', src => { const file = mediaFile(src); if (!file) throw new Error('Vídeo não encontrado.'); shell.showItemInFolder(file); });
   // Central no celular (Tailscale)
   handle('remote:status', () => remoteStatus());
   handle('remote:set', on => setRemote(on));
@@ -831,10 +852,8 @@ function createWindow(): void {
 app.whenReady().then(() => {
   setVideoDir(join(app.getPath('userData'), 'videos'));
   protocol.handle('central-media', req => {
-    // central-media://m/<id> = gravação de reunião; central-media://v/<nome> = vídeo de entrega
-    const u = new URL(req.url);
-    const file = u.host === 'm' ? meetingMedia(Number(u.pathname.replace(/^\//, ''))) : videoPath(decodeURIComponent(u.pathname.replace(/^\//, '')));
-    if (!file || !existsSync(file)) return new Response('não encontrado', { status: 404 });
+    const file = mediaFile(req.url);
+    if (!file) return new Response('não encontrado', { status: 404 });
     // pedido de trecho (Range): sem 206 o player não consegue pular para outro ponto do vídeo
     const size = statSync(file).size;
     const type = file.endsWith('.mp4') ? 'video/mp4' : file.endsWith('.gif') ? 'image/gif' : 'video/webm';
